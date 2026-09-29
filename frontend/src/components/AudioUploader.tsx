@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import type { AudioAnalysis, ProjectNode } from "../types";
+import { scaleAllTempo, scaleSectionTempo } from "../utils/audioTempo";
 
 const AUDIO_API_URL =
   import.meta.env.VITE_AUDIO_API_URL ?? "http://localhost:8000/analyze-audio";
@@ -119,6 +120,32 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
             <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-white/30">
               BPM
             </p>
+            <div className="mt-2 flex justify-center gap-1">
+              <button
+                onClick={() =>
+                  onAnalyzed(
+                    node.audioFileName ?? "",
+                    scaleAllTempo(node.audioAnalysis!, 0.5),
+                  )
+                }
+                title="If the detected tempo sounds twice too fast"
+                className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+              >
+                ½×
+              </button>
+              <button
+                onClick={() =>
+                  onAnalyzed(
+                    node.audioFileName ?? "",
+                    scaleAllTempo(node.audioAnalysis!, 2),
+                  )
+                }
+                title="If the detected tempo sounds twice too slow"
+                className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+              >
+                2×
+              </button>
+            </div>
           </div>
 
           <div>
@@ -135,11 +162,37 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
           </p>
           <ul className="space-y-1 text-left text-sm text-white/60">
             {sections.map((section) => (
-              <li key={section.id} className="flex justify-between">
+              <li key={section.id} className="flex items-center justify-between gap-3">
                 <span>
                   {formatDuration(section.start)} – {formatDuration(section.end)}
                 </span>
-                <span>{section.bpm} BPM</span>
+                <span className="flex items-center gap-2">
+                  {section.bpm} BPM
+                  <button
+                    onClick={() =>
+                      onAnalyzed(
+                        node.audioFileName ?? "",
+                        scaleSectionTempo(node.audioAnalysis!, section.id, 0.5),
+                      )
+                    }
+                    title="Halve this section's tempo"
+                    className="cursor-pointer rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+                  >
+                    ½×
+                  </button>
+                  <button
+                    onClick={() =>
+                      onAnalyzed(
+                        node.audioFileName ?? "",
+                        scaleSectionTempo(node.audioAnalysis!, section.id, 2),
+                      )
+                    }
+                    title="Double this section's tempo"
+                    className="cursor-pointer rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+                  >
+                    2×
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
