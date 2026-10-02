@@ -69,3 +69,11 @@ export type Session = {
   workspaceId: string;
   updatedAt: string;
 };
+
+     export type Frame = {
+       id: string;
+       kind: "key" | "inbetween";
+       sectionId?: string;
+       time: number;
+       litPins: number[];
+     };
