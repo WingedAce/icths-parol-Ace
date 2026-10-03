@@ -71,7 +71,15 @@ export type Session = {
   updatedAt: string;
 };
 
-export type Transition = "hold" | "ripple" | "alternate";
+// "manual" means the user built the in-between frames by hand; the other
+// three are presets that generate them.
+export type Transition = "hold" | "ripple" | "alternate" | "manual";
+
+// One hand-made in-between: which pins are on at one beat.
+export type ManualStep = {
+  time: number;
+  litPins: number[];
+};
 
 export type Frame = {
   id: string;
@@ -81,4 +89,8 @@ export type Frame = {
   litPins: number[];
   // How this keyframe moves on to the next keyframe.
   transition?: Transition;
+  // The in-betweens the user made by hand, one per beat between this
+  // keyframe and the next. Only used while transition is "manual", but kept
+  // when the user switches to a preset so their work isn't lost.
+  manualSteps?: ManualStep[];
 };
