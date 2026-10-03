@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import ParolPreview from "./ParolPreview";
-import { makeKeyFrames } from "../utils/audioTiming";
-import type { AudioSection, Frame, ProjectNode } from "../types";
+import { buildInbetweens, makeKeyFrames } from "../utils/audioTiming";
+import type {
+  AudioSection,
+  Frame,
+  ProjectNode,
+  Transition,
+} from "../types";
 
 // Two times closer than this (in seconds) count as "the same moment".
 const SAME_MOMENT = 0.02;
@@ -12,6 +17,26 @@ const pillClass =
 const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
 const linkClass =
   "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60";
+const navClass = `${pillClass} inline-flex items-center gap-2`;
+
+// How a keyframe moves on to the next keyframe.
+const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
+  {
+    value: "hold",
+    label: "Hold",
+    hint: "Keep this keyframe's lights on until the next keyframe.",
+  },
+  {
+    value: "ripple",
+    label: "Ripple",
+    hint: "Change the lights one pin at a time, spread evenly over the beats in between.",
+  },
+  {
+    value: "alternate",
+    label: "Alternate",
+    hint: "Flip between this keyframe's lights and the next one's on every beat.",
+  },
+];
 
 type SequenceEditorProps = {
   // The Group node: owns the drawing, zones and pin mappings.
@@ -41,6 +66,25 @@ function nearestIndex(beats: number[], t: number) {
     }
   }
   return best;
+}
+
+// Plain drawn arrow, so it never turns into a color emoji.
+function Chevron({ direction }: { direction: "left" | "right" }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={direction === "left" ? "M10 3 L5 8 L10 13" : "M6 3 L11 8 L6 13"} />
+    </svg>
+  );
 }
 
 function SequenceEditor({
@@ -129,6 +173,10 @@ function SequenceEditor({
     new Set((groupNode.pinMappings ?? []).map((m) => m.pin)),
   ).sort((a, b) => a - b);
 
+  // In-betweens are worked out from the keyframes every time, never stored.
+  const inbetweens = buildInbetweens(analysis, frames);
+  const allFrames = [...frames, ...inbetweens].sort((a, b) => a.time - b.time);
+
   const span = duration || 1;
 
   // ---- Where the playhead is ----
@@ -151,7 +199,7 @@ function SequenceEditor({
   // Lights hold the last keyframe's pins until the next keyframe.
   const litPinsAt = (t: number): number[] => {
     let lit: number[] = [];
-    for (const frame of frames) {
+    for (const frame of allFrames) {
       if (frame.time <= t + SAME_MOMENT) lit = frame.litPins;
       else break;
     }
@@ -162,6 +210,13 @@ function SequenceEditor({
     (f) => Math.abs(f.time - time) < SAME_MOMENT,
   );
   const litNow = litPinsAt(time);
+
+  const inbetweenHere = keyframeHere
+    ? undefined
+    : inbetweens.find((f) => Math.abs(f.time - time) < SAME_MOMENT);
+  const nextKeyframe = keyframeHere
+    ? frames.find((f) => f.time > keyframeHere.time + SAME_MOMENT)
+    : undefined;
 
   // ---- Moving the playhead ----
   const seek = (t: number) => {
@@ -233,6 +288,15 @@ function SequenceEditor({
     );
   };
 
+  const setTransition = (transition: Transition) => {
+    if (!keyframeHere) return;
+    onFramesChange(
+      frames.map((f) =>
+        f.id === keyframeHere.id ? { ...f, transition } : f,
+      ),
+    );
+  };
+
   const togglePin = (pin: number) => {
     if (!keyframeHere) return;
     setHerePins(
@@ -279,7 +343,8 @@ function SequenceEditor({
       {/* Timeline strip: section lines, keyframe markers, playhead */}
       <div>
         <p className={labelClass}>
-          Timeline · {frames.length} keyframe{frames.length === 1 ? "" : "s"}
+          Timeline · {frames.length} keyframe{frames.length === 1 ? "" : "s"} ·{" "}
+          {inbetweens.length} in-between{inbetweens.length === 1 ? "" : "s"}
         </p>
         <div
           className="relative h-12 w-full cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]"
@@ -301,6 +366,14 @@ function SequenceEditor({
               />
             ),
           )}
+
+          {inbetweens.map((frame) => (
+            <div
+              key={frame.id}
+              className="pointer-events-none absolute top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/25"
+              style={{ left: `${(frame.time / span) * 100}%` }}
+            />
+          ))}
 
           {frames.map((frame) => (
             <button
@@ -345,25 +418,29 @@ function SequenceEditor({
         >
           {isPlaying ? "Pause" : "Play"}
         </button>
-        <button onClick={() => stepBeat(-1)} className={pillClass}>
-          ◀ Beat
+        <button onClick={() => stepBeat(-1)} className={navClass}>
+          <Chevron direction="left" />
+          Beat
         </button>
-        <button onClick={() => stepBeat(1)} className={pillClass}>
-          Beat ▶
+        <button onClick={() => stepBeat(1)} className={navClass}>
+          Beat
+          <Chevron direction="right" />
         </button>
         <button
           onClick={() => jumpKeyframe(-1)}
           disabled={!frames.some((f) => f.time < time - SAME_MOMENT)}
-          className={pillClass}
+          className={navClass}
         >
-          ◀ Keyframe
+          <Chevron direction="left" />
+          Keyframe
         </button>
         <button
           onClick={() => jumpKeyframe(1)}
           disabled={!frames.some((f) => f.time > time + SAME_MOMENT)}
-          className={pillClass}
+          className={navClass}
         >
-          Keyframe ▶
+          Keyframe
+          <Chevron direction="right" />
         </button>
       </div>
 
@@ -372,7 +449,9 @@ function SequenceEditor({
         <p className={labelClass}>
           {keyframeHere
             ? `Keyframe at ${formatTime(keyframeHere.time)}`
-            : "No keyframe at this beat"}
+            : inbetweenHere
+              ? "In-between beat (generated)"
+              : "No keyframe at this beat"}
         </p>
 
         {!keyframeHere && (
@@ -381,7 +460,9 @@ function SequenceEditor({
             disabled={isPlaying}
             className="mb-4 cursor-pointer rounded-xl bg-white px-6 py-3 font-serif text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30"
           >
-            Add keyframe at beat {beatIndex + 1}
+            {inbetweenHere
+              ? "Make this beat a keyframe"
+              : `Add keyframe at beat ${beatIndex + 1}`}
           </button>
         )}
 
@@ -419,9 +500,51 @@ function SequenceEditor({
 
         {!keyframeHere && pins.length > 0 && (
           <p className="mt-3 text-xs text-white/30">
-            These are the pins currently held on. Add a keyframe here to change
+            These are the pins on at this beat. Add a keyframe here to change
             them.
           </p>
+        )}
+
+        {keyframeHere && (
+          <div className="mt-6">
+            <p className={labelClass}>Transition to next keyframe</p>
+            {nextKeyframe ? (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {TRANSITIONS.map((option) => {
+                    const isActive =
+                      (keyframeHere.transition ?? "hold") === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => setTransition(option.value)}
+                        disabled={isPlaying}
+                        className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
+                          isActive
+                            ? "border-white/40 bg-white/[0.08] text-white"
+                            : "border-white/10 text-white/50 hover:text-white"
+                        } ${isPlaying ? "cursor-default opacity-60" : "cursor-pointer"}`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 text-xs text-white/30">
+                  {
+                    TRANSITIONS.find(
+                      (o) => o.value === (keyframeHere.transition ?? "hold"),
+                    )?.hint
+                  }
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-white/30">
+                This is the last keyframe. Add a later one to choose how this
+                one transitions.
+              </p>
+            )}
+          </div>
         )}
 
         <div className="mt-4 flex flex-wrap gap-4">

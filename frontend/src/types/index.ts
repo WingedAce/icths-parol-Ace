@@ -71,10 +71,14 @@ export type Session = {
   updatedAt: string;
 };
 
-     export type Frame = {
-       id: string;
-       kind: "key" | "inbetween";
-       sectionId?: string;
-       time: number;
-       litPins: number[];
-     };
+export type Transition = "hold" | "ripple" | "alternate";
+
+export type Frame = {
+  id: string;
+  kind: "key" | "inbetween";
+  sectionId?: string;
+  time: number;
+  litPins: number[];
+  // How this keyframe moves on to the next keyframe.
+  transition?: Transition;
+};
