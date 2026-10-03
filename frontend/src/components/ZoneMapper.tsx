@@ -76,6 +76,8 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
 
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (zoom === 1) return;
+    // Don't start a pan from the on-screen buttons (Hide Pins, -, %, +).
+    if ((event.target as HTMLElement).closest("button")) return;
     setIsPanning(true);
     didDrag.current = false;
     panStart.current = {
@@ -84,14 +86,19 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
       panX: pan.x,
       panY: pan.y,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
     if (!isPanning) return;
     const dx = event.clientX - panStart.current.x;
     const dy = event.clientY - panStart.current.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag.current = true;
+    if (!didDrag.current) {
+      // Still just a click: wait for a real drag before taking over.
+      if (Math.abs(dx) <= 3 && Math.abs(dy) <= 3) return;
+      didDrag.current = true;
+      // Capture only now, so plain clicks on zones and buttons still work.
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     setPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
   }
 

@@ -27,6 +27,7 @@ export type ProjectNode = {
   // actual MP3 bytes are never stored, only the analysis result).
   audioFileName?: string;
   audioAnalysis?: AudioAnalysis;
+  frames?: Frame[];
 };
 
 export type AudioSection = {

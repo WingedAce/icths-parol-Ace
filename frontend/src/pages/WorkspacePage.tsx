@@ -5,6 +5,7 @@ import { useProjects } from "../context/ProjectContext";
 import parolIcon from "../assets/parol-icon.png";
 import ZoneMapper from "../components/ZoneMapper";
 import AudioUploader from "../components/AudioUploader";
+import SequenceEditor from "../components/SequenceEditor";
 import type { AudioAnalysis } from "../types";
 
 import type { NodeType, PinMapping, ProjectNode, Workspace, Zone } from "../types";
@@ -34,6 +35,7 @@ function WorkspacePage() {
     clearNodeZones,
     setNodeAudio,
     clearNodeAudio,
+    setNodeFrames,
   } = useProjects();
 
   const workspace: Workspace | undefined = workspaces.find(
@@ -47,7 +49,7 @@ function WorkspacePage() {
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [groupTab, setGroupTab] = useState<"zones" | "song">("zones");
+  const [groupTab, setGroupTab] = useState<"zones" | "song" | "preview">("zones");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,6 +105,16 @@ function WorkspacePage() {
 
     setGroupTab("song");
   }
+
+  function openPreviewTab() {
+  if (!currentNode || currentNode.type !== "group") return;
+
+  if (!animationChild) {
+    addNode(currentNode.id, "Song", "animation");
+  }
+
+  setGroupTab("preview");
+}
 
   // Decide what the user is allowed to create here.
   let childType: NodeType | null = null;
@@ -308,6 +320,15 @@ function WorkspacePage() {
               >
                 Song
               </button>
+              <button
+                onClick={openPreviewTab}
+                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${groupTab === "preview"
+                    ? "border-white/40 bg-white/[0.08] text-white"
+                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
+                  }`}
+              >
+                Preview
+              </button>
             </div>
 
             {groupTab === "zones" && (
@@ -384,6 +405,16 @@ function WorkspacePage() {
                 }
                 onClear={() => clearNodeAudio(animationChild.id)}
               />
+            )}
+
+            {groupTab === "preview" && animationChild && (
+              <div className="mx-auto max-w-3xl">
+                <SequenceEditor
+                  groupNode={currentNode}
+                  animationNode={animationChild}
+                  onFramesChange={(frames) => setNodeFrames(animationChild.id, frames)}
+                />
+              </div>
             )}
 
           </section>
