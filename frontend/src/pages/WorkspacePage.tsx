@@ -1,15 +1,30 @@
 import { useRef, useState } from "react";
+
 import { useNavigate, useParams } from "react-router";
 
 import { useProjects } from "../context/ProjectContext";
+
 import parolIcon from "../assets/parol-icon.png";
+
 import ZoneMapper from "../components/ZoneMapper";
+
 import AudioUploader from "../components/AudioUploader";
+
 import SequenceEditor from "../components/SequenceEditor";
+
 import KeyframeGallery from "../components/KeyframeGallery";
+
+import CodeGenerator from "../components/CodeGenerator";
+
 import type { AudioAnalysis } from "../types";
 
-import type { NodeType, PinMapping, ProjectNode, Workspace, Zone } from "../types";
+import type {
+  NodeType,
+  PinMapping,
+  ProjectNode,
+  Workspace,
+  Zone,
+} from "../types";
 
 const typeLabels: Record<NodeType, string> = {
   section: "Class Section",
@@ -20,6 +35,7 @@ const typeLabels: Record<NodeType, string> = {
 
 function WorkspacePage() {
   const { workspaceId, "*": nestedPath } = useParams();
+
   const navigate = useNavigate();
 
   const {
@@ -40,7 +56,7 @@ function WorkspacePage() {
   } = useProjects();
 
   const workspace: Workspace | undefined = workspaces.find(
-    (item) => item.id === workspaceId
+    (item) => item.id === workspaceId,
   );
 
   const pathIds = (nestedPath ?? "")
@@ -48,9 +64,14 @@ function WorkspacePage() {
     .filter((id) => id.length > 0);
 
   const [isNewOpen, setIsNewOpen] = useState(false);
+
   const [newName, setNewName] = useState("");
+
   const [isDragging, setIsDragging] = useState(false);
-  const [groupTab, setGroupTab] = useState<"zones" | "song" | "preview" | "gallery">("zones");
+
+  const [groupTab, setGroupTab] = useState<
+    "zones" | "song" | "preview" | "gallery" | "code"
+  >("zones");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -71,7 +92,7 @@ function WorkspacePage() {
 
   for (const id of pathIds) {
     const node = getChildren(parentId).find(
-      (item) => item.id === id
+      (item) => item.id === id,
     );
 
     if (!node) {
@@ -89,12 +110,12 @@ function WorkspacePage() {
   const currentNode =
     nodeChain[nodeChain.length - 1];
 
-  // A Group's single "Song" slot — reused rather than letting a group
-  // collect multiple animation children, since one parol only needs one
-  // song analyzed against it.
+  // A Group's single "Song" slot.
   const animationChild =
     currentNode?.type === "group"
-      ? getChildren(currentNode.id).find((item) => item.type === "animation")
+      ? getChildren(currentNode.id).find(
+          (item) => item.type === "animation",
+        )
       : undefined;
 
   function openSongTab() {
@@ -108,14 +129,14 @@ function WorkspacePage() {
   }
 
   function openPreviewTab() {
-  if (!currentNode || currentNode.type !== "group") return;
+    if (!currentNode || currentNode.type !== "group") return;
 
-  if (!animationChild) {
-    addNode(currentNode.id, "Song", "animation");
+    if (!animationChild) {
+      addNode(currentNode.id, "Song", "animation");
+    }
+
+    setGroupTab("preview");
   }
-
-  setGroupTab("preview");
-}
 
   function openGalleryTab() {
     if (!currentNode || currentNode.type !== "group") return;
@@ -155,7 +176,7 @@ function WorkspacePage() {
     const nextPath = [...pathIds, id].join("/");
 
     navigate(
-      `/workspace/${currentWorkspace.id}/${nextPath}`
+      `/workspace/${currentWorkspace.id}/${nextPath}`,
     );
   }
 
@@ -174,11 +195,11 @@ function WorkspacePage() {
 
   function handleRenameNode(
     id: string,
-    currentName: string
+    currentName: string,
   ) {
     const name = window.prompt(
       "Rename:",
-      currentName
+      currentName,
     );
 
     if (name?.trim()) {
@@ -188,10 +209,10 @@ function WorkspacePage() {
 
   function handleDeleteNode(
     id: string,
-    name: string
+    name: string,
   ) {
     const confirmed = window.confirm(
-      `Delete "${name}" and everything inside it?`
+      `Delete "${name}" and everything inside it?`,
     );
 
     if (confirmed) {
@@ -202,20 +223,20 @@ function WorkspacePage() {
   function handleRenameWorkspace() {
     const name = window.prompt(
       "Rename workspace:",
-      currentWorkspace.name
+      currentWorkspace.name,
     );
 
     if (name?.trim()) {
       renameWorkspace(
         currentWorkspace.id,
-        name.trim()
+        name.trim(),
       );
     }
   }
 
   function handleDeleteWorkspace() {
     const confirmed = window.confirm(
-      `Delete "${currentWorkspace.name}" and everything inside it?`
+      `Delete "${currentWorkspace.name}" and everything inside it?`,
     );
 
     if (confirmed) {
@@ -224,7 +245,9 @@ function WorkspacePage() {
     }
   }
 
-  function handleFile(file: File | null | undefined) {
+  function handleFile(
+    file: File | null | undefined,
+  ) {
     if (!file || !currentNode) return;
 
     if (file.type !== "image/png") {
@@ -234,22 +257,27 @@ function WorkspacePage() {
           "breaks or merges zones during detection. PNG is lossless, so " +
           "your exact drawing comes through pixel-for-pixel.",
       );
+
       return;
     }
 
     const reader = new FileReader();
+
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        setNodeImage(currentNode.id, reader.result);
+        setNodeImage(
+          currentNode.id,
+          reader.result,
+        );
       }
     };
+
     reader.readAsDataURL(file);
   }
 
   return (
     <main className="min-h-screen bg-[#050505] px-6 py-10 text-white md:px-12 lg:px-20">
       <div className="mx-auto max-w-7xl">
-
         <button
           onClick={() => navigate(-1)}
           className="mb-8 cursor-pointer text-xs uppercase tracking-[0.3em] text-white/30 transition hover:text-white"
@@ -274,7 +302,6 @@ function WorkspacePage() {
           </h1>
 
           <div className="flex gap-2">
-
             {!currentNode && (
               <>
                 <button
@@ -300,7 +327,6 @@ function WorkspacePage() {
                 {currentItems.length !== 1 ? "s" : ""}
               </span>
             )}
-
           </div>
         </div>
 
@@ -308,7 +334,6 @@ function WorkspacePage() {
 
         {currentNode?.type === "group" ? (
           <section className="mt-12">
-
             <div className="mb-10 flex gap-2">
               <button
                 onClick={() => setGroupTab("zones")}
@@ -331,15 +356,18 @@ function WorkspacePage() {
               >
                 Song
               </button>
+
               <button
                 onClick={openPreviewTab}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${groupTab === "preview"
+                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
+                  groupTab === "preview"
                     ? "border-white/40 bg-white/[0.08] text-white"
                     : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                  }`}
+                }`}
               >
                 Preview
               </button>
+
               <button
                 onClick={openGalleryTab}
                 className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
@@ -349,6 +377,17 @@ function WorkspacePage() {
                 }`}
               >
                 Gallery
+              </button>
+
+              <button
+                onClick={() => setGroupTab("code")}
+                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
+                  groupTab === "code"
+                    ? "border-white/40 bg-white/[0.08] text-white"
+                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
+                }`}
+              >
+                Code
               </button>
             </div>
 
@@ -360,11 +399,15 @@ function WorkspacePage() {
                       event.preventDefault();
                       setIsDragging(true);
                     }}
-                    onDragLeave={() => setIsDragging(false)}
+                    onDragLeave={() =>
+                      setIsDragging(false)
+                    }
                     onDrop={(event) => {
                       event.preventDefault();
                       setIsDragging(false);
-                      handleFile(event.dataTransfer.files?.[0]);
+                      handleFile(
+                        event.dataTransfer.files?.[0],
+                      );
                     }}
                     className={`mx-auto flex max-w-xl flex-col items-center justify-center rounded-3xl border-2 border-dashed px-10 py-16 text-center transition ${
                       isDragging
@@ -381,7 +424,9 @@ function WorkspacePage() {
                     <p className="text-white/70">
                       Drop your image here, or{" "}
                       <button
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() =>
+                          fileInputRef.current?.click()
+                        }
                         className="cursor-pointer text-white underline underline-offset-2 hover:text-white/80"
                       >
                         browse
@@ -399,20 +444,38 @@ function WorkspacePage() {
                       accept="image/png"
                       className="hidden"
                       onChange={(event) =>
-                        handleFile(event.target.files?.[0])
+                        handleFile(
+                          event.target.files?.[0],
+                        )
                       }
                     />
                   </div>
                 ) : (
                   <ZoneMapper
                     node={currentNode}
-                    onZonesReady={(zones: Zone[], imageWidth: number, imageHeight: number) =>
-                      setNodeZones(currentNode.id, zones, imageWidth, imageHeight)
+                    onZonesReady={(
+                      zones: Zone[],
+                      imageWidth: number,
+                      imageHeight: number,
+                    ) =>
+                      setNodeZones(
+                        currentNode.id,
+                        zones,
+                        imageWidth,
+                        imageHeight,
+                      )
                     }
-                    onPinMappingsChange={(pinMappings: PinMapping[]) =>
-                      setNodePinMappings(currentNode.id, pinMappings)
+                    onPinMappingsChange={(
+                      pinMappings: PinMapping[],
+                    ) =>
+                      setNodePinMappings(
+                        currentNode.id,
+                        pinMappings,
+                      )
                     }
-                    onClearZones={() => clearNodeZones(currentNode.id)}
+                    onClearZones={() =>
+                      clearNodeZones(currentNode.id)
+                    }
                   />
                 )}
               </>
@@ -421,10 +484,19 @@ function WorkspacePage() {
             {groupTab === "song" && animationChild && (
               <AudioUploader
                 node={animationChild}
-                onAnalyzed={(fileName: string, analysis: AudioAnalysis) =>
-                  setNodeAudio(animationChild.id, fileName, analysis)
+                onAnalyzed={(
+                  fileName: string,
+                  analysis: AudioAnalysis,
+                ) =>
+                  setNodeAudio(
+                    animationChild.id,
+                    fileName,
+                    analysis,
+                  )
                 }
-                onClear={() => clearNodeAudio(animationChild.id)}
+                onClear={() =>
+                  clearNodeAudio(animationChild.id)
+                }
               />
             )}
 
@@ -433,7 +505,12 @@ function WorkspacePage() {
                 <SequenceEditor
                   groupNode={currentNode}
                   animationNode={animationChild}
-                  onFramesChange={(frames) => setNodeFrames(animationChild.id, frames)}
+                  onFramesChange={(frames) =>
+                    setNodeFrames(
+                      animationChild.id,
+                      frames,
+                    )
+                  }
                 />
               </div>
             )}
@@ -444,16 +521,29 @@ function WorkspacePage() {
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) =>
-                    setNodeFrames(animationChild.id, frames)
+                    setNodeFrames(
+                      animationChild.id,
+                      frames,
+                    )
                   }
                 />
               </div>
             )}
 
+            {groupTab === "code" && animationChild && (
+              <CodeGenerator
+                pinMappings={
+                  currentNode.pinMappings ?? []
+                }
+                audioAnalysis={
+                  animationChild.audioAnalysis
+                }
+                songName={animationChild.name}
+              />
+            )}
           </section>
         ) : currentNode?.type === "animation" ? (
           <section className="mt-12">
-
             <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
               Animation Editor
             </p>
@@ -465,33 +555,38 @@ function WorkspacePage() {
             <div className="mt-8">
               <AudioUploader
                 node={currentNode}
-                onAnalyzed={(fileName: string, analysis: AudioAnalysis) =>
-                  setNodeAudio(currentNode.id, fileName, analysis)
+                onAnalyzed={(
+                  fileName: string,
+                  analysis: AudioAnalysis,
+                ) =>
+                  setNodeAudio(
+                    currentNode.id,
+                    fileName,
+                    analysis,
+                  )
                 }
-                onClear={() => clearNodeAudio(currentNode.id)}
+                onClear={() =>
+                  clearNodeAudio(currentNode.id)
+                }
               />
             </div>
 
             <p className="mt-8 text-white/25">
               Tapping zones on/off per song section will be built next.
             </p>
-
           </section>
         ) : (
           <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-
             {currentItems.map((item) => (
               <div
                 key={item.id}
                 className="group relative aspect-[4/3]"
               >
-
                 <button
                   onClick={() => openNode(item.id)}
                   className="absolute inset-0 w-full cursor-pointer rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-left transition duration-500 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06]"
                 >
                   <div className="flex h-full flex-col justify-end">
-
                     <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
                       {typeLabels[item.type]}
                     </p>
@@ -499,17 +594,15 @@ function WorkspacePage() {
                     <h2 className="mt-2 font-serif text-3xl font-light">
                       {item.name}
                     </h2>
-
                   </div>
                 </button>
 
                 <div className="absolute right-4 top-4 flex gap-2 opacity-0 transition group-hover:opacity-100">
-
                   <button
                     onClick={() =>
                       handleRenameNode(
                         item.id,
-                        item.name
+                        item.name,
                       )
                     }
                     className="cursor-pointer rounded-full bg-black/70 px-3 py-2 text-xs text-white/50 backdrop-blur hover:text-white"
@@ -521,14 +614,13 @@ function WorkspacePage() {
                     onClick={() =>
                       handleDeleteNode(
                         item.id,
-                        item.name
+                        item.name,
                       )
                     }
                     className="cursor-pointer rounded-full bg-black/70 px-3 py-2 text-xs text-white/50 backdrop-blur hover:text-white"
                   >
                     Delete
                   </button>
-
                 </div>
               </div>
             ))}
@@ -539,7 +631,6 @@ function WorkspacePage() {
                 className="aspect-[4/3] w-full cursor-pointer rounded-2xl border border-dashed border-white/10 bg-white/[0.015] transition duration-500 hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.04]"
               >
                 <span className="flex h-full flex-col items-center justify-center">
-
                   <span className="text-5xl font-light text-white/30">
                     +
                   </span>
@@ -547,21 +638,16 @@ function WorkspacePage() {
                   <span className="mt-3 text-[10px] uppercase tracking-[0.3em] text-white/30">
                     New
                   </span>
-
                 </span>
               </button>
             )}
-
           </div>
         )}
 
         {isNewOpen && childType && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
-
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0b0b] p-8">
-
               <div className="flex items-center justify-between">
-
                 <h2 className="font-serif text-3xl">
                   New {typeLabels[childType]}
                 </h2>
@@ -575,7 +661,6 @@ function WorkspacePage() {
                 >
                   ✕
                 </button>
-
               </div>
 
               <input
@@ -601,12 +686,9 @@ function WorkspacePage() {
               >
                 Create
               </button>
-
             </div>
-
           </div>
         )}
-
       </div>
     </main>
   );
