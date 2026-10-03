@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
+
 import ParolPreview from "./ParolPreview";
+import { loadAudio, saveAudio } from "../lib/audioStore";
 import { buildInbetweens, makeKeyFrames } from "../utils/audioTiming";
 import type {
   AudioSection,
@@ -8,6 +10,8 @@ import type {
   ProjectNode,
   Transition,
 } from "../types";
+
+
 
 // Two times closer than this (in seconds) count as "the same moment".
 const SAME_MOMENT = 0.02;
@@ -111,6 +115,22 @@ function SequenceEditor({
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     };
   }, [audioUrl]);
+
+  // The song uploaded on the Song tab is kept in the browser (see
+  // lib/audioStore.ts), so load it automatically and Play has sound
+  // without the student picking the file again.
+  useEffect(() => {
+    let cancelled = false;
+    loadAudio(animationNode.id)
+      .then((blob) => {
+        if (cancelled || !blob) return;
+        setAudioUrl(URL.createObjectURL(blob));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [animationNode.id]);
 
   // Playback loop: moves the playhead forward in real time. If an audio
   // file is loaded, the audio is the clock so lights and sound stay locked.
@@ -594,12 +614,15 @@ function SequenceEditor({
               if (!file) return;
               setIsPlaying(false);
               setAudioUrl(URL.createObjectURL(file));
+              saveAudio(animationNode.id, file).catch(() => {});
             }}
           />
         </label>
         <p className="mt-2 text-[11px] text-white/25">
-          The app only stores the song's analysis, not the MP3. Without the
-          file, Play runs the lights silently in real time.
+          The song is saved in this browser when you upload it on the Song
+          tab, and plays here automatically. If you uploaded it before that
+          was added, load the file once here. Without the file, Play runs the
+          lights silently in real time.
         </p>
       </div>
     </div>

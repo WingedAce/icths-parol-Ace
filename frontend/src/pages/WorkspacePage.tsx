@@ -6,6 +6,7 @@ import parolIcon from "../assets/parol-icon.png";
 import ZoneMapper from "../components/ZoneMapper";
 import AudioUploader from "../components/AudioUploader";
 import SequenceEditor from "../components/SequenceEditor";
+import KeyframeGallery from "../components/KeyframeGallery";
 import type { AudioAnalysis } from "../types";
 
 import type { NodeType, PinMapping, ProjectNode, Workspace, Zone } from "../types";
@@ -49,7 +50,7 @@ function WorkspacePage() {
   const [isNewOpen, setIsNewOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [groupTab, setGroupTab] = useState<"zones" | "song" | "preview">("zones");
+  const [groupTab, setGroupTab] = useState<"zones" | "song" | "preview" | "gallery">("zones");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +116,16 @@ function WorkspacePage() {
 
   setGroupTab("preview");
 }
+
+  function openGalleryTab() {
+    if (!currentNode || currentNode.type !== "group") return;
+
+    if (!animationChild) {
+      addNode(currentNode.id, "Song", "animation");
+    }
+
+    setGroupTab("gallery");
+  }
 
   // Decide what the user is allowed to create here.
   let childType: NodeType | null = null;
@@ -329,6 +340,16 @@ function WorkspacePage() {
               >
                 Preview
               </button>
+              <button
+                onClick={openGalleryTab}
+                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
+                  groupTab === "gallery"
+                    ? "border-white/40 bg-white/[0.08] text-white"
+                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
+                }`}
+              >
+                Gallery
+              </button>
             </div>
 
             {groupTab === "zones" && (
@@ -413,6 +434,18 @@ function WorkspacePage() {
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) => setNodeFrames(animationChild.id, frames)}
+                />
+              </div>
+            )}
+
+            {groupTab === "gallery" && animationChild && (
+              <div className="mx-auto max-w-5xl">
+                <KeyframeGallery
+                  groupNode={currentNode}
+                  animationNode={animationChild}
+                  onFramesChange={(frames) =>
+                    setNodeFrames(animationChild.id, frames)
+                  }
                 />
               </div>
             )}
