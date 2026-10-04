@@ -101,6 +101,12 @@ export const LED_WARN_LIMIT = 6;
 // ...and more than this is not allowed at all.
 export const LED_MAX_PER_PIN = 10;
 
+// The whole parol is meant to stay at or under this many LEDs. Going over
+// only shows a warning; the student can still keep going.
+export const LED_PAROL_LIMIT = 300;
+// The meter turns amber from here on (90% of the limit).
+export const LED_PAROL_WARN = 270;
+
 // LEDs in one zone. A zone with no saved count has 1.
 export const ledsInZone = (m: { ledCount?: number }) => m.ledCount ?? 1;
 

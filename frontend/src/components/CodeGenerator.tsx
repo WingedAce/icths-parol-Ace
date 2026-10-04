@@ -8,8 +8,10 @@ import type {
 } from "../types";
 import {
   LED_MAX_PER_PIN,
+  LED_PAROL_LIMIT,
   formatPin,
   pinLedLoad,
+  totalLeds,
 } from "../utils/pins";
 import { buildSequence, type SequenceBuild } from "../utils/sequenceExport";
 
@@ -226,6 +228,14 @@ function CodeGenerator({
   const { pins, problems } = analyzePins(pinMappings);
   const hasPins = pins.length > 0 && problems.length === 0;
 
+  // Over the whole-parol limit is only a warning (same as the Zone Map), so
+  // it never blocks generating the code.
+  const parolLeds = totalLeds(pinMappings, tricolorGroups);
+  const parolWarning =
+    parolLeds > LED_PAROL_LIMIT
+      ? `The parol has ${parolLeds} LEDs, which is over the ${LED_PAROL_LIMIT} LED limit.`
+      : "";
+
   function handleGenerate() {
     if (!hasPins) return;
     const result = buildSequence(
@@ -275,6 +285,10 @@ function CodeGenerator({
                 <p key={p}>{p}</p>
               ))}
             </div>
+          )}
+
+          {parolWarning && (
+            <p className="text-xs text-amber-300/80">⚠ {parolWarning}</p>
           )}
 
           <button
@@ -330,7 +344,7 @@ function CodeGenerator({
                   keyframes first; the table fills in from them.
                 </p>
               )}
-              {build.warnings.map((w) => (
+              {[...(parolWarning ? [parolWarning] : []), ...build.warnings].map((w) => (
                 <p key={w} className="text-xs text-amber-300/80">
                   ⚠ {w}
                 </p>

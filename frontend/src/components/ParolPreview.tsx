@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { useProjects } from "../context/ProjectContext";
 import {
@@ -25,10 +25,22 @@ type ParolPreviewProps = {
   // Shows the color pickers for tricolor LEDs under the preview. Off for
   // small thumbnails so they stay clean.
   editColors?: boolean;
+  // Adds a "Show pins" button on the drawing that writes each zone's pin
+  // number on top of it, so nobody has to remember which pin is which.
+  allowPinLabels?: boolean;
 };
 
-function ParolPreview({ node, litPins, levels, editColors }: ParolPreviewProps) {
+function ParolPreview({
+  node,
+  litPins,
+  levels,
+  editColors,
+  allowPinLabels,
+}: ParolPreviewProps) {
   const { setNodeTricolorGroups } = useProjects();
+  // Pin-number labels over the zones. Off until the user asks for them, so
+  // they never hide the glow by default.
+  const [showLabels, setShowLabels] = useState(false);
   // Unique id for the glow filter, with the colons React adds removed so
   // url(#...) references resolve in every browser.
   const glowId = `glow-${useId().replace(/:/g, "")}`;
@@ -62,6 +74,8 @@ function ParolPreview({ node, litPins, levels, editColors }: ParolPreviewProps) 
   // Glow size scales with the drawing's own resolution, same idea as the
   // pin labels in ZoneMapper.
   const glowBlur = Math.max(imageWidth, imageHeight) * 0.008;
+  // Label size follows the drawing's resolution, same idea as the Zone Map.
+  const labelSize = Math.max(20, Math.max(imageWidth, imageHeight) * 0.026);
 
   function pointsOf(polygon: [number, number][]) {
     return polygon.map((p) => p.join(",")).join(" ");
@@ -141,7 +155,46 @@ function ParolPreview({ node, litPins, levels, editColors }: ParolPreviewProps) 
             stroke="none"
           />
         ))}
+
+        {/* Pin numbers, on request. Zones that are off are a bit dimmer. */}
+        {allowPinLabels &&
+          showLabels &&
+          zones.map((zone) => {
+            const mapping = zoneToMapping.get(zone.id);
+            if (!mapping) return null;
+            return (
+              <text
+                key={`label-${zone.id}`}
+                x={zone.cx}
+                y={zone.cy}
+                fontSize={labelSize}
+                fontWeight={700}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="#fff"
+                stroke="#000"
+                strokeWidth={labelSize * 0.22}
+                paintOrder="stroke"
+                opacity={lit.has(mapping.pin) ? 1 : 0.65}
+                style={{ pointerEvents: "none" }}
+              >
+                {formatPin(mapping.pin)}
+              </text>
+            );
+          })}
       </svg>
+
+      {allowPinLabels && (
+        <div className="absolute bottom-2 left-2 rounded-full border border-white/10 bg-black/70 p-0.5 backdrop-blur">
+          <button
+            onClick={() => setShowLabels((v) => !v)}
+            aria-pressed={showLabels}
+            className="cursor-pointer rounded-full px-3 py-1 text-[11px] uppercase tracking-wider text-white/70 hover:text-white"
+          >
+            {showLabels ? "Hide pins" : "Show pins"}
+          </button>
+        </div>
+      )}
     </div>
 
     {editColors && groups.length > 0 && (

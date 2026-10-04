@@ -7,6 +7,7 @@ import {
   FULL_LEVEL,
   MIN_LEVEL,
   analogPinSet,
+  formatPin,
   levelOf,
   pruneLevels,
 } from "../utils/pins";
@@ -26,6 +27,9 @@ const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
 const linkClass =
   "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60";
 const navClass = `${pillClass} inline-flex items-center gap-2`;
+// Small action buttons above the pin chips (Select all / Turn all off).
+const miniPillClass =
+  "cursor-pointer rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
 
 // How a keyframe moves on to the next keyframe.
 const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
@@ -395,6 +399,7 @@ function SequenceEditor({
         litPins={litNow}
         levels={levelsNow}
         editColors
+        allowPinLabels
       />
 
       {/* Timeline strip: section lines, keyframe markers, playhead */}
@@ -528,6 +533,27 @@ function SequenceEditor({
             No pins assigned yet. Assign pins on the Zone Map tab first.
           </p>
         ) : (
+          <>
+          <div className="mb-3 flex flex-wrap gap-2">
+            <button
+              onClick={() => setHerePins([...pins])}
+              disabled={
+                !keyframeHere ||
+                isPlaying ||
+                pins.every((pin) => keyframeHere.litPins.includes(pin))
+              }
+              className={miniPillClass}
+            >
+              Select all
+            </button>
+            <button
+              onClick={() => setHerePins([])}
+              disabled={!keyframeHere || isPlaying || keyframeHere.litPins.length === 0}
+              className={miniPillClass}
+            >
+              Turn all off
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {pins.map((pin) => {
               const isOn = (keyframeHere ?? { litPins: litNow }).litPins.includes(
@@ -548,11 +574,12 @@ function SequenceEditor({
                       : "cursor-default opacity-60"
                   }`}
                 >
-                  Pin {pin}
+                  Pin {formatPin(pin)}
                 </button>
               );
             })}
           </div>
+          </>
         )}
 
         {!keyframeHere && pins.length > 0 && (
@@ -583,7 +610,7 @@ function SequenceEditor({
                         key={pin}
                         className="flex items-center gap-3 text-xs text-white/60"
                       >
-                        <span className="w-14 font-serif">Pin {pin}</span>
+                        <span className="w-14 font-serif">Pin {formatPin(pin)}</span>
                         <input
                           type="range"
                           min={MIN_LEVEL}
@@ -650,22 +677,13 @@ function SequenceEditor({
 
         <div className="mt-4 flex flex-wrap gap-4">
           {keyframeHere && (
-            <>
-              <button
-                onClick={() => setHerePins([])}
-                disabled={isPlaying}
-                className={linkClass}
-              >
-                Turn all off
-              </button>
-              <button
-                onClick={deleteKeyframe}
-                disabled={isPlaying}
-                className={linkClass}
-              >
-                Delete this keyframe
-              </button>
-            </>
+            <button
+              onClick={deleteKeyframe}
+              disabled={isPlaying}
+              className={linkClass}
+            >
+              Delete this keyframe
+            </button>
           )}
           {frames.length === 0 && (
             <button onClick={addSectionKeyframes} className={linkClass}>
