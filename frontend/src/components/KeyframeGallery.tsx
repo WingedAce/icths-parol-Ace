@@ -2,10 +2,20 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import ParolPreview from "./ParolPreview";
 import { beatsBetween, buildInbetweens } from "../utils/audioTiming";
+import {
+  FULL_LEVEL,
+  MIN_LEVEL,
+  analogPinSet,
+  describePins,
+  levelOf,
+  pruneLevels,
+  sameLights,
+} from "../utils/pins";
 import type {
   AudioAnalysis,
   Frame,
   ManualStep,
+  PinLevels,
   ProjectNode,
   Transition,
 } from "../types";
@@ -43,6 +53,11 @@ const PRESETS: { value: Preset; label: string; hint: string }[] = [
     label: "Alternate",
     hint: "Flip between the first keyframe's lights and the second's on every beat.",
   },
+  {
+    value: "fade",
+    label: "Fade",
+    hint: "Dim analog pins smoothly from the first keyframe's brightness to the second's. Digital pins switch halfway.",
+  },
 ];
 
 const presetLabel = (value: Preset) =>
@@ -69,19 +84,10 @@ function pinsOnLabel(frame: Frame) {
   return count === 0 ? "All off" : `${count} pin${count === 1 ? "" : "s"} on`;
 }
 
-function pinsText(litPins: number[]) {
-  const sorted = [...litPins].sort((a, b) => a - b);
-  return sorted.length === 0 ? "All pins off" : `Pins on: ${sorted.join(", ")}`;
-}
-
 function sectionLabel(frame: Frame, analysis?: AudioAnalysis) {
   if (!analysis || !frame.sectionId) return null;
   const index = analysis.sections.findIndex((s) => s.id === frame.sectionId);
   return index >= 0 ? `Section ${index + 1}` : null;
-}
-
-function sameSet(a: number[], b: number[]) {
-  return a.length === b.length && a.every((pin) => b.includes(pin));
 }
 
 const toggleClass = (active: boolean) =>
@@ -112,7 +118,11 @@ function KeyframePanel({
 
   const body = (
     <>
-      <ParolPreview node={groupNode} litPins={frame.litPins} />
+      <ParolPreview
+        node={groupNode}
+        litPins={frame.litPins}
+        levels={frame.levels}
+      />
       <div className="mt-3 flex items-baseline justify-between gap-3">
         <p className="font-serif text-2xl text-white">Keyframe {number}</p>
         <p className="text-xs text-white/40">
@@ -120,7 +130,9 @@ function KeyframePanel({
           {section && ` · ${section}`}
         </p>
       </div>
-      <p className="mt-1 text-xs text-white/30">{pinsText(frame.litPins)}</p>
+      <p className="mt-1 text-xs text-white/30">
+        {describePins(frame.litPins, frame.levels, analogPinSet(groupNode))}
+      </p>
     </>
   );
 
@@ -226,7 +238,11 @@ function TransitionLoop({
       <p className={labelClass}>
         Keyframe {fromNumber} to keyframe {toNumber}
       </p>
-      <ParolPreview node={groupNode} litPins={steps[activeIndex].litPins} />
+      <ParolPreview
+        node={groupNode}
+        litPins={steps[activeIndex].litPins}
+        levels={steps[activeIndex].levels}
+      />
       <div className="mt-4 flex items-center gap-4">
         <button
           onClick={() => setPlaying((value) => !value)}
@@ -286,6 +302,9 @@ function PairView({
   );
   const activePreset: Preset = isManual ? lastPreset : mode;
 
+  // Pins the Zone Map tab marked as analog (dimmable).
+  const analog = useMemo(() => analogPinSet(groupNode), [groupNode]);
+
   // Manual mode only offers the pins that keyframe 1 or keyframe 2 uses,
   // not every pin on the parol.
   const usedPins = useMemo(
@@ -313,21 +332,30 @@ function PairView({
         sectionId: from.sectionId,
         time,
         litPins: [...from.litPins],
+        ...(from.levels ? { levels: { ...from.levels } } : {}),
       }));
     } else {
-      inbetweens = analysis ? buildInbetweens(analysis, [from, to]) : [];
+      inbetweens = analysis ? buildInbetweens(analysis, [from, to], analog) : [];
     }
     return [from, ...inbetweens, to];
-  }, [analysis, from, to, mode, beatTimes]);
+  }, [analysis, from, to, mode, beatTimes, analog]);
 
   const betweenCount = steps.length - 2;
 
   const changedPins = useMemo(() => {
     const all = new Set([...from.litPins, ...to.litPins]);
-    return [...all].filter(
-      (pin) => from.litPins.includes(pin) !== to.litPins.includes(pin),
-    ).length;
-  }, [from, to]);
+    return [...all].filter((pin) => {
+      const inFrom = from.litPins.includes(pin);
+      const inTo = to.litPins.includes(pin);
+      if (inFrom !== inTo) return true;
+      // Lit in both, but an analog pin at a different brightness.
+      return (
+        inFrom &&
+        analog.has(pin) &&
+        levelOf(from.levels, pin) !== levelOf(to.levels, pin)
+      );
+    }).length;
+  }, [from, to, analog]);
 
   // ---- Which frame the middle panel shows ----
   // `offset` is seconds since the first keyframe. It stays tied to a beat's
@@ -354,13 +382,13 @@ function PairView({
   const [draft, setDraft] = useState<{
     index: number;
     litPins: number[];
+    levels: PinLevels;
   } | null>(null);
 
-  const draftLit =
-    canEdit && draft !== null && draft.index === activeIndex
-      ? draft.litPins
-      : null;
-  const displayLit = draftLit ?? showing.litPins;
+  const draftNow =
+    canEdit && draft !== null && draft.index === activeIndex ? draft : null;
+  const displayLit = draftNow?.litPins ?? showing.litPins;
+  const displayLevels = draftNow?.levels ?? showing.levels;
 
   const isSavedAt = (time: number) =>
     (from.manualSteps ?? []).some((step) => Math.abs(step.time - time) < 0.02);
@@ -369,7 +397,14 @@ function PairView({
     .filter((step) => isSavedAt(step.time)).length;
   const isSavedHere = isBetween && isSavedAt(showing.time);
   const draftChanged =
-    draftLit !== null && !sameSet(draftLit, showing.litPins);
+    draftNow !== null &&
+    !sameLights(
+      draftNow.litPins,
+      draftNow.levels,
+      showing.litPins,
+      showing.levels,
+      analog,
+    );
   const canSave = canEdit && (draftChanged || !isSavedHere);
 
   const selectStep = (index: number) => {
@@ -428,24 +463,44 @@ function PairView({
     setDraft(null);
     const seeded: ManualStep[] =
       preset === "hold" || !analysis
-        ? beatTimes.map((time) => ({ time, litPins: [...from.litPins] }))
-        : buildInbetweens(analysis, [{ ...from, transition: preset }, to]).map(
-            (f) => ({ time: f.time, litPins: [...f.litPins] }),
-          );
+        ? beatTimes.map((time) => ({
+            time,
+            litPins: [...from.litPins],
+            ...(from.levels ? { levels: { ...from.levels } } : {}),
+          }))
+        : buildInbetweens(
+            analysis,
+            [{ ...from, transition: preset }, to],
+            analog,
+          ).map((f) => ({
+            time: f.time,
+            litPins: [...f.litPins],
+            ...(f.levels ? { levels: { ...f.levels } } : {}),
+          }));
     onChangeFrame({ transition: "manual", manualSteps: seeded });
   };
 
-  const startDraft = (litPins: number[]) => {
+  const startDraft = (litPins: number[], levels?: PinLevels) => {
     if (!canEdit) return;
-    setDraft({ index: activeIndex, litPins: [...litPins].sort((a, b) => a - b) });
+    const sorted = [...litPins].sort((a, b) => a - b);
+    setDraft({
+      index: activeIndex,
+      litPins: sorted,
+      levels: pruneLevels(levels, sorted) ?? {},
+    });
   };
 
   const togglePin = (pin: number) => {
     const lit = displayLit;
     startDraft(
       lit.includes(pin) ? lit.filter((p) => p !== pin) : [...lit, pin],
+      displayLevels,
     );
   };
+
+  // Brightness of one analog pin that is on, in percent.
+  const setLevel = (pin: number, level: number) =>
+    startDraft(displayLit, { ...(displayLevels ?? {}), [pin]: level });
 
   // Store the in-between that is showing, replacing any earlier save for
   // the same beat.
@@ -454,11 +509,17 @@ function PairView({
     const others = (from.manualSteps ?? []).filter(
       (step) => Math.abs(step.time - showing.time) >= 0.02,
     );
+    const sortedPins = [...displayLit].sort((a, b) => a - b);
+    const keptLevels = pruneLevels(displayLevels, sortedPins);
     onChangeFrame({
       transition: "manual",
       manualSteps: [
         ...others,
-        { time: showing.time, litPins: [...displayLit].sort((a, b) => a - b) },
+        {
+          time: showing.time,
+          litPins: sortedPins,
+          ...(keptLevels ? { levels: keptLevels } : {}),
+        },
       ].sort((a, b) => a.time - b.time),
     });
     setDraft(null);
@@ -483,7 +544,12 @@ function PairView({
       note =
         "There are no beats between these two keyframes, so the lights just switch.";
     } else if (changedPins === 0) {
-      note = `Both keyframes light the same pins, so ${presetLabel(mode)} looks the same as Hold.`;
+      note = `Both keyframes light the same pins${
+        usedPins.some((pin) => analog.has(pin)) ? " at the same brightness" : ""
+      }, so ${presetLabel(mode)} looks the same as Hold.`;
+    } else if (mode === "fade" && !usedPins.some((pin) => analog.has(pin))) {
+      note =
+        "None of the pins used here are analog, so Fade just switches every pin halfway. Mark a pin as analog on the Zone Map tab to fade it.";
     } else if (mode === "ripple" && changedPins > betweenCount) {
       note =
         "More pins change than there are beats, so some pins change on the same beat.";
@@ -509,7 +575,11 @@ function PairView({
             </div>
           ) : (
             <>
-              <ParolPreview node={groupNode} litPins={displayLit} />
+              <ParolPreview
+                node={groupNode}
+                litPins={displayLit}
+                levels={displayLevels}
+              />
               <div className="mt-3 flex items-baseline justify-between gap-3">
                 <p className="font-serif text-2xl text-white">
                   {isBetween
@@ -522,7 +592,7 @@ function PairView({
                 </p>
               </div>
               <p className="mt-1 text-xs text-white/30">
-                {pinsText(displayLit)}
+                {describePins(displayLit, displayLevels, analog)}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={() => stepBeat(-1)} className={pillClass}>
@@ -575,6 +645,7 @@ function PairView({
                     <ParolPreview
                       node={groupNode}
                       litPins={index === activeIndex ? displayLit : step.litPins}
+                      levels={index === activeIndex ? displayLevels : step.levels}
                     />
                   </div>
                   <p className="mt-2 text-xs text-white/50">{index}</p>
@@ -703,6 +774,7 @@ function PairView({
                               }`}
                             >
                               Pin {pin}
+                              {analog.has(pin) && " · analog"}
                             </button>
                           );
                         })}
@@ -711,6 +783,50 @@ function PairView({
                         Only the pins used by keyframe {fromNumber} or keyframe{" "}
                         {toNumber} are shown.
                       </p>
+
+                      {/* Brightness for each analog pin that is on */}
+                      {canEdit &&
+                        usedPins.some(
+                          (pin) => analog.has(pin) && displayLit.includes(pin),
+                        ) && (
+                          <div className="mt-5">
+                            <p className={labelClass}>Brightness</p>
+                            <div className="flex flex-col gap-3">
+                              {usedPins
+                                .filter(
+                                  (pin) =>
+                                    analog.has(pin) && displayLit.includes(pin),
+                                )
+                                .map((pin) => {
+                                  const level = levelOf(displayLevels, pin);
+                                  return (
+                                    <label
+                                      key={pin}
+                                      className="flex items-center gap-3 text-xs text-white/60"
+                                    >
+                                      <span className="w-14 font-serif">
+                                        Pin {pin}
+                                      </span>
+                                      <input
+                                        type="range"
+                                        min={MIN_LEVEL}
+                                        max={FULL_LEVEL}
+                                        step={5}
+                                        value={level}
+                                        onChange={(event) =>
+                                          setLevel(pin, Number(event.target.value))
+                                        }
+                                        className="flex-1 accent-white"
+                                      />
+                                      <span className="w-10 text-right text-white/40">
+                                        {level}%
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
                     </>
                   )}
 
@@ -735,14 +851,14 @@ function PairView({
 
                   <div className="mt-4 flex flex-wrap gap-4">
                     <button
-                      onClick={() => startDraft(from.litPins)}
+                      onClick={() => startDraft(from.litPins, from.levels)}
                       disabled={!canEdit}
                       className={linkClass}
                     >
                       Copy keyframe {fromNumber}
                     </button>
                     <button
-                      onClick={() => startDraft(to.litPins)}
+                      onClick={() => startDraft(to.litPins, to.levels)}
                       disabled={!canEdit}
                       className={linkClass}
                     >
@@ -929,7 +1045,11 @@ function KeyframeGallery({
             className="group min-w-0 cursor-pointer text-left"
           >
             <div className="relative rounded-2xl ring-1 ring-transparent transition group-hover:ring-white/40">
-              <ParolPreview node={groupNode} litPins={frame.litPins} />
+              <ParolPreview
+                node={groupNode}
+                litPins={frame.litPins}
+                levels={frame.levels}
+              />
               <span className="pointer-events-none absolute left-3 top-2 font-serif text-lg text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">
                 {index + 1}
               </span>

@@ -1,6 +1,7 @@
 import { useId } from "react";
 
-import type { ProjectNode } from "../types";
+import { FULL_LEVEL, levelOf } from "../utils/pins";
+import type { PinLevels, ProjectNode } from "../types";
 
 // Used when a pin has no color recorded on the Zone Map tab yet.
 const DEFAULT_LIT_COLOR = "#ffd98a";
@@ -11,9 +12,12 @@ type ParolPreviewProps = {
   node: ProjectNode;
   // Pins that are on right now (a Frame's litPins).
   litPins: number[];
+  // How bright the analog pins are (a Frame's levels). Missing means full
+  // brightness, and digital pins are always at full brightness.
+  levels?: PinLevels;
 };
 
-function ParolPreview({ node, litPins }: ParolPreviewProps) {
+function ParolPreview({ node, litPins, levels }: ParolPreviewProps) {
   // Unique id for the glow filter, with the colons React adds removed so
   // url(#...) references resolve in every browser.
   const glowId = `glow-${useId().replace(/:/g, "")}`;
@@ -55,6 +59,13 @@ function ParolPreview({ node, litPins }: ParolPreviewProps) {
     return zoneToMapping.get(zoneId)?.color ?? DEFAULT_LIT_COLOR;
   }
 
+  // 0..1. Only analog pins can be dimmed.
+  function brightnessOf(zoneId: number) {
+    const mapping = zoneToMapping.get(zoneId);
+    if (!mapping || mapping.pinType !== "analog") return 1;
+    return levelOf(levels, mapping.pin) / FULL_LEVEL;
+  }
+
   return (
     <div
       className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b]"
@@ -90,7 +101,7 @@ function ParolPreview({ node, litPins }: ParolPreviewProps) {
               key={`glow-${zone.id}`}
               points={pointsOf(zone.polygon)}
               fill={colorOf(zone.id)}
-              fillOpacity={0.9}
+              fillOpacity={0.9 * brightnessOf(zone.id)}
               stroke="none"
             />
           ))}
@@ -102,7 +113,7 @@ function ParolPreview({ node, litPins }: ParolPreviewProps) {
             key={zone.id}
             points={pointsOf(zone.polygon)}
             fill={colorOf(zone.id)}
-            fillOpacity={0.85}
+            fillOpacity={0.85 * brightnessOf(zone.id)}
             stroke="none"
           />
         ))}

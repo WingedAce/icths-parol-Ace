@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 
-
 import ParolPreview from "./ParolPreview";
-import { loadAudio, saveAudio } from "../lib/audioStore";
 import { buildInbetweens, makeKeyFrames } from "../utils/audioTiming";
+import { loadAudio, saveAudio } from "../lib/audioStore";
+import {
+  FULL_LEVEL,
+  MIN_LEVEL,
+  analogPinSet,
+  levelOf,
+  pruneLevels,
+} from "../utils/pins";
 import type {
   AudioSection,
   Frame,
   ProjectNode,
   Transition,
 } from "../types";
-
-
 
 // Two times closer than this (in seconds) count as "the same moment".
 const SAME_MOMENT = 0.02;
@@ -39,6 +43,11 @@ const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
     value: "alternate",
     label: "Alternate",
     hint: "Flip between this keyframe's lights and the next one's on every beat.",
+  },
+  {
+    value: "fade",
+    label: "Fade",
+    hint: "Dim analog pins smoothly from this keyframe's brightness to the next one's. Digital pins switch halfway.",
   },
 ];
 
@@ -128,7 +137,7 @@ function SequenceEditor({
       })
       .catch(() => {});
     return () => {
-      cancelled = true;
+      cancelled = true
     };
   }, [animationNode.id]);
 
@@ -193,8 +202,11 @@ function SequenceEditor({
     new Set((groupNode.pinMappings ?? []).map((m) => m.pin)),
   ).sort((a, b) => a - b);
 
+  // Pins the Zone Map tab marked as analog (dimmable).
+  const analogPins = analogPinSet(groupNode);
+
   // In-betweens are worked out from the keyframes every time, never stored.
-  const inbetweens = buildInbetweens(analysis, frames);
+  const inbetweens = buildInbetweens(analysis, frames, analogPins);
   const allFrames = [...frames, ...inbetweens].sort((a, b) => a.time - b.time);
 
   const span = duration || 1;
@@ -217,19 +229,22 @@ function SequenceEditor({
       Math.round(previousSection.bpm) !== Math.round(section.bpm));
 
   // Lights hold the last keyframe's pins until the next keyframe.
-  const litPinsAt = (t: number): number[] => {
-    let lit: number[] = [];
+  const frameAt = (t: number): Frame | undefined => {
+    let current: Frame | undefined;
     for (const frame of allFrames) {
-      if (frame.time <= t + SAME_MOMENT) lit = frame.litPins;
+      if (frame.time <= t + SAME_MOMENT) current = frame;
       else break;
     }
-    return lit;
+    return current;
   };
+  const litPinsAt = (t: number): number[] => frameAt(t)?.litPins ?? [];
+  const levelsAt = (t: number) => frameAt(t)?.levels;
 
   const keyframeHere = frames.find(
     (f) => Math.abs(f.time - time) < SAME_MOMENT,
   );
   const litNow = litPinsAt(time);
+  const levelsNow = levelsAt(time);
 
   const inbetweenHere = keyframeHere
     ? undefined
@@ -291,6 +306,7 @@ function SequenceEditor({
       time: snapped,
       // Start from what is already lit, so you only change what's different.
       litPins: [...litPinsAt(snapped)],
+      ...(levelsAt(snapped) ? { levels: { ...levelsAt(snapped) } } : {}),
     };
     onFramesChange(sortByTime([...frames, newFrame]));
     seek(snapped);
@@ -304,7 +320,23 @@ function SequenceEditor({
   const setHerePins = (litPins: number[]) => {
     if (!keyframeHere) return;
     onFramesChange(
-      frames.map((f) => (f.id === keyframeHere.id ? { ...f, litPins } : f)),
+      frames.map((f) =>
+        f.id === keyframeHere.id
+          ? { ...f, litPins, levels: pruneLevels(f.levels, litPins) }
+          : f,
+      ),
+    );
+  };
+
+  // Brightness of one analog pin, in percent.
+  const setHereLevel = (pin: number, level: number) => {
+    if (!keyframeHere) return;
+    onFramesChange(
+      frames.map((f) =>
+        f.id === keyframeHere.id
+          ? { ...f, levels: { ...(f.levels ?? {}), [pin]: level } }
+          : f,
+      ),
     );
   };
 
@@ -358,7 +390,7 @@ function SequenceEditor({
       </div>
 
       {/* The parol, lit the way it would be at the playhead */}
-      <ParolPreview node={groupNode} litPins={litNow} />
+      <ParolPreview node={groupNode} litPins={litNow} levels={levelsNow} />
 
       {/* Timeline strip: section lines, keyframe markers, playhead */}
       <div>
@@ -524,6 +556,50 @@ function SequenceEditor({
             them.
           </p>
         )}
+
+        {/* Brightness for each analog pin that is on in this keyframe */}
+        {keyframeHere &&
+          pins.some(
+            (pin) =>
+              analogPins.has(pin) && keyframeHere.litPins.includes(pin),
+          ) && (
+            <div className="mt-5">
+              <p className={labelClass}>Brightness</p>
+              <div className="flex flex-col gap-3">
+                {pins
+                  .filter(
+                    (pin) =>
+                      analogPins.has(pin) && keyframeHere.litPins.includes(pin),
+                  )
+                  .map((pin) => {
+                    const level = levelOf(keyframeHere.levels, pin);
+                    return (
+                      <label
+                        key={pin}
+                        className="flex items-center gap-3 text-xs text-white/60"
+                      >
+                        <span className="w-14 font-serif">Pin {pin}</span>
+                        <input
+                          type="range"
+                          min={MIN_LEVEL}
+                          max={FULL_LEVEL}
+                          step={5}
+                          value={level}
+                          disabled={isPlaying}
+                          onChange={(event) =>
+                            setHereLevel(pin, Number(event.target.value))
+                          }
+                          className="flex-1 accent-white"
+                        />
+                        <span className="w-10 text-right text-white/40">
+                          {level}%
+                        </span>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
 
         {keyframeHere && (
           <div className="mt-6">
