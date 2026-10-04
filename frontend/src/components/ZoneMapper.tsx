@@ -4,7 +4,6 @@ import type { PinMapping, PinType, ProjectNode, Zone } from "../types";
 import {
   ANALOG_PIN_COUNT,
   ANALOG_PIN_OFFSET,
-  PWM_PINS,
   formatPin,
   isAnalogPin,
   isPwmPin,
@@ -13,19 +12,6 @@ import {
 
 const SEGMENT_API_URL =
   import.meta.env.VITE_SEGMENT_API_URL ?? "http://localhost:8000/segment";
-
-// The only LED colors available for the build — the palette is fixed to
-// these eight, so there's no free color picker.
-const PIN_COLORS = [
-  { name: "Red", hex: "#ff4d4d" },
-  { name: "Blue", hex: "#0a9bff" },
-  { name: "Yellow", hex: "#ffd60a" },
-  { name: "Green", hex: "#34c759" },
-  { name: "Orange", hex: "#ff8a1f" },
-  { name: "White", hex: "#ffffff" },
-  { name: "Pink", hex: "#ff6fb5" },
-  { name: "Purple", hex: "#b86bff" },
-] as const;
 
 // Pins the board keeps for itself: 0 and 1 are the serial line (USB), 53 is
 // the Mega's SPI select pin.
@@ -50,10 +36,6 @@ const ANALOG_PAGES = [
     pins: pinRange(ANALOG_PIN_OFFSET, ANALOG_PIN_COUNT),
   },
 ];
-
-function colorName(hex?: string) {
-  return PIN_COLORS.find((c) => c.hex.toLowerCase() === hex?.toLowerCase())?.name;
-}
 
 type ZoneMapperProps = {
   node: ProjectNode;
@@ -88,10 +70,6 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
 
   // Which page of the sliding pin selector is showing.
   const [pinPage, setPinPage] = useState(0);
-
-  // Which pin's color swatches are open (only one at a time). Opens when
-  // "Assign color" is pressed, closes as soon as a color is picked.
-  const [colorPickerPin, setColorPickerPin] = useState<number | null>(null);
 
   // Zoom/pan so tiny zones in dense designs can be made physically bigger
   // on screen before tapping — the reliable fix for "the shape is correctly
@@ -266,7 +244,6 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
     onPinMappingsChange([]);
     setSelected(new Set());
     setPinInput("");
-    setColorPickerPin(null);
   }
 
   // Fills the pin box from a saved pin number, switching the Pin Type toggle
@@ -296,7 +273,6 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
       ids.forEach((id) => next.delete(id));
       return next;
     });
-    setColorPickerPin(null);
     setPinInput("");
   }
 
@@ -327,19 +303,6 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
     return (
       pinMappings.find((m) => m.pin === pin && m.pinType)?.pinType ?? "digital"
     );
-  }
-
-  function setPinType(pin: number, pinType: PinType) {
-    onPinMappingsChange(
-      pinMappings.map((m) => (m.pin === pin ? { ...m, pinType } : m)),
-    );
-  }
-
-  function setPinColor(pin: number, color: string) {
-    onPinMappingsChange(
-      pinMappings.map((m) => (m.pin === pin ? { ...m, color } : m)),
-    );
-    setColorPickerPin(null);
   }
 
   // ---- No zones yet: show the segmentation trigger ----
@@ -548,9 +511,9 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
           (stacked), separating the drawing from the pin-assignment panel. */}
       <div className="h-px w-full bg-white/10 lg:h-auto lg:w-px lg:self-stretch" />
 
-      {/* Right: zone selection, pin assignment and LED colors. */}
+      {/* Right: zone selection and pin assignment. Pin type and LED color live in the Pins tab. */}
       <div className="flex w-full flex-col gap-6 lg:flex-1">
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div>
           {/* Pin controls */}
           <div className="flex min-w-0 flex-col gap-5">
             <div>
@@ -746,146 +709,6 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
               </div>
             )}
           </div>
-
-          {/* Right column: pin type (dimming) and LED colors */}
-          {groupedPins.length > 0 && (
-            <div className="flex min-w-0 flex-col gap-6">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-              <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/30">
-                Pin Type
-              </p>
-              <p className="mb-3 text-[11px] leading-relaxed text-white/25">
-                Digital pins are simply on or off. Analog pins can be dimmed to
-                any brightness, so they need a PWM-capable pin (marked ~). On
-                an Arduino Mega those are {PWM_PINS.join(", ")}. The A0–A15
-                pins can't dim an LED.
-              </p>
-              <div className="flex flex-col gap-2">
-                {groupedPins.map((pin) => {
-                  const type = pinTypeOf(pin);
-                  const cannotDim = type === "analog" && !isPwmPin(pin);
-
-                  return (
-                    <div
-                      key={pin}
-                      className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
-                    >
-                      <span className="font-serif text-sm text-white/70">
-                        Pin <b className="text-white">{formatPin(pin)}</b>
-                      </span>
-
-                      <div className="ml-auto flex gap-1">
-                        {(["digital", "analog"] as PinType[]).map((option) => (
-                          <button
-                            key={option}
-                            onClick={() => setPinType(pin, option)}
-                            aria-pressed={type === option}
-                            className={`cursor-pointer rounded-lg border px-3 py-1.5 font-serif text-xs capitalize transition ${
-                              type === option
-                                ? "border-white/40 bg-white/[0.08] text-white"
-                                : "border-white/10 text-white/50 hover:text-white"
-                            }`}
-                          >
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-
-                      {cannotDim && (
-                        <p className="basis-full text-[11px] text-amber-200/70">
-                          Pin {formatPin(pin)} can't dim an LED on an Arduino
-                          Mega. Use one of the PWM pins ({PWM_PINS.join(", ")})
-                          or switch this pin back to Digital.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-              <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/30">
-                LED Color
-              </p>
-              <p className="mb-3 text-[11px] leading-relaxed text-white/25">
-                Pick the real LED color soldered onto each pin — a preview
-                only, the actual color is fixed by the hardware, not this
-                website.
-              </p>
-              <div className="flex flex-col gap-2">
-                {groupedPins.map((pin) => {
-                  const savedColor = pinMappings.find(
-                    (m) => m.pin === pin && m.color,
-                  )?.color;
-                  const isOpen = colorPickerPin === pin;
-
-                  return (
-                    <div
-                      key={pin}
-                      className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-serif text-sm text-white/70">
-                          Pin <b className="text-white">{formatPin(pin)}</b>
-                        </span>
-
-                        {savedColor && (
-                          <span className="flex items-center gap-1.5 text-xs text-white/40">
-                            <span
-                              className="h-3 w-3 rounded-full border border-white/20"
-                              style={{ backgroundColor: savedColor }}
-                            />
-                            {colorName(savedColor)}
-                          </span>
-                        )}
-
-                        <button
-                          onClick={() => setColorPickerPin(isOpen ? null : pin)}
-                          className={`ml-auto cursor-pointer rounded-lg border px-3 py-1.5 font-serif text-xs transition hover:text-white ${
-                            isOpen
-                              ? "border-white/40 bg-white/[0.08] text-white"
-                              : "border-white/10 text-white/60 hover:border-white/30"
-                          }`}
-                        >
-                          Assign color
-                        </button>
-                      </div>
-
-                      {isOpen && (
-                        <div className="mt-3 grid grid-cols-4 gap-1 border-t border-white/10 pt-3">
-                          {PIN_COLORS.map((c) => {
-                            const isPicked =
-                              savedColor?.toLowerCase() === c.hex.toLowerCase();
-                            return (
-                              <button
-                                key={c.name}
-                                onClick={() => setPinColor(pin, c.hex)}
-                                title={c.name}
-                                aria-label={`${c.name} for pin ${formatPin(pin)}`}
-                                aria-pressed={isPicked}
-                                className={`flex cursor-pointer items-center justify-center rounded-xl border p-1.5 transition ${
-                                  isPicked
-                                    ? "border-white/40 bg-white/[0.08]"
-                                    : "border-transparent hover:bg-white/[0.06]"
-                                }`}
-                              >
-                                <span
-                                  className="block aspect-square w-full rounded-lg"
-                                  style={{ backgroundColor: c.hex }}
-                                />
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            </div>
-          )}
         </div>
 
         <div className="flex flex-col gap-2 border-t border-white/5 pt-4">
