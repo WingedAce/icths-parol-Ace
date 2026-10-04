@@ -49,6 +49,7 @@ function WorkspacePage() {
     renameWorkspace,
     deleteWorkspace,
     setNodeImage,
+    removeNodeImage,
     setNodeZones,
     setNodePinMappings,
     setNodeTricolorGroups,
@@ -77,6 +78,12 @@ function WorkspacePage() {
   >("zones");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Hidden input for "Replace image" (the drop area above only exists while
+  // there is no image yet).
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  // Bumped on every replace/remove so the Zone Map starts fresh instead of
+  // keeping selections from the old drawing.
+  const [imageVersion, setImageVersion] = useState(0);
 
   if (!workspace) {
     return (
@@ -246,6 +253,40 @@ function WorkspacePage() {
       deleteWorkspace(currentWorkspace.id);
       navigate("/");
     }
+  }
+
+  // Zones, pin assignments and tricolor merges are made from the drawing, so
+  // replacing or removing it throws them away. Ask first if there are any.
+  function confirmDiscard(action: "replace" | "remove") {
+    const hasWork =
+      (currentNode?.zones?.length ?? 0) > 0 ||
+      (currentNode?.pinMappings?.length ?? 0) > 0;
+    if (!hasWork) return true;
+
+    return window.confirm(
+      `${action === "replace" ? "Replacing" : "Removing"} the image will ` +
+        "delete its detected zones, pin assignments and tricolor merges.\n\n" +
+        "Keyframes in the song are kept, but they may point to pins that " +
+        "no longer exist.\n\nContinue?",
+    );
+  }
+
+  function handleReplaceFile(file: File | null | undefined) {
+    if (!file) return;
+    // Check the type first so a wrong file doesn't ask for confirmation.
+    if (file.type !== "image/png") {
+      handleFile(file);
+      return;
+    }
+    if (!confirmDiscard("replace")) return;
+    setImageVersion((v) => v + 1);
+    handleFile(file);
+  }
+
+  function handleRemoveImage() {
+    if (!currentNode || !confirmDiscard("remove")) return;
+    setImageVersion((v) => v + 1);
+    removeNodeImage(currentNode.id);
   }
 
   function handleFile(
@@ -465,7 +506,34 @@ function WorkspacePage() {
                     />
                   </div>
                 ) : (
+                  <>
+                  <div className="mx-auto mb-6 flex max-w-6xl flex-wrap items-center justify-end gap-2">
+                    <button
+                      onClick={() => replaceInputRef.current?.click()}
+                      className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/25 hover:text-white"
+                    >
+                      Upload another image
+                    </button>
+                    <button
+                      onClick={handleRemoveImage}
+                      className="cursor-pointer rounded-full border border-red-400/20 px-4 py-1.5 text-[11px] uppercase tracking-wider text-red-300/70 transition hover:border-red-400/40 hover:text-red-300"
+                    >
+                      Remove image
+                    </button>
+                    <input
+                      ref={replaceInputRef}
+                      type="file"
+                      accept="image/png"
+                      className="hidden"
+                      onChange={(event) => {
+                        handleReplaceFile(event.target.files?.[0]);
+                        // So picking the same file again still fires onChange.
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
                   <ZoneMapper
+                    key={imageVersion}
                     node={currentNode}
                     onZonesReady={(
                       zones: Zone[],
@@ -494,6 +562,7 @@ function WorkspacePage() {
                       clearNodeZones(currentNode.id)
                     }
                   />
+                  </>
                 )}
               </>
             )}

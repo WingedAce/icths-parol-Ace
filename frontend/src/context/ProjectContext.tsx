@@ -31,6 +31,7 @@ type ProjectContextType = {
   renameNode: (id: string, name: string) => void;
   deleteNode: (id: string) => void;
   setNodeImage: (id: string, imageDataUrl: string) => void;
+  removeNodeImage: (id: string) => void;
   setNodeZones: (
     id: string,
     zones: Zone[],
@@ -274,7 +275,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
-            ? { ...node, imageDataUrl }
+            ? {
+                ...node,
+                imageDataUrl,
+                // Zones, pins and merges all belong to the old drawing, so
+                // a new image starts clean. (First upload: nothing to clear.)
+                zones: undefined,
+                imageWidth: undefined,
+                imageHeight: undefined,
+                pinMappings: [],
+                tricolorGroups: [],
+              }
             : node,
         );
       }
@@ -284,6 +295,36 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     saveImage(id, imageDataUrl).catch((error) => {
       console.error("Failed to save drawing to IndexedDB:", error);
+    });
+  }
+
+  // Takes the drawing away completely, together with everything detected
+  // from it, so the group goes back to the upload screen.
+  function removeNodeImage(id: string) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id
+            ? {
+                ...node,
+                imageDataUrl: undefined,
+                zones: undefined,
+                imageWidth: undefined,
+                imageHeight: undefined,
+                pinMappings: [],
+                tricolorGroups: [],
+              }
+            : node,
+        );
+      }
+
+      return next;
+    });
+
+    deleteImage(id).catch((error) => {
+      console.error("Failed to delete drawing from IndexedDB:", error);
     });
   }
 
@@ -436,6 +477,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         renameNode,
         deleteNode,
         setNodeImage,
+        removeNodeImage,
         setNodeZones,
         setNodePinMappings,
         setNodeTricolorGroups,
