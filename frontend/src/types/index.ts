@@ -27,6 +27,7 @@ export type ProjectNode = {
   // actual MP3 bytes are never stored, only the analysis result).
   audioFileName?: string;
   audioAnalysis?: AudioAnalysis;
+  frames?: Frame[];
 };
 
 export type AudioSection = {
@@ -53,6 +54,14 @@ export type Zone = {
   cy: number;
 };
 
+// Digital pins are simply on or off. Analog (PWM) pins can also be dimmed.
+// A pin with no pinType counts as digital, so old saved projects still load.
+export type PinType = "digital" | "analog";
+
+// Brightness of analog pins in percent, keyed by pin number. A pin that is
+// missing from the object is at full brightness (100). Digital pins ignore it.
+export type PinLevels = Record<number, number>;
+
 export type PinMapping = {
   zoneId: number;
   pin: number;
@@ -62,10 +71,40 @@ export type PinMapping = {
   // parol instead of a generic placeholder color. Optional so existing
   // saved projects without a color yet still load fine.
   color?: string;
+  // Belongs to the PIN: every zone on the same pin shares one type.
+  pinType?: PinType;
 };
 
 export type Session = {
   id: string;
   workspaceId: string;
   updatedAt: string;
+};
+
+// "manual" means the user built the in-between frames by hand; the other
+// four are presets that generate them.
+export type Transition = "hold" | "ripple" | "alternate" | "fade" | "manual";
+
+// One hand-made in-between: which pins are on at one beat, and how bright
+// the analog ones are.
+export type ManualStep = {
+  time: number;
+  litPins: number[];
+  levels?: PinLevels;
+};
+
+export type Frame = {
+  id: string;
+  kind: "key" | "inbetween";
+  sectionId?: string;
+  time: number;
+  litPins: number[];
+  // Brightness of the analog pins that are on. Missing means full brightness.
+  levels?: PinLevels;
+  // How this keyframe moves on to the next keyframe.
+  transition?: Transition;
+  // The in-betweens the user made by hand, one per beat between this
+  // keyframe and the next. Only used while transition is "manual", but kept
+  // when the user switches to a preset so their work isn't lost.
+  manualSteps?: ManualStep[];
 };

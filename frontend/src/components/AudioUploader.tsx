@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import type { AudioAnalysis, ProjectNode } from "../types";
+import { deleteAudio, saveAudio } from "../lib/audioStore";
 import { scaleAllTempo, scaleSectionTempo } from "../utils/audioTempo";
 
 const AUDIO_API_URL =
@@ -82,6 +83,11 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
       }
 
       const raw: AudioAnalysisResponse = await response.json();
+
+      // Keep the song itself so the Preview tab can play it. Best-effort:
+      // if storage fails, analysis still works and preview is just silent.
+      await saveAudio(node.id, file).catch(() => {});
+
       onAnalyzed(file.name, toAudioAnalysis(raw));
     } catch (err) {
       setError(
@@ -199,7 +205,10 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
         </div>
 
         <button
-          onClick={onClear}
+          onClick={() => {
+            deleteAudio(node.id).catch(() => {});
+            onClear();
+          }}
           className="mt-8 w-full cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
         >
           Remove & upload a different song

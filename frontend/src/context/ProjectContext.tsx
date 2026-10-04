@@ -10,6 +10,7 @@ import { workspaces as initialWorkspaces } from "../data/workspaces";
 import { deleteImage, loadAllImages, saveImage } from "../lib/imageStore";
 import type {
   AudioAnalysis,
+  Frame,
   NodeType,
   PinMapping,
   ProjectNode,
@@ -43,6 +44,7 @@ type ProjectContextType = {
     audioAnalysis: AudioAnalysis,
   ) => void;
   clearNodeAudio: (id: string) => void;
+  setNodeFrames: (id: string, frames: Frame[]) => void;
 };
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
@@ -376,6 +378,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+        function setNodeFrames(id: string, frames: Frame[]) {
+        setNodesByParent((previous) => {
+          const next = { ...previous };
+          for (const parentId of Object.keys(next)) {
+            next[parentId] = next[parentId].map((node) =>
+              node.id === id ? { ...node, frames } : node,
+            );
+          }
+          return next;
+        });
+      }
+
   function getChildren(parentId: string) {
     return nodesByParent[parentId] ?? [];
   }
@@ -410,6 +424,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         clearNodeZones,
         setNodeAudio,
         clearNodeAudio,
+        setNodeFrames,
       }}
     >
       {children}
