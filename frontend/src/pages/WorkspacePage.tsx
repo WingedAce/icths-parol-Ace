@@ -8,6 +8,8 @@ import parolIcon from "../assets/parol-icon.png";
 
 import ZoneMapper from "../components/ZoneMapper";
 
+import PinSetup from "../components/PinSetup";
+
 import AudioUploader from "../components/AudioUploader";
 
 import SequenceEditor from "../components/SequenceEditor";
@@ -70,7 +72,7 @@ function WorkspacePage() {
   const [isDragging, setIsDragging] = useState(false);
 
   const [groupTab, setGroupTab] = useState<
-    "zones" | "song" | "preview" | "gallery" | "code"
+    "zones" | "pins" | "song" | "preview" | "gallery" | "code"
   >("zones");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -347,6 +349,17 @@ function WorkspacePage() {
               </button>
 
               <button
+                onClick={() => setGroupTab("pins")}
+                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
+                  groupTab === "pins"
+                    ? "border-white/40 bg-white/[0.08] text-white"
+                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
+                }`}
+              >
+                Pins
+              </button>
+
+              <button
                 onClick={openSongTab}
                 className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
                   groupTab === "song"
@@ -479,6 +492,16 @@ function WorkspacePage() {
                   />
                 )}
               </>
+            )}
+
+            {groupTab === "pins" && (
+              <PinSetup
+                node={currentNode}
+                onPinMappingsChange={(pinMappings: PinMapping[]) =>
+                  setNodePinMappings(currentNode.id, pinMappings)
+                }
+                onGoToZoneMap={() => setGroupTab("zones")}
+              />
             )}
 
             {groupTab === "song" && animationChild && (
