@@ -562,6 +562,10 @@ function WorkspacePage() {
                 pinMappings={
                   currentNode.pinMappings ?? []
                 }
+                tricolorGroups={
+                  currentNode.tricolorGroups ?? []
+                }
+                frames={animationChild.frames ?? []}
                 audioAnalysis={
                   animationChild.audioAnalysis
                 }
