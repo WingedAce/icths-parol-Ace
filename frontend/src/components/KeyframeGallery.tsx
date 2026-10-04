@@ -1,22 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import ParolPreview from "./ParolPreview";
 import { beatsBetween, buildInbetweens } from "../utils/audioTiming";
-import type { AudioAnalysis, Frame, ProjectNode, Transition } from "../types";
+import type {
+  AudioAnalysis,
+  Frame,
+  ManualStep,
+  ProjectNode,
+  Transition,
+} from "../types";
 
 const pillClass =
   "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
 const linkClass =
-  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60";
-
+  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60 disabled:cursor-default disabled:opacity-40 disabled:no-underline disabled:hover:text-white/30";
+const primaryClass =
+  "cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white";
 const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
+const emptyBoxClass =
+  "flex aspect-[4/3] items-center justify-center rounded-2xl border border-dashed border-white/10 px-6 text-center text-sm text-white/30";
 
 // How long the looping preview rests on the second keyframe before it
 // starts over, in seconds.
 const LOOP_TAIL = 0.6;
 
-// How a keyframe moves on to the next keyframe.
-const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
+// The ready-made transitions. They are also the starting points for Manual.
+type Preset = Exclude<Transition, "manual">;
+
+const PRESETS: { value: Preset; label: string; hint: string }[] = [
   {
     value: "hold",
     label: "Hold",
@@ -34,8 +45,8 @@ const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
   },
 ];
 
-const transitionLabel = (value: Transition) =>
-  TRANSITIONS.find((t) => t.value === value)?.label ?? value;
+const presetLabel = (value: Preset) =>
+  PRESETS.find((p) => p.value === value)?.label ?? value;
 
 type KeyframeGalleryProps = {
   // The Group node: owns the drawing, zones and pin mappings.
@@ -58,11 +69,27 @@ function pinsOnLabel(frame: Frame) {
   return count === 0 ? "All off" : `${count} pin${count === 1 ? "" : "s"} on`;
 }
 
+function pinsText(litPins: number[]) {
+  const sorted = [...litPins].sort((a, b) => a - b);
+  return sorted.length === 0 ? "All pins off" : `Pins on: ${sorted.join(", ")}`;
+}
+
 function sectionLabel(frame: Frame, analysis?: AudioAnalysis) {
   if (!analysis || !frame.sectionId) return null;
   const index = analysis.sections.findIndex((s) => s.id === frame.sectionId);
   return index >= 0 ? `Section ${index + 1}` : null;
 }
+
+function sameSet(a: number[], b: number[]) {
+  return a.length === b.length && a.every((pin) => b.includes(pin));
+}
+
+const toggleClass = (active: boolean) =>
+  `cursor-pointer rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
+    active
+      ? "border-white/40 bg-white/[0.08] text-white"
+      : "border-white/10 text-white/50 hover:text-white"
+  }`;
 
 type PanelProps = {
   frame: Frame;
@@ -73,7 +100,7 @@ type PanelProps = {
   onClick?: () => void;
 };
 
-// One big keyframe in the pair view.
+// One big keyframe on the left or right of the pair view.
 function KeyframePanel({
   frame,
   number,
@@ -82,7 +109,6 @@ function KeyframePanel({
   onClick,
 }: PanelProps) {
   const section = sectionLabel(frame, analysis);
-  const sortedPins = [...frame.litPins].sort((a, b) => a - b);
 
   const body = (
     <>
@@ -94,11 +120,7 @@ function KeyframePanel({
           {section && ` · ${section}`}
         </p>
       </div>
-      <p className="mt-1 text-xs text-white/30">
-        {sortedPins.length === 0
-          ? "All pins off"
-          : `Pins on: ${sortedPins.join(", ")}`}
-      </p>
+      <p className="mt-1 text-xs text-white/30">{pinsText(frame.litPins)}</p>
     </>
   );
 
@@ -114,60 +136,52 @@ function KeyframePanel({
   );
 }
 
-type TransitionEditorProps = {
-  from: Frame;
-  to: Frame;
-  fromNumber: number;
-  toNumber: number;
-  groupNode: ProjectNode;
-  analysis?: AudioAnalysis;
-  // Name of the first keyframe's section, and how many other keyframes
-  // share it (for the "apply to this section" link).
-  sectionName: string | null;
-  sectionMates: number;
-  onPick: (transition: Transition) => void;
-  onApplyToSection: (transition: Transition) => void;
-  onApplyToAll: (transition: Transition) => void;
+type PairNavProps = {
+  onBack: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
 };
 
-// Everything about the move from one keyframe to the next: pick the
-// transition, watch it loop, and see each in-between frame.
-function TransitionEditor({
-  from,
-  to,
+// Bottom row of the pair view: back to the grid, and step between keyframes.
+function PairNav({ onBack, onPrevious, onNext }: PairNavProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">
+      <button onClick={onBack} className={linkClass}>
+        Back to all keyframes
+      </button>
+      <div className="flex gap-2">
+        <button onClick={onPrevious} disabled={!onPrevious} className={pillClass}>
+          Previous keyframe
+        </button>
+        <button onClick={onNext} disabled={!onNext} className={pillClass}>
+          Next keyframe
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type TransitionLoopProps = {
+  // First keyframe, every in-between, then the second keyframe.
+  steps: Frame[];
+  groupNode: ProjectNode;
+  fromNumber: number;
+  toNumber: number;
+};
+
+// The big preview: plays keyframe 1 -> in-betweens -> keyframe 2 over and
+// over, at the song's real tempo, so you can watch the whole transition.
+function TransitionLoop({
+  steps,
+  groupNode,
   fromNumber,
   toNumber,
-  groupNode,
-  analysis,
-  sectionName,
-  sectionMates,
-  onPick,
-  onApplyToSection,
-  onApplyToAll,
-}: TransitionEditorProps) {
-  const mode = from.transition ?? "hold";
-  const span = to.time - from.time;
+}: TransitionLoopProps) {
+  const start = steps[0].time;
+  const span = steps[steps.length - 1].time - start;
   const total = span + LOOP_TAIL;
 
-  // First keyframe, then every in-between beat, then the second keyframe.
-  const steps = useMemo(() => {
-    const inbetweens = analysis ? buildInbetweens(analysis, [from, to]) : [];
-    return [from, ...inbetweens, to];
-  }, [analysis, from, to]);
-
-  const beatCount = analysis
-    ? beatsBetween(analysis, from.time, to.time).length
-    : 0;
-
-  const changedPins = useMemo(() => {
-    const all = new Set([...from.litPins, ...to.litPins]);
-    return [...all].filter(
-      (pin) => from.litPins.includes(pin) !== to.litPins.includes(pin),
-    ).length;
-  }, [from, to]);
-
-  // ---- Looping preview ----
-  // offset = seconds since the first keyframe.
+  // `offset` is seconds since the first keyframe.
   const [offset, setOffset] = useState(0);
   const [playing, setPlaying] = useState(
     () => !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -195,130 +209,591 @@ function TransitionEditor({
     activeIndex = steps.length - 1;
   } else {
     for (let i = 0; i < steps.length - 1; i++) {
+      if (steps[i].time - start <= offset + 0.001) activeIndex = i;
+    }
+  }
+
+  const betweenCount = steps.length - 2;
+  const whatsShowing =
+    activeIndex === 0
+      ? `Keyframe ${fromNumber}`
+      : activeIndex === steps.length - 1
+        ? `Keyframe ${toNumber}`
+        : `In-between ${activeIndex} of ${betweenCount}`;
+
+  return (
+    <div>
+      <p className={labelClass}>
+        Keyframe {fromNumber} to keyframe {toNumber}
+      </p>
+      <ParolPreview node={groupNode} litPins={steps[activeIndex].litPins} />
+      <div className="mt-4 flex items-center gap-4">
+        <button
+          onClick={() => setPlaying((value) => !value)}
+          className={pillClass}
+        >
+          {playing ? "Pause" : "Play"}
+        </button>
+        <p className="text-xs text-white/40">{whatsShowing}</p>
+      </div>
+    </div>
+  );
+}
+
+type PairViewProps = {
+  from: Frame;
+  to: Frame;
+  fromNumber: number;
+  toNumber: number;
+  groupNode: ProjectNode;
+  analysis?: AudioAnalysis;
+  // Name of the first keyframe's section, and how many other keyframes
+  // share it (for the "apply to this section" link).
+  sectionName: string | null;
+  sectionMates: number;
+  // Change something on the first keyframe (its transition or manual steps).
+  onChangeFrame: (patch: Partial<Frame>) => void;
+  onApplyToSection: (transition: Preset) => void;
+  onApplyToAll: (transition: Preset) => void;
+  onOpenNext: () => void;
+  nav: ReactNode;
+};
+
+// Keyframe | in-between | next keyframe, with the transition controls below.
+function PairView({
+  from,
+  to,
+  fromNumber,
+  toNumber,
+  groupNode,
+  analysis,
+  sectionName,
+  sectionMates,
+  onChangeFrame,
+  onApplyToSection,
+  onApplyToAll,
+  onOpenNext,
+  nav,
+}: PairViewProps) {
+  const mode = from.transition ?? "hold";
+  const isManual = mode === "manual";
+  const span = to.time - from.time;
+
+  // The preset to fall back to when leaving Manual, and the one the apply
+  // links use.
+  const [lastPreset, setLastPreset] = useState<Preset>(
+    mode === "manual" ? "hold" : mode,
+  );
+  const activePreset: Preset = isManual ? lastPreset : mode;
+
+  // Manual mode only offers the pins that keyframe 1 or keyframe 2 uses,
+  // not every pin on the parol.
+  const usedPins = useMemo(
+    () =>
+      Array.from(new Set([...from.litPins, ...to.litPins])).sort(
+        (a, b) => a - b,
+      ),
+    [from.litPins, to.litPins],
+  );
+
+  const beatTimes = useMemo(
+    () => (analysis ? beatsBetween(analysis, from.time, to.time) : []),
+    [analysis, from.time, to.time],
+  );
+
+  // First keyframe, then one in-between per beat, then the second keyframe.
+  // Hold has no generated in-betweens, so they are filled in here as copies
+  // of the first keyframe, which is exactly what Hold looks like.
+  const steps = useMemo(() => {
+    let inbetweens: Frame[];
+    if (mode === "hold") {
+      inbetweens = beatTimes.map((time, index) => ({
+        id: `${from.id}-${index + 1}`,
+        kind: "inbetween",
+        sectionId: from.sectionId,
+        time,
+        litPins: [...from.litPins],
+      }));
+    } else {
+      inbetweens = analysis ? buildInbetweens(analysis, [from, to]) : [];
+    }
+    return [from, ...inbetweens, to];
+  }, [analysis, from, to, mode, beatTimes]);
+
+  const betweenCount = steps.length - 2;
+
+  const changedPins = useMemo(() => {
+    const all = new Set([...from.litPins, ...to.litPins]);
+    return [...all].filter(
+      (pin) => from.litPins.includes(pin) !== to.litPins.includes(pin),
+    ).length;
+  }, [from, to]);
+
+  // ---- Which frame the middle panel shows ----
+  // `offset` is seconds since the first keyframe. It stays tied to a beat's
+  // time, so the same beat stays picked when the in-betweens change.
+  const firstOffset = betweenCount > 0 ? steps[1].time - from.time : 0;
+  const [offset, setOffset] = useState(firstOffset);
+
+  let activeIndex = 0;
+  if (offset >= span) {
+    activeIndex = steps.length - 1;
+  } else {
+    for (let i = 0; i < steps.length - 1; i++) {
       if (steps[i].time - from.time <= offset + 0.001) activeIndex = i;
     }
   }
 
-  const showStep = (index: number) => {
+  const showing = steps[activeIndex];
+  const isBetween = activeIndex >= 1 && activeIndex <= betweenCount;
+  const canEdit = isManual && isBetween;
+
+  // ---- Manual mode: build one in-between, then save it ----
+  // The pins being toggled for the beat that is showing. Nothing is stored
+  // until the user presses Save.
+  const [draft, setDraft] = useState<{
+    index: number;
+    litPins: number[];
+  } | null>(null);
+
+  const draftLit =
+    canEdit && draft !== null && draft.index === activeIndex
+      ? draft.litPins
+      : null;
+  const displayLit = draftLit ?? showing.litPins;
+
+  const isSavedAt = (time: number) =>
+    (from.manualSteps ?? []).some((step) => Math.abs(step.time - time) < 0.02);
+  const savedCount = steps
+    .slice(1, -1)
+    .filter((step) => isSavedAt(step.time)).length;
+  const isSavedHere = isBetween && isSavedAt(showing.time);
+  const draftChanged =
+    draftLit !== null && !sameSet(draftLit, showing.litPins);
+  const canSave = canEdit && (draftChanged || !isSavedHere);
+
+  const selectStep = (index: number) => {
     const t = Math.min(span, steps[index].time - from.time);
-    setPlaying(false);
-    offsetRef.current = t;
+    setDraft(null);
     setOffset(t);
   };
 
-  // ---- Notes under the picker ----
+  const stepBeat = (direction: 1 | -1) => {
+    if (betweenCount === 0) return;
+    if (!isBetween) {
+      selectStep(direction === 1 ? 1 : betweenCount);
+      return;
+    }
+    selectStep(Math.min(betweenCount, Math.max(1, activeIndex + direction)));
+  };
+
+  // Keep the picked beat in view in the strip of in-betweens.
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = stripRef.current;
+    const item = strip?.querySelector<HTMLElement>(
+      `[data-step="${activeIndex}"]`,
+    );
+    if (!strip || !item) return;
+    strip.scrollTo({
+      left: item.offsetLeft - strip.clientWidth / 2 + item.clientWidth / 2,
+      behavior: "smooth",
+    });
+  }, [activeIndex]);
+
+  // ---- Changing the transition ----
+  const pickPreset = (preset: Preset) => {
+    setLastPreset(preset);
+    onChangeFrame({ transition: preset });
+  };
+
+  // Nothing is saved yet when Manual starts. Beats the user hasn't saved
+  // keep the previous lights, which looks the same as Hold.
+  const chooseManual = () => {
+    setDraft(null);
+    onChangeFrame({
+      transition: "manual",
+      manualSteps: from.manualSteps ?? [],
+    });
+  };
+
+  const choosePresets = () => {
+    setDraft(null);
+    onChangeFrame({ transition: lastPreset });
+  };
+
+  // Save every in-between at once, using what a preset would make. This
+  // replaces any in-betweens already saved for this pair.
+  const fillFrom = (preset: Preset) => {
+    setDraft(null);
+    const seeded: ManualStep[] =
+      preset === "hold" || !analysis
+        ? beatTimes.map((time) => ({ time, litPins: [...from.litPins] }))
+        : buildInbetweens(analysis, [{ ...from, transition: preset }, to]).map(
+            (f) => ({ time: f.time, litPins: [...f.litPins] }),
+          );
+    onChangeFrame({ transition: "manual", manualSteps: seeded });
+  };
+
+  const startDraft = (litPins: number[]) => {
+    if (!canEdit) return;
+    setDraft({ index: activeIndex, litPins: [...litPins].sort((a, b) => a - b) });
+  };
+
+  const togglePin = (pin: number) => {
+    const lit = displayLit;
+    startDraft(
+      lit.includes(pin) ? lit.filter((p) => p !== pin) : [...lit, pin],
+    );
+  };
+
+  // Store the in-between that is showing, replacing any earlier save for
+  // the same beat.
+  const saveStep = () => {
+    if (!canSave) return;
+    const others = (from.manualSteps ?? []).filter(
+      (step) => Math.abs(step.time - showing.time) >= 0.02,
+    );
+    onChangeFrame({
+      transition: "manual",
+      manualSteps: [
+        ...others,
+        { time: showing.time, litPins: [...displayLit].sort((a, b) => a - b) },
+      ].sort((a, b) => a.time - b.time),
+    });
+    setDraft(null);
+  };
+
+  // Forget the saved in-between for this beat (it then keeps the previous
+  // beat's lights).
+  const removeSaved = () => {
+    if (!isSavedHere) return;
+    onChangeFrame({
+      manualSteps: (from.manualSteps ?? []).filter(
+        (step) => Math.abs(step.time - showing.time) >= 0.02,
+      ),
+    });
+    setDraft(null);
+  };
+
+  // ---- Notes for the presets ----
   let note: string | null = null;
-  if (mode !== "hold") {
-    if (beatCount === 0) {
+  if (!isManual && mode !== "hold") {
+    if (betweenCount === 0) {
       note =
         "There are no beats between these two keyframes, so the lights just switch.";
     } else if (changedPins === 0) {
-      note = `Both keyframes light the same pins, so ${transitionLabel(mode)} looks the same as Hold.`;
-    } else if (mode === "ripple" && changedPins > beatCount) {
+      note = `Both keyframes light the same pins, so ${presetLabel(mode)} looks the same as Hold.`;
+    } else if (mode === "ripple" && changedPins > betweenCount) {
       note =
         "More pins change than there are beats, so some pins change on the same beat.";
     }
   }
 
   return (
-    <div className="grid gap-8 md:grid-cols-2">
-      <div className="min-w-0">
-        <p className={labelClass}>
-          Transition from {fromNumber} to {toNumber}
-        </p>
+    <div className="flex flex-col gap-8">
+      {/* Keyframe | in-between | next keyframe */}
+      <div className="grid items-start gap-6 md:grid-cols-3">
+        <KeyframePanel
+          frame={from}
+          number={fromNumber}
+          groupNode={groupNode}
+          analysis={analysis}
+        />
 
-        <div className="flex flex-wrap gap-2">
-          {TRANSITIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => onPick(option.value)}
-              className={`cursor-pointer rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
-                mode === option.value
-                  ? "border-white/40 bg-white/[0.08] text-white"
-                  : "border-white/10 text-white/50 hover:text-white"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="min-w-0">
+          {betweenCount === 0 ? (
+            <div className={emptyBoxClass}>
+              There are no beats between these two keyframes, so there is
+              nothing to fill in.
+            </div>
+          ) : (
+            <>
+              <ParolPreview node={groupNode} litPins={displayLit} />
+              <div className="mt-3 flex items-baseline justify-between gap-3">
+                <p className="font-serif text-2xl text-white">
+                  {isBetween
+                    ? `In-between ${activeIndex}`
+                    : `Keyframe ${activeIndex === 0 ? fromNumber : toNumber}`}
+                </p>
+                <p className="text-xs text-white/40">
+                  {formatTime(showing.time)}
+                  {isBetween && ` · ${activeIndex} of ${betweenCount}`}
+                </p>
+              </div>
+              <p className="mt-1 text-xs text-white/30">
+                {pinsText(displayLit)}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={() => stepBeat(-1)} className={pillClass}>
+                  Previous beat
+                </button>
+                <button onClick={() => stepBeat(1)} className={pillClass}>
+                  Next beat
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        <p className="mt-3 text-xs text-white/30">
-          {TRANSITIONS.find((o) => o.value === mode)?.hint}
-        </p>
+        <KeyframePanel
+          frame={to}
+          number={toNumber}
+          groupNode={groupNode}
+          analysis={analysis}
+          onClick={onOpenNext}
+        />
+      </div>
 
-        <p className="mt-4 text-xs text-white/40">
-          {beatCount} beat{beatCount === 1 ? "" : "s"} between these keyframes
-          · {changedPins} pin{changedPins === 1 ? "" : "s"} change
-        </p>
+      {/* Every in-between, in order */}
+      {betweenCount > 0 && (
+        <div className="min-w-0">
+          <p className={labelClass}>
+            {betweenCount} in-between{betweenCount === 1 ? "" : "s"}, one per
+            beat
+          </p>
+          <div
+            ref={stripRef}
+            className="relative flex gap-3 overflow-x-auto pb-3"
+          >
+            {steps.slice(1, -1).map((step, i) => {
+              const index = i + 1;
+              return (
+                <button
+                  key={step.id}
+                  data-step={index}
+                  onClick={() => selectStep(index)}
+                  className="w-28 shrink-0 cursor-pointer text-left"
+                >
+                  <div
+                    className={`rounded-2xl ring-1 transition ${
+                      index === activeIndex
+                        ? "ring-white/60"
+                        : "ring-transparent hover:ring-white/30"
+                    }`}
+                  >
+                    <ParolPreview
+                      node={groupNode}
+                      litPins={index === activeIndex ? displayLit : step.litPins}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-white/50">{index}</p>
+                  <p className="text-[11px] text-white/25">
+                    {formatTime(step.time)}
+                    {isManual &&
+                      (isSavedAt(step.time) ? " · Saved" : " · Not saved")}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-        {note && <p className="mt-2 text-xs text-amber-200/60">{note}</p>}
+      {/* The big looping preview sits beside the controls on wide screens */}
+      <div className="grid items-start gap-8 lg:grid-cols-2">
+        <div className="min-w-0 lg:sticky lg:top-6 lg:order-2">
+          <TransitionLoop
+            steps={steps}
+            groupNode={groupNode}
+            fromNumber={fromNumber}
+            toNumber={toNumber}
+          />
+        </div>
 
-        <div className="mt-6 flex flex-wrap gap-4">
-          <button onClick={() => onApplyToAll(mode)} className={linkClass}>
-            Use {transitionLabel(mode)} for every keyframe
-          </button>
-          {sectionName && sectionMates > 0 && (
-            <button
-              onClick={() => onApplyToSection(mode)}
-              className={linkClass}
-            >
-              Use {transitionLabel(mode)} for all of {sectionName}
-            </button>
+        {/* How the in-betweens are made */}
+        <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.02] p-6 lg:order-1">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex gap-2">
+              <button
+                onClick={choosePresets}
+                className={toggleClass(!isManual)}
+              >
+                Presets
+              </button>
+              <button onClick={chooseManual} className={toggleClass(isManual)}>
+                Manual
+              </button>
+            </div>
+            <p className="text-xs text-white/40">
+              {betweenCount} beat{betweenCount === 1 ? "" : "s"} between ·{" "}
+              {changedPins} pin{changedPins === 1 ? "" : "s"} differ
+            </p>
+          </div>
+
+          {!isManual ? (
+            <div className="mt-6">
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => pickPreset(option.value)}
+                    className={toggleClass(mode === option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <p className="mt-3 text-xs text-white/30">
+                {PRESETS.find((o) => o.value === mode)?.hint}
+              </p>
+              {note && <p className="mt-2 text-xs text-amber-200/60">{note}</p>}
+
+              <div className="mt-6 flex flex-wrap gap-4">
+                <button
+                  onClick={() => onApplyToAll(activePreset)}
+                  className={linkClass}
+                >
+                  Use {presetLabel(activePreset)} for every keyframe
+                </button>
+                {sectionName && sectionMates > 0 && (
+                  <button
+                    onClick={() => onApplyToSection(activePreset)}
+                    className={linkClass}
+                  >
+                    Use {presetLabel(activePreset)} for all of {sectionName}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6">
+              <p className="text-sm text-white/60">
+                {betweenCount === 0
+                  ? `There are no beats between keyframe ${fromNumber} and keyframe ${toNumber}, so no in-betweens can be made here.`
+                  : `Between keyframe ${fromNumber} and keyframe ${toNumber} there ${
+                      betweenCount === 1 ? "is 1 beat" : `are ${betweenCount} beats`
+                    }, so you can make ${betweenCount} in-between${
+                      betweenCount === 1 ? "" : "s"
+                    }. ${savedCount} saved.`}
+              </p>
+
+              {betweenCount > 0 && (
+                <>
+                  <p className="mt-6 text-xs text-white/40">
+                    {canEdit
+                      ? `In-between ${activeIndex}: tap a pin to turn it on or off, then save it.`
+                      : "Pick an in-between above to make it."}
+                  </p>
+
+                  {usedPins.length === 0 ? (
+                    <p className="mt-3 text-xs text-white/30">
+                      Both keyframes have every pin off, so there are no pins to
+                      turn on in between.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {usedPins.map((pin) => {
+                          const isOn = displayLit.includes(pin);
+                          return (
+                            <button
+                              key={pin}
+                              onClick={() => togglePin(pin)}
+                              disabled={!canEdit}
+                              className={`rounded-full border px-3 py-1 font-serif text-xs transition ${
+                                isOn
+                                  ? "border-white/40 bg-white/[0.08] text-white"
+                                  : "border-white/10 text-white/50"
+                              } ${
+                                canEdit
+                                  ? "cursor-pointer hover:text-white"
+                                  : "cursor-default opacity-60"
+                              }`}
+                            >
+                              Pin {pin}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-3 text-[11px] text-white/25">
+                        Only the pins used by keyframe {fromNumber} or keyframe{" "}
+                        {toNumber} are shown.
+                      </p>
+                    </>
+                  )}
+
+                  <div className="mt-5 flex flex-wrap items-center gap-4">
+                    <button
+                      onClick={saveStep}
+                      disabled={!canSave}
+                      className={primaryClass}
+                    >
+                      Save in-between{isBetween ? ` ${activeIndex}` : ""}
+                    </button>
+                    {canEdit && (
+                      <span
+                        className={`text-xs ${
+                          canSave ? "text-amber-200/60" : "text-white/40"
+                        }`}
+                      >
+                        {canSave ? "Not saved yet" : "Saved"}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-4">
+                    <button
+                      onClick={() => startDraft(from.litPins)}
+                      disabled={!canEdit}
+                      className={linkClass}
+                    >
+                      Copy keyframe {fromNumber}
+                    </button>
+                    <button
+                      onClick={() => startDraft(to.litPins)}
+                      disabled={!canEdit}
+                      className={linkClass}
+                    >
+                      Copy keyframe {toNumber}
+                    </button>
+                    <button
+                      onClick={() => startDraft([])}
+                      disabled={!canEdit}
+                      className={linkClass}
+                    >
+                      Turn all off
+                    </button>
+                    <button
+                      onClick={() => setDraft(null)}
+                      disabled={!draftChanged}
+                      className={linkClass}
+                    >
+                      Undo changes
+                    </button>
+                    <button
+                      onClick={removeSaved}
+                      disabled={!canEdit || !isSavedHere}
+                      className={linkClass}
+                    >
+                      Remove this saved in-between
+                    </button>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-white/10 pt-5">
+                    <span className="text-xs text-white/30">
+                      Save all {betweenCount} in-between
+                      {betweenCount === 1 ? "" : "s"} at once from
+                    </span>
+                    {PRESETS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => fillFrom(option.value)}
+                        className={linkClass}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      <div className="min-w-0">
-        <p className={labelClass}>Preview of just this transition</p>
-        <ParolPreview node={groupNode} litPins={steps[activeIndex].litPins} />
-        <button
-          onClick={() => setPlaying((value) => !value)}
-          className={`${pillClass} mt-4`}
-        >
-          {playing ? "Pause" : "Play"}
-        </button>
-      </div>
-
-      {/* Every frame in the transition, in order */}
-      <div className="min-w-0 md:col-span-2">
-        <p className={labelClass}>
-          Frames · {steps.length - 2} in-between
-          {steps.length - 2 === 1 ? "" : "s"}
-        </p>
-        <div className="flex gap-3 overflow-x-auto pb-3">
-          {steps.map((step, index) => {
-            const isKey = index === 0 || index === steps.length - 1;
-            return (
-              <button
-                key={step.id}
-                onClick={() => showStep(index)}
-                className="w-32 shrink-0 cursor-pointer text-left"
-              >
-                <div
-                  className={`rounded-2xl ring-1 transition ${
-                    index === activeIndex
-                      ? "ring-white/60"
-                      : "ring-transparent hover:ring-white/30"
-                  }`}
-                >
-                  <ParolPreview node={groupNode} litPins={step.litPins} />
-                </div>
-                <p
-                  className={`mt-2 text-xs ${isKey ? "text-white/60" : "text-white/35"}`}
-                >
-                  {isKey
-                    ? `Keyframe ${index === 0 ? fromNumber : toNumber}`
-                    : "In-between"}
-                </p>
-                <p className="text-[11px] text-white/25">
-                  {formatTime(step.time)}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {nav}
     </div>
   );
 }
@@ -363,23 +838,50 @@ function KeyframeGallery({
     ? keyframes.findIndex((f) => f.id === selectedId)
     : -1;
 
-  // ---- Pair view: the clicked keyframe on the left, the next on the right ----
+  // ---- Pair view ----
   if (selectedIndex >= 0) {
     const current = keyframes[selectedIndex];
     const next = keyframes[selectedIndex + 1];
     const previous = keyframes[selectedIndex - 1];
 
-    const setTransitions = (
-      transition: Transition,
+    const nav = (
+      <PairNav
+        onBack={() => setSelectedId(null)}
+        onPrevious={previous ? () => setSelectedId(previous.id) : undefined}
+        onNext={next ? () => setSelectedId(next.id) : undefined}
+      />
+    );
+
+    // The last keyframe has nothing after it, so no transition to edit.
+    if (!next) {
+      return (
+        <div className="flex flex-col gap-8">
+          <div className="grid items-start gap-6 md:grid-cols-3">
+            <KeyframePanel
+              frame={current}
+              number={selectedIndex + 1}
+              groupNode={groupNode}
+              analysis={analysis}
+            />
+            <div className={`${emptyBoxClass} md:col-span-2`}>
+              This is the last keyframe, so there is nothing after it.
+            </div>
+          </div>
+          {nav}
+        </div>
+      );
+    }
+
+    const updateFrames = (
       shouldChange: (frame: Frame) => boolean,
+      patch: Partial<Frame>,
     ) =>
       onFramesChange(
         (animationNode.frames ?? []).map((f) =>
-          shouldChange(f) ? { ...f, transition } : f,
+          shouldChange(f) ? { ...f, ...patch } : f,
         ),
       );
 
-    const currentSection = sectionLabel(current, analysis);
     const sectionMates = current.sectionId
       ? keyframes.filter(
           (f) => f.sectionId === current.sectionId && f.id !== current.id,
@@ -387,94 +889,26 @@ function KeyframeGallery({
       : 0;
 
     return (
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <button onClick={() => setSelectedId(null)} className={linkClass}>
-            Back to all keyframes
-          </button>
-          <div className="flex gap-2">
-            <button
-              onClick={() => previous && setSelectedId(previous.id)}
-              disabled={!previous}
-              className={pillClass}
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => next && setSelectedId(next.id)}
-              disabled={!next}
-              className={pillClass}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-
-        <div className="grid items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
-          <KeyframePanel
-            frame={current}
-            number={selectedIndex + 1}
-            groupNode={groupNode}
-            analysis={analysis}
-          />
-
-          {next ? (
-            <>
-              {/* Where the transition editor will go */}
-              <div className="flex flex-col items-center gap-2 md:flex-row">
-                <div className="h-6 w-px bg-white/15 md:h-px md:w-6" />
-                <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/50">
-                  {transitionLabel(current.transition ?? "hold")}
-                </span>
-                <div className="h-6 w-px bg-white/15 md:h-px md:w-6" />
-              </div>
-
-              <KeyframePanel
-                frame={next}
-                number={selectedIndex + 2}
-                groupNode={groupNode}
-                analysis={analysis}
-                onClick={() => setSelectedId(next.id)}
-              />
-            </>
-          ) : (
-            <>
-              <div />
-              <div className="flex aspect-[4/3] items-center justify-center rounded-2xl border border-dashed border-white/10 px-6 text-center text-sm text-white/30">
-                This is the last keyframe, so there is nothing after it.
-              </div>
-            </>
-          )}
-        </div>
-
-        {next && (
-          <div className="border-t border-white/10 pt-8">
-            <TransitionEditor
-              key={`${current.id}:${next.id}`}
-              from={current}
-              to={next}
-              fromNumber={selectedIndex + 1}
-              toNumber={selectedIndex + 2}
-              groupNode={groupNode}
-              analysis={analysis}
-              sectionName={currentSection}
-              sectionMates={sectionMates}
-              onPick={(transition) =>
-                setTransitions(transition, (f) => f.id === current.id)
-              }
-              onApplyToSection={(transition) =>
-                setTransitions(
-                  transition,
-                  (f) => f.sectionId === current.sectionId,
-                )
-              }
-              onApplyToAll={(transition) =>
-                setTransitions(transition, () => true)
-              }
-            />
-          </div>
-        )}
-      </div>
+      <PairView
+        key={`${current.id}:${next.id}`}
+        from={current}
+        to={next}
+        fromNumber={selectedIndex + 1}
+        toNumber={selectedIndex + 2}
+        groupNode={groupNode}
+        analysis={analysis}
+        sectionName={sectionLabel(current, analysis)}
+        sectionMates={sectionMates}
+        onChangeFrame={(patch) =>
+          updateFrames((f) => f.id === current.id, patch)
+        }
+        onApplyToSection={(transition) =>
+          updateFrames((f) => f.sectionId === current.sectionId, { transition })
+        }
+        onApplyToAll={(transition) => updateFrames(() => true, { transition })}
+        onOpenNext={() => setSelectedId(next.id)}
+        nav={nav}
+      />
     );
   }
 
@@ -483,7 +917,8 @@ function KeyframeGallery({
     <div className="flex flex-col gap-6">
       <p className="text-xs text-white/40">
         {keyframes.length} keyframe{keyframes.length === 1 ? "" : "s"}. Click
-        one to see it next to the keyframe that follows.
+        one to see it next to the keyframe that follows and edit the
+        transition between them.
       </p>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
