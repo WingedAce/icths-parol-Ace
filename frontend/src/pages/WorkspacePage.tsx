@@ -51,6 +51,7 @@ function WorkspacePage() {
     setNodeImage,
     setNodeZones,
     setNodePinMappings,
+    setNodeTricolorGroups,
     clearNodeZones,
     setNodeAudio,
     clearNodeAudio,
@@ -485,6 +486,9 @@ function WorkspacePage() {
                         currentNode.id,
                         pinMappings,
                       )
+                    }
+                    onTricolorGroupsChange={(groups) =>
+                      setNodeTricolorGroups(currentNode.id, groups)
                     }
                     onClearZones={() =>
                       clearNodeZones(currentNode.id)

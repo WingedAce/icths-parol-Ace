@@ -22,6 +22,8 @@ export type ProjectNode = {
   imageHeight?: number;
   zones?: Zone[];
   pinMappings?: PinMapping[];
+  // Sets of 3 pins merged into one tricolor LED (see TricolorGroup).
+  tricolorGroups?: TricolorGroup[];
   // Audio analysis result, lives on the "animation" node — see
   // AudioAnalysis below. audioFileName is kept only for display (the
   // actual MP3 bytes are never stored, only the analysis result).
@@ -73,6 +75,18 @@ export type PinMapping = {
   color?: string;
   // Belongs to the PIN: every zone on the same pin shares one type.
   pinType?: PinType;
+  // How many LEDs sit inside this zone. A zone is not always one LED, so the
+  // user types it in. Missing means 1, so old saved projects still load.
+  ledCount?: number;
+};
+
+// Three pins merged into one tricolor LED. One tricolor LED counts as 3 LEDs.
+// The group has one color that the user can change in the previews; the
+// zones of all three pins light up in that color.
+export type TricolorGroup = {
+  id: string;
+  pins: [number, number, number];
+  color?: string;
 };
 
 export type Session = {

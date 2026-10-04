@@ -1,18 +1,13 @@
 import type { PinMapping, PinType, ProjectNode } from "../types";
-import { PWM_PINS, formatPin, isPwmPin } from "../utils/pins";
-
-// The only LED colors available for the build — the palette is fixed to
-// these eight, so there's no free color picker.
-export const PIN_COLORS = [
-  { name: "Red", hex: "#ff4d4d" },
-  { name: "Blue", hex: "#0a9bff" },
-  { name: "Yellow", hex: "#ffd60a" },
-  { name: "Green", hex: "#34c759" },
-  { name: "Orange", hex: "#ff8a1f" },
-  { name: "White", hex: "#ffffff" },
-  { name: "Pink", hex: "#ff6fb5" },
-  { name: "Purple", hex: "#b86bff" },
-] as const;
+import {
+  LED_WARN_LIMIT,
+  PIN_COLORS,
+  PWM_PINS,
+  formatPin,
+  groupOfPin,
+  isPwmPin,
+  pinLedLoad,
+} from "../utils/pins";
 
 function colorName(hex?: string) {
   return PIN_COLORS.find((c) => c.hex.toLowerCase() === hex?.toLowerCase())
@@ -30,6 +25,7 @@ type PinSetupProps = {
 // instead of "Assign color" -> pick -> panel closes.
 function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
   const pinMappings = node.pinMappings ?? [];
+  const tricolorGroups = node.tricolorGroups ?? [];
   const pins = Array.from(new Set(pinMappings.map((m) => m.pin))).sort(
     (a, b) => a - b,
   );
@@ -74,7 +70,9 @@ function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
     );
   }
 
-  const uncolored = pins.filter((pin) => !colorOf(pin)).length;
+  const uncolored = pins.filter(
+    (pin) => !colorOf(pin) && !groupOfPin(tricolorGroups, pin),
+  ).length;
   const analogCount = pins.filter((pin) => pinTypeOf(pin) === "analog").length;
 
   return (
@@ -116,6 +114,8 @@ function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
           const color = colorOf(pin);
           const zoneCount = pinMappings.filter((m) => m.pin === pin).length;
           const cannotDim = type === "analog" && !isPwmPin(pin);
+          const tri = groupOfPin(tricolorGroups, pin);
+          const leds = pinLedLoad(pinMappings, pin);
 
           return (
             <div
@@ -127,7 +127,9 @@ function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
                 <div className="flex items-center gap-3">
                   <span
                     className="h-8 w-1.5 rounded-full border border-white/10"
-                    style={{ backgroundColor: color ?? "transparent" }}
+                    style={{
+                      backgroundColor: tri ? (tri.color ?? "#fff") : (color ?? "transparent"),
+                    }}
                   />
                   <div>
                     <p className="font-serif text-base text-white/70">
@@ -137,7 +139,11 @@ function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
                       )}
                     </p>
                     <p className="text-[11px] text-white/30">
-                      {zoneCount} zone{zoneCount === 1 ? "" : "s"}
+                      {zoneCount} zone{zoneCount === 1 ? "" : "s"} · {leds} LED
+                      {leds === 1 ? "" : "s"}
+                      {leds > LED_WARN_LIMIT && (
+                        <span className="text-amber-300"> ⚠</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -161,6 +167,12 @@ function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
                 </div>
 
                 {/* Color: always-visible swatches */}
+                {tri ? (
+                  <p className="text-xs text-white/45">
+                    Tricolor LED (pins {tri.pins.map(formatPin).join(" + ")}) —
+                    change its color in the previews.
+                  </p>
+                ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   {PIN_COLORS.map((c) => {
                     const picked = color?.toLowerCase() === c.hex.toLowerCase();
@@ -184,6 +196,7 @@ function PinSetup({ node, onPinMappingsChange, onGoToZoneMap }: PinSetupProps) {
                     {colorName(color) ?? "No color"}
                   </span>
                 </div>
+                )}
               </div>
 
               {cannotDim && (

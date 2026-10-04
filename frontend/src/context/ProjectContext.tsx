@@ -14,6 +14,7 @@ import type {
   NodeType,
   PinMapping,
   ProjectNode,
+  TricolorGroup,
   Workspace,
   WorkspaceType,
   Zone,
@@ -37,6 +38,7 @@ type ProjectContextType = {
     imageHeight: number,
   ) => void;
   setNodePinMappings: (id: string, pinMappings: PinMapping[]) => void;
+  setNodeTricolorGroups: (id: string, groups: TricolorGroup[]) => void;
   clearNodeZones: (id: string) => void;
   setNodeAudio: (
     id: string,
@@ -297,7 +299,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
-            ? { ...node, zones, imageWidth, imageHeight, pinMappings: [] }
+            ? { ...node, zones, imageWidth, imageHeight, pinMappings: [], tricolorGroups: [] }
             : node,
         );
       }
@@ -320,6 +322,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  function setNodeTricolorGroups(id: string, tricolorGroups: TricolorGroup[]) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, tricolorGroups } : node,
+        );
+      }
+
+      return next;
+    });
+  }
+
   function clearNodeZones(id: string) {
     setNodesByParent((previous) => {
       const next = { ...previous };
@@ -333,6 +349,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 imageWidth: undefined,
                 imageHeight: undefined,
                 pinMappings: [],
+                tricolorGroups: [],
               }
             : node,
         );
@@ -421,6 +438,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setNodeImage,
         setNodeZones,
         setNodePinMappings,
+        setNodeTricolorGroups,
         clearNodeZones,
         setNodeAudio,
         clearNodeAudio,

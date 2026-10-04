@@ -1,13 +1,25 @@
 import { useRef, useState } from "react";
 
-import type { PinMapping, PinType, ProjectNode, Zone } from "../types";
+import type {
+  PinMapping,
+  PinType,
+  ProjectNode,
+  TricolorGroup,
+  Zone,
+} from "../types";
 import {
   ANALOG_PIN_COUNT,
   ANALOG_PIN_OFFSET,
   formatPin,
   isAnalogPin,
   isPwmPin,
+  LED_MAX_PER_PIN,
+  LED_WARN_LIMIT,
+  groupOfPin,
+  ledsInZone,
   parsePin,
+  pinLedLoad,
+  totalLeds,
 } from "../utils/pins";
 
 const SEGMENT_API_URL =
@@ -41,6 +53,7 @@ type ZoneMapperProps = {
   node: ProjectNode;
   onZonesReady: (zones: Zone[], imageWidth: number, imageHeight: number) => void;
   onPinMappingsChange: (pinMappings: PinMapping[]) => void;
+  onTricolorGroupsChange: (groups: TricolorGroup[]) => void;
   onClearZones: () => void;
 };
 
@@ -53,13 +66,35 @@ async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
   return new File([blob], filename, { type: blob.type });
 }
 
-function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: ZoneMapperProps) {
+// Default color of a freshly merged tricolor LED in the previews.
+const DEFAULT_TRICOLOR = "#ffffff";
+
+function clampLeds(n: number) {
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(LED_MAX_PER_PIN, Math.max(1, Math.round(n)));
+}
+
+function ZoneMapper({
+  node,
+  onZonesReady,
+  onPinMappingsChange,
+  onTricolorGroupsChange,
+  onClearZones,
+}: ZoneMapperProps) {
   const [isSegmenting, setIsSegmenting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pinInput, setPinInput] = useState("");
   const [warning, setWarning] = useState("");
+  // Non-blocking heads-up (more than 6 LEDs on a pin).
+  const [notice, setNotice] = useState("");
+
+  // LED count typed for each selected zone, keyed by zone id. Filled when a
+  // zone is clicked (from its saved count, or 1) and saved on "Assign pin".
+  const [ledDraft, setLedDraft] = useState<Record<number, number>>({});
+  // Pins ticked for merging into one tricolor LED (needs exactly 3).
+  const [mergeSel, setMergeSel] = useState<number[]>([]);
 
   // Which header the next assignment uses: the digital pins (2-52) or the
   // A0-A15 header. D1 and A1 are different pins, so both can be mixed in one
@@ -146,7 +181,22 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
   const zones = node.zones ?? [];
   const pinMappings = node.pinMappings ?? [];
   const zoneToPin = new Map(pinMappings.map((m) => [m.zoneId, m.pin]));
-  const zoneToColor = new Map(pinMappings.map((m) => [m.zoneId, m.color]));
+  const tricolorGroups = node.tricolorGroups ?? [];
+  // Merged pins take the color of their tricolor group instead of a pin color.
+  const zoneToColor = new Map(
+    pinMappings.map((m) => [
+      m.zoneId,
+      groupOfPin(tricolorGroups, m.pin)?.color ?? m.color,
+    ]),
+  );
+
+  // Saves new pin mappings and drops any tricolor group that lost a pin.
+  function commitMappings(next: PinMapping[]) {
+    const live = new Set(next.map((m) => m.pin));
+    const kept = tricolorGroups.filter((g) => g.pins.every((p) => live.has(p)));
+    if (kept.length !== tricolorGroups.length) onTricolorGroupsChange(kept);
+    onPinMappingsChange(next);
+  }
 
   async function runSegmentation() {
     if (!node.imageDataUrl) return;
@@ -198,7 +248,34 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
       else next.add(zoneId);
       return next;
     });
+    // Clicking a zone asks how many LEDs are in it: start from the saved
+    // count if it already has one.
+    setLedDraft((previous) => {
+      if (previous[zoneId] !== undefined) return previous;
+      const saved = pinMappings.find((m) => m.zoneId === zoneId);
+      return { ...previous, [zoneId]: saved ? ledsInZone(saved) : 1 };
+    });
     setWarning("");
+    setNotice("");
+  }
+
+  function setZoneLeds(zoneId: number, value: number) {
+    setLedDraft((previous) => ({ ...previous, [zoneId]: clampLeds(value) }));
+    setWarning("");
+  }
+
+  function setAllLeds(value: number) {
+    setLedDraft((previous) => {
+      const next = { ...previous };
+      selected.forEach((id) => {
+        next[id] = clampLeds(value);
+      });
+      return next;
+    });
+  }
+
+  function draftOf(zoneId: number) {
+    return ledDraft[zoneId] ?? 1;
   }
 
   function assignPin() {
@@ -218,6 +295,23 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
       return;
     }
 
+    // LED limit: other zones already on this pin + the selected zones.
+    const others = pinMappings.filter(
+      (m) => m.pin === pin && !selected.has(m.zoneId),
+    );
+    const otherLeds = others.reduce((sum, m) => sum + ledsInZone(m), 0);
+    const newLeds = Array.from(selected).reduce(
+      (sum, id) => sum + draftOf(id),
+      0,
+    );
+    const load = otherLeds + newLeds;
+    if (load > LED_MAX_PER_PIN) {
+      setWarning(
+        `Pin ${formatPin(pin)} can hold at most ${LED_MAX_PER_PIN} LEDs, and this would make ${load}. Lower the LED counts or use another pin.`,
+      );
+      return;
+    }
+
     const withoutSelected = pinMappings.filter((m) => !selected.has(m.zoneId));
     // Zones joining a pin that already exists take on that pin's type.
     const existingType = pinMappings.find(
@@ -226,24 +320,67 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
     const added: PinMapping[] = Array.from(selected).map((zoneId) => ({
       zoneId,
       pin,
+      ledCount: draftOf(zoneId),
       ...(existingType ? { pinType: existingType } : {}),
     }));
 
-    onPinMappingsChange([...withoutSelected, ...added]);
+    commitMappings([...withoutSelected, ...added]);
     setSelected(new Set());
+    setLedDraft({});
     setPinInput("");
     setWarning("");
+    setNotice(
+      load > LED_WARN_LIMIT
+        ? `Warning: pin ${formatPin(pin)} now drives ${load} LEDs. More than ${LED_WARN_LIMIT} on one pin can cause problems (dim LEDs, too much current). Consider splitting them across pins.`
+        : "",
+    );
   }
 
   function clearSelection() {
     setSelected(new Set());
+    setLedDraft({});
     setWarning("");
+    setNotice("");
   }
 
   function resetAllPins() {
     onPinMappingsChange([]);
+    onTricolorGroupsChange([]);
     setSelected(new Set());
+    setLedDraft({});
+    setMergeSel([]);
     setPinInput("");
+    setNotice("");
+  }
+
+  // ---- Tricolor merge ----
+  function toggleMergePin(pin: number) {
+    setMergeSel((previous) =>
+      previous.includes(pin)
+        ? previous.filter((p) => p !== pin)
+        : previous.length >= 3
+          ? previous
+          : [...previous, pin],
+    );
+  }
+
+  function mergeTricolor() {
+    if (mergeSel.length !== 3) return;
+    const pins = [...mergeSel].sort((a, b) => a - b) as [number, number, number];
+    // Merged pins share one type so the three channels dim together.
+    const type = pinTypeOf(pins[0]);
+    onPinMappingsChange(
+      pinMappings.map((m) => (pins.includes(m.pin) ? { ...m, pinType: type } : m)),
+    );
+    onTricolorGroupsChange([
+      ...tricolorGroups,
+      { id: `tri-${Date.now()}`, pins, color: DEFAULT_TRICOLOR },
+    ]);
+    setMergeSel([]);
+  }
+
+  function unmerge(id: string) {
+    onTricolorGroupsChange(tricolorGroups.filter((g) => g.id !== id));
   }
 
   // Fills the pin box from a saved pin number, switching the Pin Type toggle
@@ -260,6 +397,13 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
   function selectPinGroup(pin: number) {
     const ids = pinMappings.filter((m) => m.pin === pin).map((m) => m.zoneId);
     setSelected(new Set(ids));
+    setLedDraft(
+      Object.fromEntries(
+        pinMappings
+          .filter((m) => m.pin === pin)
+          .map((m) => [m.zoneId, ledsInZone(m)]),
+      ),
+    );
     showPinInInput(pin);
   }
 
@@ -267,7 +411,8 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
     const ids = new Set(
       pinMappings.filter((m) => m.pin === pin).map((m) => m.zoneId),
     );
-    onPinMappingsChange(pinMappings.filter((m) => m.pin !== pin));
+    commitMappings(pinMappings.filter((m) => m.pin !== pin));
+    setMergeSel((previous) => previous.filter((p) => p !== pin));
     setSelected((previous) => {
       const next = new Set(previous);
       ids.forEach((id) => next.delete(id));
@@ -340,6 +485,17 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
   const pinPages = useAnalog ? ANALOG_PAGES : DIGITAL_PAGES;
   const currentPinPage = pinPages[Math.min(pinPage, pinPages.length - 1)];
   const typedPin = parsePin(pinInput, useAnalog);
+
+  // LEDs the typed pin would drive if the selected zones were assigned to it.
+  const pendingLoad =
+    typedPin !== null && selected.size > 0
+      ? pinMappings
+          .filter((m) => m.pin === typedPin && !selected.has(m.zoneId))
+          .reduce((sum, m) => sum + ledsInZone(m), 0) +
+        Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0)
+      : null;
+
+  const mergedPinSet = new Set(tricolorGroups.flatMap((g) => g.pins));
 
   // Any zone whose bounding-box diagonal is under ~3% of the drawing's
   // overall size gets an invisible, larger "assist" circle centered on it,
@@ -524,9 +680,93 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
                 {selected.size} zone{selected.size === 1 ? "" : "s"} selected
               </p>
               <p className="mt-1 text-[11px] text-white/30">
-                Total pins assigned: {groupedPins.length}
+                Total pins assigned: {groupedPins.length} · Total LEDs:{" "}
+                {totalLeds(pinMappings, tricolorGroups)}
               </p>
             </div>
+
+            {/* LED count for every selected zone */}
+            {selected.size > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+                    LEDs in each zone
+                  </p>
+                  {selected.size > 1 && (
+                    <label className="flex items-center gap-2 text-[11px] text-white/40">
+                      Set all
+                      <input
+                        type="number"
+                        min={1}
+                        max={LED_MAX_PER_PIN}
+                        placeholder="–"
+                        onChange={(e) => {
+                          if (e.target.value !== "") setAllLeds(Number(e.target.value));
+                        }}
+                        className="w-14 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-center text-white outline-none focus:border-white/30"
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
+                  {Array.from(selected).map((zoneId) => (
+                    <div
+                      key={zoneId}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-3 py-1.5"
+                    >
+                      <span className="text-xs text-white/50">Zone {zoneId}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setZoneLeds(zoneId, draftOf(zoneId) - 1)}
+                          disabled={draftOf(zoneId) <= 1}
+                          aria-label={`Fewer LEDs in zone ${zoneId}`}
+                          className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={LED_MAX_PER_PIN}
+                          value={draftOf(zoneId)}
+                          onChange={(e) => setZoneLeds(zoneId, Number(e.target.value))}
+                          aria-label={`LEDs in zone ${zoneId}`}
+                          className="w-12 rounded-lg border border-white/10 bg-white/[0.03] py-1 text-center text-white outline-none focus:border-white/30"
+                        />
+                        <button
+                          onClick={() => setZoneLeds(zoneId, draftOf(zoneId) + 1)}
+                          disabled={draftOf(zoneId) >= LED_MAX_PER_PIN}
+                          aria-label={`More LEDs in zone ${zoneId}`}
+                          className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {pendingLoad !== null && (
+                  <p
+                    className={`mt-2 text-[11px] ${
+                      pendingLoad > LED_MAX_PER_PIN
+                        ? "text-red-400"
+                        : pendingLoad > LED_WARN_LIMIT
+                          ? "text-amber-300/80"
+                          : "text-white/40"
+                    }`}
+                  >
+                    Pin {formatPin(typedPin as number)} would drive {pendingLoad} LED
+                    {pendingLoad === 1 ? "" : "s"}
+                    {pendingLoad > LED_MAX_PER_PIN
+                      ? ` — over the ${LED_MAX_PER_PIN} LED limit, it can't be assigned.`
+                      : pendingLoad > LED_WARN_LIMIT
+                        ? ` — more than ${LED_WARN_LIMIT} on one pin can cause problems.`
+                        : "."}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-white/30">
@@ -672,6 +912,7 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
             </div>
 
             {warning && <p className="text-xs text-red-400">{warning}</p>}
+            {notice && <p className="text-xs text-amber-300/80">⚠ {notice}</p>}
 
             {groupedPins.length > 0 && (
               <div>
@@ -681,17 +922,40 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
                 <div className="flex max-w-full flex-wrap gap-2">
                   {groupedPins.map((pin) => {
                     const count = pinMappings.filter((m) => m.pin === pin).length;
+                    const leds = pinLedLoad(pinMappings, pin);
+                    const merged = mergedPinSet.has(pin);
+                    const ticked = mergeSel.includes(pin);
                     return (
                       <div
                         key={pin}
-                        className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03]"
+                        className={`flex items-center gap-1 rounded-full border bg-white/[0.03] ${
+                          ticked ? "border-white/50" : "border-white/10"
+                        }`}
                       >
+                        <input
+                          type="checkbox"
+                          checked={ticked}
+                          disabled={merged || (!ticked && mergeSel.length >= 3)}
+                          onChange={() => toggleMergePin(pin)}
+                          title={
+                            merged
+                              ? "Already part of a tricolor LED"
+                              : "Tick 3 pins to merge them into a tricolor LED"
+                          }
+                          aria-label={`Select pin ${formatPin(pin)} for tricolor merge`}
+                          className="ml-3 cursor-pointer disabled:cursor-default disabled:opacity-30"
+                        />
                         <button
                           onClick={() => selectPinGroup(pin)}
                           className="cursor-pointer rounded-full px-3 py-1 font-serif text-xs text-white/50 hover:text-white"
                         >
                           Pin <b className="text-white">{formatPin(pin)}</b> —{" "}
-                          {count} zone{count === 1 ? "" : "s"}
+                          {count} zone{count === 1 ? "" : "s"} · {leds} LED
+                          {leds === 1 ? "" : "s"}
+                          {leds > LED_WARN_LIMIT && (
+                            <span className="text-amber-300"> ⚠</span>
+                          )}
+                          {merged && " · tricolor"}
                           {pinTypeOf(pin) === "analog" &&
                             (isPwmPin(pin) ? " · analog" : " · analog ⚠")}
                         </button>
@@ -706,6 +970,74 @@ function ZoneMapper({ node, onZonesReady, onPinMappingsChange, onClearZones }: Z
                     );
                   })}
                 </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={mergeTricolor}
+                    disabled={mergeSel.length !== 3}
+                    className="cursor-pointer rounded-xl border border-white/20 px-4 py-2 font-serif text-sm text-white/80 transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-35"
+                  >
+                    Merge into tricolor LED
+                  </button>
+                  <p className="text-[11px] text-white/35">
+                    {mergeSel.length}/3 pins ticked — merging needs exactly 3.
+                    One tricolor LED counts as 3 LEDs.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {tricolorGroups.length > 0 && (
+              <div>
+                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/30">
+                  Tricolor LEDs
+                </p>
+                <div className="flex flex-col gap-2">
+                  {tricolorGroups.map((g) => {
+                    const each = Math.max(
+                      ...g.pins.map((p) => pinLedLoad(pinMappings, p)),
+                    );
+                    const uneven = g.pins.some(
+                      (p) => pinLedLoad(pinMappings, p) !== each,
+                    );
+                    return (
+                      <div
+                        key={g.id}
+                        className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="flex items-center gap-2 font-serif text-xs text-white/60">
+                            <span
+                              className="h-3 w-3 rounded-full border border-white/20"
+                              style={{ backgroundColor: g.color ?? DEFAULT_TRICOLOR }}
+                            />
+                            Pins{" "}
+                            <b className="text-white">
+                              {g.pins.map(formatPin).join(" + ")}
+                            </b>{" "}
+                            — {each * 3} LEDs ({each} tricolor)
+                          </p>
+                          <button
+                            onClick={() => unmerge(g.id)}
+                            className="cursor-pointer rounded-full px-2 py-1 text-xs text-red-300/50 hover:bg-red-400/10 hover:text-red-300"
+                          >
+                            Unmerge
+                          </button>
+                        </div>
+                        {uneven && (
+                          <p className="mt-1 text-[11px] text-amber-300/80">
+                            ⚠ The 3 pins have different LED counts. Each tricolor LED uses
+                            one LED on every pin, so they should match.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] text-white/30">
+                  Change a tricolor LED's color in the previews (Sequence and
+                  Keyframes tabs).
+                </p>
               </div>
             )}
           </div>
