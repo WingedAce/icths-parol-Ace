@@ -390,7 +390,12 @@ function SequenceEditor({
       </div>
 
       {/* The parol, lit the way it would be at the playhead */}
-      <ParolPreview node={groupNode} litPins={litNow} levels={levelsNow} />
+      <ParolPreview
+        node={groupNode}
+        litPins={litNow}
+        levels={levelsNow}
+        editColors
+      />
 
       {/* Timeline strip: section lines, keyframe markers, playhead */}
       <div>

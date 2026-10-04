@@ -579,6 +579,7 @@ function PairView({
                 node={groupNode}
                 litPins={displayLit}
                 levels={displayLevels}
+                editColors
               />
               <div className="mt-3 flex items-baseline justify-between gap-3">
                 <p className="font-serif text-2xl text-white">

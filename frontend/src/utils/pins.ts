@@ -93,3 +93,64 @@ export function describePins(
   );
   return `Pins on: ${parts.join(", ")}`;
 }
+
+// ---- LED counts per pin ----
+
+// More than this many LEDs on one pin shows a warning...
+export const LED_WARN_LIMIT = 6;
+// ...and more than this is not allowed at all.
+export const LED_MAX_PER_PIN = 10;
+
+// LEDs in one zone. A zone with no saved count has 1.
+export const ledsInZone = (m: { ledCount?: number }) => m.ledCount ?? 1;
+
+// Total LEDs a pin has to drive, across all of its zones. A tricolor LED puts
+// one LED on each of its 3 pins, so this is also the pin's load for tricolor.
+export function pinLedLoad(
+  pinMappings: { pin: number; ledCount?: number }[],
+  pin: number,
+): number {
+  return pinMappings
+    .filter((m) => m.pin === pin)
+    .reduce((sum, m) => sum + ledsInZone(m), 0);
+}
+
+// Total LEDs in the whole parol. A tricolor LED equals 3 LEDs, so a merged
+// group of 3 pins counts 3 x (tricolor LEDs on it); the tricolor count is the
+// biggest load among its 3 pins.
+export function totalLeds(
+  pinMappings: { pin: number; ledCount?: number }[],
+  groups: { pins: number[] }[],
+): number {
+  const merged = new Set(groups.flatMap((g) => g.pins));
+  let total = 0;
+  for (const pin of new Set(pinMappings.map((m) => m.pin))) {
+    if (!merged.has(pin)) total += pinLedLoad(pinMappings, pin);
+  }
+  for (const g of groups) {
+    total += 3 * Math.max(...g.pins.map((p) => pinLedLoad(pinMappings, p)), 0);
+  }
+  return total;
+}
+
+// The tricolor group a pin belongs to, if any.
+export function groupOfPin<T extends { pins: number[] }>(
+  groups: T[],
+  pin: number,
+): T | undefined {
+  return groups.find((g) => g.pins.includes(pin));
+}
+
+
+// The only LED colors available for the build — the palette is fixed to
+// these eight, so there's no free color picker.
+export const PIN_COLORS = [
+  { name: "Red", hex: "#ff4d4d" },
+  { name: "Blue", hex: "#0a9bff" },
+  { name: "Yellow", hex: "#ffd60a" },
+  { name: "Green", hex: "#34c759" },
+  { name: "Orange", hex: "#ff8a1f" },
+  { name: "White", hex: "#ffffff" },
+  { name: "Pink", hex: "#ff6fb5" },
+  { name: "Purple", hex: "#b86bff" },
+] as const;
