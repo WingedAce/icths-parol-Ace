@@ -7,6 +7,7 @@ import { useProjects } from "../context/ProjectContext";
 import parolIcon from "../assets/parol-icon.png";
 
 import ZoneMapper from "../components/ZoneMapper";
+import ConfirmDialog from "../components/ConfirmDialog.tsx";
 
 import PinSetup from "../components/PinSetup";
 
@@ -285,29 +286,27 @@ function WorkspacePage() {
 
   // Zones, pin assignments and tricolor merges are made from the drawing, so
   // replacing, removing or re-scanning it throws them away. The design is
-  // shared by all three rounds, so ask first (and say so) if there is any.
-  function confirmDiscard(action: "replace" | "remove" | "rescan") {
+  // shared by all three rounds, so ask first (in the popup, and say so) if
+  // there is any. With nothing to lose it just goes ahead.
+  const [discardDialog, setDiscardDialog] = useState<{
+    action: "replace" | "remove" | "rescan";
+    onConfirm: () => void;
+  } | null>(null);
+
+  function askBeforeDiscarding(
+    action: "replace" | "remove" | "rescan",
+    onConfirm: () => void,
+  ) {
     const hasWork =
       (currentNode?.zones?.length ?? 0) > 0 ||
       (currentNode?.pinMappings?.length ?? 0) > 0;
-    if (!hasWork) return true;
 
-    const what =
-      action === "replace"
-        ? "Replacing the image will"
-        : action === "remove"
-          ? "Removing the image will"
-          : "Re-scanning the drawing will";
+    if (!hasWork) {
+      onConfirm();
+      return;
+    }
 
-    return window.confirm(
-      `${what} delete its detected zones, pin assignments and tricolor merges.\n\n` +
-        "This design is shared by all three rounds, so Round 1, Round 2 and " +
-        "Round 3 are all affected.\n\n" +
-        "The song and keyframes of each round are kept, but the keyframes " +
-        "may point to pins that no longer exist. Set up the pins again, then " +
-        "check the keyframes in every round.\n\n" +
-        "Continue?",
-    );
+    setDiscardDialog({ action, onConfirm });
   }
 
   function handleReplaceFile(file: File | null | undefined) {
@@ -317,15 +316,19 @@ function WorkspacePage() {
       handleFile(file);
       return;
     }
-    if (!confirmDiscard("replace")) return;
-    setImageVersion((v) => v + 1);
-    handleFile(file);
+    askBeforeDiscarding("replace", () => {
+      setImageVersion((v) => v + 1);
+      handleFile(file);
+    });
   }
 
   function handleRemoveImage() {
-    if (!currentNode || !confirmDiscard("remove")) return;
-    setImageVersion((v) => v + 1);
-    removeNodeImage(currentNode.id);
+    if (!currentNode) return;
+    const id = currentNode.id;
+    askBeforeDiscarding("remove", () => {
+      setImageVersion((v) => v + 1);
+      removeNodeImage(id);
+    });
   }
 
   function handleFile(
@@ -590,9 +593,8 @@ function WorkspacePage() {
                       setNodeTricolorGroups(currentNode.id, groups)
                     }
                     onClearZones={() => {
-                      if (confirmDiscard("rescan")) {
-                        clearNodeZones(currentNode.id);
-                      }
+                      const id = currentNode.id;
+                      askBeforeDiscarding("rescan", () => clearNodeZones(id));
                     }}
                   />
                   </>
@@ -864,6 +866,44 @@ function WorkspacePage() {
               </button>
             </div>
           </div>
+        )}
+
+        {discardDialog && (
+          <ConfirmDialog
+            title={
+              discardDialog.action === "replace"
+                ? "Replace image?"
+                : discardDialog.action === "remove"
+                  ? "Remove image?"
+                  : "Re-scan drawing?"
+            }
+            checkboxLabel="I understand this affects all three rounds"
+            onCancel={() => setDiscardDialog(null)}
+            onConfirm={() => {
+              const { onConfirm } = discardDialog;
+              setDiscardDialog(null);
+              onConfirm();
+            }}
+          >
+            <p>
+              {discardDialog.action === "replace"
+                ? "Replacing the image"
+                : discardDialog.action === "remove"
+                  ? "Removing the image"
+                  : "Re-scanning the drawing"}{" "}
+              will delete its detected zones, pin assignments and tricolor
+              merges.
+            </p>
+            <p>
+              This design is shared by all three rounds, so Round 1, Round 2
+              and Round 3 are all affected.
+            </p>
+            <p>
+              The song and keyframes of each round are kept, but the keyframes
+              may point to pins that no longer exist. Set up the pins again,
+              then check the keyframes in every round.
+            </p>
+          </ConfirmDialog>
         )}
       </div>
     </main>
