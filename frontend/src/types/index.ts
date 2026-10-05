@@ -17,6 +17,9 @@ export type ProjectNode = {
   name: string;
   type: NodeType;
   parentId: string;
+  // For a group's "animation" nodes: which round (1-3) this song and its
+  // keyframes belong to. Missing means round 1, so old projects still load.
+  round?: number;
   imageDataUrl?: string;
   imageWidth?: number;
   imageHeight?: number;

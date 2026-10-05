@@ -371,7 +371,7 @@ function SequenceEditor({
   };
 
   const startOver = () => {
-    if (window.confirm("Delete all keyframes and start over?")) {
+    if (window.confirm("Reset all keyframes and start over? The song stays.")) {
       setIsPlaying(false);
       seek(0);
       onFramesChange([]);
@@ -691,8 +691,11 @@ function SequenceEditor({
             </button>
           )}
           {frames.length > 0 && (
-            <button onClick={startOver} className={linkClass}>
-              Start over
+            <button
+              onClick={startOver}
+              className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-xs uppercase tracking-wider text-white/60 transition hover:border-white/40 hover:text-white"
+            >
+              Reset keyframes
             </button>
           )}
         </div>

@@ -408,6 +408,8 @@ MIN_SECTION_SECONDS = 8    # a "section" shorter than this is almost
 TARGET_SECTION_SECONDS = 20  # rough real-world length of a verse or
                               # chorus; used only to pick how many
                               # sections to look for, not as a hard rule
+MAX_SONG_SECONDS = 240   # songs longer than 4:00 are turned away
+SONG_LIMIT_GRACE_SECONDS = 1  # so a song shown as 4:00 isn't rejected at 240.04s
 MIN_SECTIONS = 2
 MAX_SECTIONS = 12   # a section count higher than this stops being
                      # meaningfully different from just working beat-by-
@@ -574,6 +576,13 @@ def analyze_audio(audio_bytes: bytes) -> dict:
         raise ValueError(
             f"Audio is only {duration:.1f}s long — too short to analyze "
             "meaningfully."
+        )
+
+    if duration > MAX_SONG_SECONDS + SONG_LIMIT_GRACE_SECONDS:
+        raise ValueError(
+            f"This song is {int(duration // 60)}:{int(duration % 60):02d} long. "
+            f"The limit is {MAX_SONG_SECONDS // 60}:{MAX_SONG_SECONDS % 60:02d}, "
+            "so please upload a shorter song or trim it first."
         )
 
     # ---- BPM + beat timestamps ----

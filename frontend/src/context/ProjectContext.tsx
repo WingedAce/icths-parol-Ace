@@ -27,7 +27,12 @@ type ProjectContextType = {
   addWorkspace: (name: string, type: WorkspaceType) => string;
   renameWorkspace: (id: string, name: string) => void;
   deleteWorkspace: (id: string) => void;
-  addNode: (parentId: string, name: string, type: NodeType) => string;
+  addNode: (
+    parentId: string,
+    name: string,
+    type: NodeType,
+    round?: number,
+  ) => string;
   renameNode: (id: string, name: string) => void;
   deleteNode: (id: string) => void;
   setNodeImage: (id: string, imageDataUrl: string) => void;
@@ -213,21 +218,38 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     parentId: string,
     name: string,
     type: NodeType,
+    round?: number,
   ) {
     const node: ProjectNode = {
       id: crypto.randomUUID(),
       name,
       type,
       parentId,
+      ...(round ? { round } : {}),
     };
 
-    setNodesByParent((previous) => ({
-      ...previous,
-      [parentId]: [
-        ...(previous[parentId] ?? []),
-        node,
-      ],
-    }));
+    setNodesByParent((previous) => {
+      // A group has one song slot per round. A fast double click must not
+      // make a second slot for the same round.
+      if (
+        type === "animation" &&
+        (previous[parentId] ?? []).some(
+          (item) =>
+            item.type === "animation" &&
+            (item.round ?? 1) === (round ?? 1),
+        )
+      ) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [parentId]: [
+          ...(previous[parentId] ?? []),
+          node,
+        ],
+      };
+    });
 
     return node.id;
   }

@@ -38,9 +38,45 @@ function toAudioAnalysis(raw: AudioAnalysisResponse): AudioAnalysis {
 
 type AudioUploaderProps = {
   node: ProjectNode;
+  // A new song was uploaded and analyzed.
   onAnalyzed: (fileName: string, analysis: AudioAnalysis) => void;
+  // The same song with its tempo halved or doubled (the beats move).
+  onTempoChange: (analysis: AudioAnalysis) => void;
   onClear: () => void;
+  // Shows a "Reset keyframes" button (the song stays).
+  frameCount?: number;
+  onResetKeyframes?: () => void;
 };
+
+// Songs longer than this are not accepted (the backend checks it too).
+const MAX_SONG_SECONDS = 240;
+// A little leeway so a song shown as 4:00 is not turned away at 240.04s.
+const SONG_LIMIT_GRACE_SECONDS = 1;
+
+const clock = (seconds: number) => {
+  const total = Math.round(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
+
+// Reads the song length in the browser, before anything is uploaded.
+// Returns null when the browser can't tell (the backend then checks it).
+function readDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    const finish = (value: number | null) => {
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 5000);
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () =>
+      finish(Number.isFinite(audio.duration) ? audio.duration : null);
+    audio.onerror = () => finish(null);
+    audio.src = url;
+  });
+}
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -48,7 +84,14 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
+function AudioUploader({
+  node,
+  onAnalyzed,
+  onTempoChange,
+  onClear,
+  frameCount = 0,
+  onResetKeyframes,
+}: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +110,13 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
     setIsUploading(true);
 
     try {
+      const length = await readDuration(file);
+      if (length !== null && length > MAX_SONG_SECONDS + SONG_LIMIT_GRACE_SECONDS) {
+        throw new Error(
+          `This song is ${clock(length)} long. The limit is ${clock(MAX_SONG_SECONDS)}, so please upload a shorter song or trim it first.`,
+        );
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
@@ -129,10 +179,7 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
             <div className="mt-2 flex justify-center gap-1">
               <button
                 onClick={() =>
-                  onAnalyzed(
-                    node.audioFileName ?? "",
-                    scaleAllTempo(node.audioAnalysis!, 0.5),
-                  )
+                  onTempoChange(scaleAllTempo(node.audioAnalysis!, 0.5))
                 }
                 title="If the detected tempo sounds twice too fast"
                 className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
@@ -141,10 +188,7 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
               </button>
               <button
                 onClick={() =>
-                  onAnalyzed(
-                    node.audioFileName ?? "",
-                    scaleAllTempo(node.audioAnalysis!, 2),
-                  )
+                  onTempoChange(scaleAllTempo(node.audioAnalysis!, 2))
                 }
                 title="If the detected tempo sounds twice too slow"
                 className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
@@ -176,10 +220,7 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
                   {section.bpm} BPM
                   <button
                     onClick={() =>
-                      onAnalyzed(
-                        node.audioFileName ?? "",
-                        scaleSectionTempo(node.audioAnalysis!, section.id, 0.5),
-                      )
+                      onTempoChange(scaleSectionTempo(node.audioAnalysis!, section.id, 0.5))
                     }
                     title="Halve this section's tempo"
                     className="cursor-pointer rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
@@ -188,10 +229,7 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
                   </button>
                   <button
                     onClick={() =>
-                      onAnalyzed(
-                        node.audioFileName ?? "",
-                        scaleSectionTempo(node.audioAnalysis!, section.id, 2),
-                      )
+                      onTempoChange(scaleSectionTempo(node.audioAnalysis!, section.id, 2))
                     }
                     title="Double this section's tempo"
                     className="cursor-pointer rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
@@ -204,12 +242,30 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
           </ul>
         </div>
 
+        {onResetKeyframes && (
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Reset all keyframes for this song? The song itself stays.",
+                )
+              ) {
+                onResetKeyframes();
+              }
+            }}
+            disabled={frameCount === 0}
+            className="mt-8 w-full cursor-pointer rounded-full border border-white/15 px-4 py-2 text-xs text-white/60 transition hover:border-white/40 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/15 disabled:hover:text-white/60"
+          >
+            Reset keyframes{frameCount > 0 ? ` (${frameCount})` : ""}
+          </button>
+        )}
+
         <button
           onClick={() => {
             deleteAudio(node.id).catch(() => {});
             onClear();
           }}
-          className="mt-8 w-full cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
+          className="mt-3 w-full cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
         >
           Remove & upload a different song
         </button>
@@ -250,7 +306,7 @@ function AudioUploader({ node, onAnalyzed, onClear }: AudioUploaderProps) {
           </p>
 
           <p className="mt-2 text-xs text-white/25">
-            MP3 only — analyzed for BPM, sections, and energy
+            MP3 only, up to 4 minutes — analyzed for BPM, sections, and energy
           </p>
         </>
       )}

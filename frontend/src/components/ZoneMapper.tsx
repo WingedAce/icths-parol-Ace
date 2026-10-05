@@ -388,6 +388,24 @@ function ZoneMapper({
   }
 
   function resetAllPins() {
+    const hasPins =
+      (node.pinMappings?.length ?? 0) > 0 ||
+      (node.tricolorGroups?.length ?? 0) > 0;
+    if (
+      hasPins &&
+      !window.confirm(
+        "Reset all pin assignments?\n\n" +
+          "This removes the pin, LED color and LED count of every zone, " +
+          "and all tricolor merges. The design is shared by all three " +
+          "rounds, so Round 1, Round 2 and Round 3 are all affected.\n\n" +
+          "The keyframes in each round are kept, but they will not match " +
+          "any pin until you assign the pins again.\n\n" +
+          "Continue?",
+      )
+    ) {
+      return;
+    }
+
     onPinMappingsChange([]);
     onTricolorGroupsChange([]);
     setSelected(new Set());
@@ -693,20 +711,36 @@ function ZoneMapper({
                 const zone = zoneById.get(zoneId);
                 if (!zone) return null;
                 const hot = hoverZone === zoneId;
+
+                // Keep the marker small enough that the zone's shape still
+                // shows: it shrinks with the zone (never below a readable
+                // minimum, never above the max).
+                const zxs = zone.polygon.map((pt) => pt[0]);
+                const zys = zone.polygon.map((pt) => pt[1]);
+                const zoneSpan = Math.min(
+                  Math.max(...zxs) - Math.min(...zxs),
+                  Math.max(...zys) - Math.min(...zys),
+                );
+                const markerR = Math.min(
+                  pinFontSize * 0.52,
+                  Math.max(pinFontSize * 0.3, zoneSpan * 0.26),
+                );
+
                 return (
                   <g key={`marker-${zoneId}`} style={{ pointerEvents: "none" }}>
                     <circle
                       cx={zone.cx}
                       cy={zone.cy}
-                      r={pinFontSize * 0.8}
+                      r={markerR}
                       fill={hot ? "#ffffff" : "#e8e4d8"}
+                      fillOpacity={0.92}
                       stroke="#000"
-                      strokeWidth={pinStrokeWidth * 0.6}
+                      strokeWidth={pinStrokeWidth * 0.4}
                     />
                     <text
                       x={zone.cx}
                       y={zone.cy}
-                      fontSize={pinFontSize * 0.85}
+                      fontSize={markerR * 1.15}
                       fontWeight={700}
                       textAnchor="middle"
                       dominantBaseline="central"
