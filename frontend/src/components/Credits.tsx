@@ -20,7 +20,7 @@ const GROUPS: CreditGroup[] = [
       { name: "Enzo Yutuc" },
       { name: "Josh Sanchez" },
       { name: "Red Reyes" },
-      { name: "Jacob Magtoti" },
+      { name: "ESPECIALLY Jacob Magtata" },
     ],
   },
   {
