@@ -12,6 +12,7 @@ function App() {
   const [batch, setBatch] = useState("");
   const [section, setSection] = useState("");
   const [groupNumber, setGroupNumber] = useState("");
+  const [lockedMessage, setLockedMessage] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -60,6 +61,16 @@ function App() {
         item.type === "group" &&
         item.name.toLowerCase() === groupLabel.toLowerCase(),
     );
+
+    // A group whose design was locked in the Developer Window can't be opened.
+    if (groupNode?.locked) {
+      setLockedMessage(
+        `${groupLabel} (${sectionName}, Batch ${batchName}) is locked. Ask your teacher to unlock it.`,
+      );
+      return;
+    }
+
+    setLockedMessage("");
 
     const groupNodeId =
       groupNode?.id ??
@@ -133,6 +144,15 @@ function App() {
               className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
             />
           </div>
+
+          {lockedMessage && (
+            <p
+              role="alert"
+              className="rounded-xl border border-[#ff3b41]/60 bg-[#ff3b41]/10 px-4 py-3 text-xs leading-relaxed text-[#ff8a8e]"
+            >
+              🔒 {lockedMessage}
+            </p>
+          )}
 
           <button
             type="submit"

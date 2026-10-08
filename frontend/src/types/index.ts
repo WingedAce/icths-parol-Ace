@@ -37,6 +37,9 @@ export type ProjectNode = {
   // student undo back to it even after several corrections.
   audioAnalysisOriginal?: AudioAnalysis;
   frames?: Frame[];
+  // Set from the Developer Window. A locked group (design) cannot be opened,
+  // edited or deleted by anyone until it is unlocked again.
+  locked?: boolean;
 };
 
 export type AudioSection = {

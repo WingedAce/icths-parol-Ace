@@ -247,10 +247,25 @@ function WorkspacePage() {
     }
   }
 
+  // True if this node, or anything inside it, is a locked design.
+  function containsLocked(node: ProjectNode): boolean {
+    if (node.locked) return true;
+    return getChildren(node.id).some(containsLocked);
+  }
+
   function handleDeleteNode(
     id: string,
     name: string,
   ) {
+    const target = currentItems.find((item) => item.id === id);
+
+    if (target && containsLocked(target)) {
+      window.alert(
+        `"${name}" has a locked design inside it, so it can't be deleted. Unlock it in the Developer Window first.`,
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete "${name}" and everything inside it?`,
     );
@@ -275,6 +290,13 @@ function WorkspacePage() {
   }
 
   function handleDeleteWorkspace() {
+    if (getChildren(currentWorkspace.id).some(containsLocked)) {
+      window.alert(
+        `"${currentWorkspace.name}" has a locked design inside it, so it can't be deleted. Unlock it in the Developer Window first.`,
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete "${currentWorkspace.name}" and everything inside it?`,
     );
@@ -419,7 +441,24 @@ function WorkspacePage() {
 
         <div className="mt-10 h-px w-full bg-white/10" />
 
-        {currentNode?.type === "group" ? (
+        {nodeChain.some((node) => node.locked) ? (
+          <section className="mx-auto mt-16 max-w-md rounded-3xl border-2 border-[#ff3b41] bg-[#ff3b41]/[0.06] px-8 py-12 text-center shadow-[0_0_30px_rgba(255,59,65,0.25)]">
+            <p className="text-4xl">🔒</p>
+            <h2 className="mt-4 font-serif text-3xl font-light">
+              This design is locked
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-white/50">
+              It can't be opened or changed right now. Ask your teacher to
+              unlock it in the Developer Window.
+            </p>
+            <button
+              onClick={() => navigate("/")}
+              className="mt-8 cursor-pointer rounded-xl bg-white px-6 py-3 text-sm text-black transition hover:bg-white/90"
+            >
+              Back to start
+            </button>
+          </section>
+        ) : currentNode?.type === "group" ? (
           <section className="mt-12">
             <div className="mb-10">
               {/* Round picker */}
@@ -768,11 +807,28 @@ function WorkspacePage() {
                 className="group relative aspect-[4/3]"
               >
                 <button
-                  onClick={() => openNode(item.id)}
-                  className="absolute inset-0 w-full cursor-pointer rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-left transition duration-500 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06]"
+                  onClick={() => {
+                    if (item.locked) {
+                      window.alert(
+                        `"${item.name}" is locked. Ask your teacher to unlock it.`,
+                      );
+                      return;
+                    }
+                    openNode(item.id);
+                  }}
+                  className={`absolute inset-0 w-full rounded-2xl border p-7 text-left transition duration-500 ${
+                    item.locked
+                      ? "cursor-not-allowed border-2 border-[#ff3b41] bg-[#ff3b41]/[0.05] shadow-[0_0_18px_rgba(255,59,65,0.3)]"
+                      : "cursor-pointer border-white/10 bg-white/[0.03] hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06]"
+                  }`}
                 >
                   <div className="flex h-full flex-col justify-end">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+                    <p
+                      className={`text-[10px] uppercase tracking-[0.3em] ${
+                        item.locked ? "text-[#ff8a8e]" : "text-white/30"
+                      }`}
+                    >
+                      {item.locked ? "🔒 Locked · " : ""}
                       {typeLabels[item.type]}
                     </p>
 

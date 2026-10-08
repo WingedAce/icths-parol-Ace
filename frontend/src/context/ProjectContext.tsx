@@ -54,6 +54,8 @@ type ProjectContextType = {
   setNodeAudioOriginal: (id: string, audioAnalysisOriginal: AudioAnalysis) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
+  // Locks or unlocks groups (designs). Used by the Developer Window.
+  setNodesLocked: (ids: string[], locked: boolean) => void;
 };
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
@@ -494,6 +496,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         });
       }
 
+  function setNodesLocked(ids: string[], locked: boolean) {
+    const idSet = new Set(ids);
+
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          idSet.has(node.id) ? { ...node, locked } : node,
+        );
+      }
+
+      return next;
+    });
+  }
+
   function getChildren(parentId: string) {
     return nodesByParent[parentId] ?? [];
   }
@@ -532,6 +550,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setNodeAudioOriginal,
         clearNodeAudio,
         setNodeFrames,
+        setNodesLocked,
       }}
     >
       {children}
