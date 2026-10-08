@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -18,6 +19,9 @@ function App() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
 
+  const [showEmail, setShowEmail] = useState(false);
+  const [showCode, setShowCode] = useState(false);
+
   const [step, setStep] = useState<"group" | "email" | "code">("group");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -35,6 +39,7 @@ function App() {
     }
 
     setError("");
+    setLockedMessage("");
     setStep("email");
   }
 
@@ -78,6 +83,8 @@ function App() {
         );
       }
 
+      setCode("");
+      setShowCode(false);
       setStep("code");
     } catch (err) {
       setError(
@@ -137,7 +144,7 @@ function App() {
 
       const groupLabel = `Group ${groupNumberValue}`;
 
-      let workspace = workspaces.find(
+      const workspace = workspaces.find(
         (item) =>
           item.type === "batch" &&
           item.name.toLowerCase() === batchName.toLowerCase(),
@@ -148,7 +155,7 @@ function App() {
 
       const sectionChildren = getChildren(workspaceId);
 
-      let sectionNode = sectionChildren.find(
+      const sectionNode = sectionChildren.find(
         (item) =>
           item.type === "section" &&
           item.name.toLowerCase() === sectionName.toLowerCase(),
@@ -160,7 +167,7 @@ function App() {
 
       const groupChildren = getChildren(sectionNodeId);
 
-      let groupNode = groupChildren.find(
+      const groupNode = groupChildren.find(
         (item) =>
           item.type === "group" &&
           item.name.toLowerCase() === groupLabel.toLowerCase(),
@@ -196,7 +203,6 @@ function App() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
       <div className="w-full max-w-sm">
-
         <div className="mb-12 text-center">
           <p className="mb-5 text-[10px] uppercase tracking-[0.45em] text-white/30">
             Lighting Design System
@@ -295,17 +301,34 @@ function App() {
                 Gmail Address
               </label>
 
-              <input
-                autoFocus
-                type="text"
-                inputMode="email"
-                value={email}
-                onChange={(event) =>
-                  setEmail(event.target.value)
-                }
-                placeholder="Enter your Gmail address"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
-              />
+              <div className="relative">
+                <input
+                  autoFocus
+                  type={showEmail ? "text" : "password"}
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
+                  placeholder="Enter your Gmail address"
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 pr-14 text-white outline-none placeholder:text-white/20 focus:border-white/30"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowEmail((current) => !current)
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-lg text-white/50 transition hover:text-white"
+                  aria-label={
+                    showEmail
+                      ? "Hide Gmail address"
+                      : "Show Gmail address"
+                  }
+                >
+                  {showEmail ? "🙈" : "👁"}
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -348,26 +371,45 @@ function App() {
                 Verification Code
               </label>
 
-              <input
-                autoFocus
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={code}
-                onChange={(event) =>
-                  setCode(
-                    event.target.value.replace(/\D/g, ""),
-                  )
-                }
-                placeholder="Enter 6-digit code"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-xl tracking-[0.4em] text-white outline-none placeholder:text-white/20 focus:border-white/30"
-              />
+              <div className="relative">
+                <input
+                  autoFocus
+                  type={showCode ? "text" : "password"}
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) =>
+                    setCode(
+                      event.target.value.replace(/\D/g, ""),
+                    )
+                  }
+                  placeholder="Enter 6-digit code"
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 pr-14 text-center text-xl tracking-[0.4em] text-white outline-none placeholder:text-white/20 focus:border-white/30"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCode((current) => !current)
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-lg text-white/50 transition hover:text-white"
+                  aria-label={
+                    showCode
+                      ? "Hide verification code"
+                      : "Show verification code"
+                  }
+                >
+                  {showCode ? "🙈" : "👁"}
+                </button>
+              </div>
             </div>
 
             <p className="text-center text-xs leading-relaxed text-white/40">
               We sent a verification code to
               <br />
-              <span className="text-white/70">{email}</span>
+              <span className="text-white/70">
+                {email}
+              </span>
             </p>
 
             {error && (
@@ -391,6 +433,7 @@ function App() {
               type="button"
               onClick={() => {
                 setCode("");
+                setShowCode(false);
                 setError("");
                 setStep("email");
               }}
@@ -408,10 +451,10 @@ function App() {
         >
           Developer Window
         </button>
-
       </div>
     </main>
   );
 }
 
 export default App;
+
