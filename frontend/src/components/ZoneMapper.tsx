@@ -1299,13 +1299,13 @@ function ZoneMapper({
         <div className="flex flex-col gap-2 border-t border-white/5 pt-4">
           <button
             onClick={resetAllPins}
-            className="cursor-pointer text-left text-xs text-white/30 underline underline-offset-2 hover:text-white/60"
+            className="w-fit cursor-pointer rounded-full border border-white/10 px-4 py-2 text-left text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white"
           >
             Reset all pin assignments
           </button>
           <button
             onClick={onClearZones}
-            className="cursor-pointer text-left text-xs text-white/30 underline underline-offset-2 hover:text-white/60"
+            className="w-fit cursor-pointer rounded-full border border-white/10 px-4 py-2 text-left text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white"
           >
             Re-scan drawing (forces a fresh detection from the server)
           </button>

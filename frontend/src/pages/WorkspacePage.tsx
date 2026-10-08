@@ -516,7 +516,7 @@ function WorkspacePage() {
                         onClick={() =>
                           fileInputRef.current?.click()
                         }
-                        className="cursor-pointer text-white underline underline-offset-2 hover:text-white/80"
+                        className="mx-1 cursor-pointer rounded-full border border-white/25 px-3 py-1 text-xs uppercase tracking-[0.15em] text-white transition hover:border-white/50 hover:bg-white/10"
                       >
                         browse
                       </button>

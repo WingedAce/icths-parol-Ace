@@ -25,7 +25,7 @@ const pillClass =
   "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
 const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
 const linkClass =
-  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60";
+  "inline-flex cursor-pointer items-center rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
 const navClass = `${pillClass} inline-flex items-center gap-2`;
 // Small action buttons above the pin chips (Select all / Turn all off).
 const miniPillClass =
