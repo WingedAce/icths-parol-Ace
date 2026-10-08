@@ -76,6 +76,7 @@ function WorkspacePage() {
     setNodeTricolorGroups,
     clearNodeZones,
     setNodeAudio,
+    setNodeAudioOriginal,
     clearNodeAudio,
     setNodeFrames,
   } = useProjects();
@@ -516,7 +517,7 @@ function WorkspacePage() {
                         onClick={() =>
                           fileInputRef.current?.click()
                         }
-                        className="mx-1 cursor-pointer rounded-full border border-white/25 px-3 py-1 text-xs uppercase tracking-[0.15em] text-white transition hover:border-white/50 hover:bg-white/10"
+                        className="cursor-pointer text-white underline underline-offset-2 hover:text-white/80"
                       >
                         browse
                       </button>
@@ -628,6 +629,9 @@ function WorkspacePage() {
                   // A new song starts with no keyframes.
                   setNodeFrames(animationChild.id, []);
                 }}
+                onFreshAnalysis={(analysis: AudioAnalysis) =>
+                  setNodeAudioOriginal(animationChild.id, analysis)
+                }
                 onTempoChange={(analysis: AudioAnalysis) => {
                   setNodeAudio(
                     animationChild.id,
@@ -728,6 +732,9 @@ function WorkspacePage() {
                   );
                   setNodeFrames(currentNode.id, []);
                 }}
+                onFreshAnalysis={(analysis: AudioAnalysis) =>
+                  setNodeAudioOriginal(currentNode.id, analysis)
+                }
                 onTempoChange={(analysis: AudioAnalysis) => {
                   setNodeAudio(
                     currentNode.id,

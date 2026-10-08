@@ -23,7 +23,7 @@ import type {
 const pillClass =
   "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
 const linkClass =
-  "inline-flex cursor-pointer items-center rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
+  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60 disabled:cursor-default disabled:opacity-40 disabled:no-underline disabled:hover:text-white/30";
 const primaryClass =
   "cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white";
 const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";

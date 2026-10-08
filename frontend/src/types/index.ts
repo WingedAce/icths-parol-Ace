@@ -32,6 +32,10 @@ export type ProjectNode = {
   // actual MP3 bytes are never stored, only the analysis result).
   audioFileName?: string;
   audioAnalysis?: AudioAnalysis;
+  // Snapshot of what the backend originally detected, set once per
+  // upload and never touched by ½×/⅔×/1.5×/2× corrections — lets the
+  // student undo back to it even after several corrections.
+  audioAnalysisOriginal?: AudioAnalysis;
   frames?: Frame[];
 };
 
@@ -45,6 +49,11 @@ export type AudioSection = {
 
 export type AudioAnalysis = {
   duration: number;
+  // Only present when the source song was longer than the analysis cap
+  // (see MAX_CLIP_SECONDS in backend/main.py) — tells the UI what window
+  // of the original song this analysis actually covers.
+  sourceDuration?: number;
+  clipStart?: number;
   bpm: number;
   beatTimes: number[];
   tempoCurve: { time: number; bpm: number }[]; // local BPM at each beat

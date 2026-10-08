@@ -12,7 +12,7 @@ contour extraction), matching the locked decision in the project
 handoff doc.
 """
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import io
@@ -21,6 +21,7 @@ import subprocess
 import cv2
 import librosa
 import numpy as np
+from beat_tracking import track_beats
 
 app = FastAPI(title="I-Parol Segmentation API")
 
@@ -408,8 +409,13 @@ MIN_SECTION_SECONDS = 8    # a "section" shorter than this is almost
 TARGET_SECTION_SECONDS = 20  # rough real-world length of a verse or
                               # chorus; used only to pick how many
                               # sections to look for, not as a hard rule
-MAX_SONG_SECONDS = 240   # songs longer than 4:00 are turned away
-SONG_LIMIT_GRACE_SECONDS = 1  # so a song shown as 4:00 isn't rejected at 240.04s
+MAX_CLIP_SECONDS = 120   # hard cap on how much of a song gets analyzed.
+                         # Longer songs aren't rejected — the frontend
+                         # lets the student pick which 120s window to
+                         # use (see `start` below), and only that window
+                         # is ever decoded past this point, analyzed, or
+                         # sent back. Keeps response size and analysis
+                         # time predictable regardless of song length.
 MIN_SECTIONS = 2
 MAX_SECTIONS = 12   # a section count higher than this stops being
                      # meaningfully different from just working beat-by-
@@ -552,10 +558,17 @@ def _load_audio(audio_bytes: bytes):
             )
 
 
-def analyze_audio(audio_bytes: bytes) -> dict:
+def analyze_audio(audio_bytes: bytes, clip_start: float = 0.0) -> dict:
     """Analyze an uploaded song: BPM, beat timestamps, an energy curve,
     and a set of structural section boundaries with each section's
     average energy.
+
+    `clip_start` (seconds into the original file) is where the analyzed
+    window begins — everything downstream of the slice below (BPM,
+    sections, energy, the whole response) only ever sees that window, up
+    to MAX_CLIP_SECONDS long. This is what lets a student pick which
+    120s chunk of a longer song to use, without the backend ever
+    decoding/analyzing more than that chunk.
 
     Pure function like segment_image() above — no FastAPI code in here,
     just librosa/numpy. Returns a plain dict, ready to hand to
@@ -571,30 +584,51 @@ def analyze_audio(audio_bytes: bytes) -> dict:
             f"(underlying error: {e})"
         )
 
+    source_duration = float(librosa.get_duration(y=y, sr=sr))
+
+    if clip_start < 0 or clip_start >= source_duration:
+        raise ValueError(
+            f"Start time {clip_start:.1f}s is outside the song "
+            f"(song is {source_duration:.1f}s long)."
+        )
+
+    # Slice to the analyzed window BEFORE anything else runs, so BPM,
+    # sections and energy are all computed only from this window —
+    # matching exactly what the student chose to use.
+    if source_duration > MAX_CLIP_SECONDS or clip_start > 0:
+        start_sample = int(round(clip_start * sr))
+        end_sample = min(
+            start_sample + int(round(MAX_CLIP_SECONDS * sr)), len(y)
+        )
+        y = y[start_sample:end_sample]
+
     duration = float(librosa.get_duration(y=y, sr=sr))
     if duration < MIN_SECTION_SECONDS:
         raise ValueError(
-            f"Audio is only {duration:.1f}s long — too short to analyze "
-            "meaningfully."
-        )
-
-    if duration > MAX_SONG_SECONDS + SONG_LIMIT_GRACE_SECONDS:
-        raise ValueError(
-            f"This song is {int(duration // 60)}:{int(duration % 60):02d} long. "
-            f"The limit is {MAX_SONG_SECONDS // 60}:{MAX_SONG_SECONDS % 60:02d}, "
-            "so please upload a shorter song or trim it first."
+            f"Selected clip is only {duration:.1f}s long — too short to "
+            "analyze meaningfully. Pick a window further from the end "
+            "of the song."
         )
 
     # ---- BPM + beat timestamps ----
-    # beat_track returns tempo as a 1-element array in newer librosa
-    # versions and a bare float in older ones — float(...) handles both.
-    tempo, beat_frames = librosa.beat.beat_track(
-        y=y, sr=sr, tightness=BEAT_TIGHTNESS
-    )
-    bpm = round(float(np.atleast_1d(tempo)[0]), 1)
-    beat_times = librosa.frames_to_time(beat_frames, sr=sr).round(3).tolist()
-    beat_times, tempo_factor = _fix_octave(beat_times)
-    bpm = round(bpm * tempo_factor, 1)
+    # `y` is already clean mono audio from _load_audio() (soundfile, or the
+    # ffmpeg fallback for malformed MP3s), so Beat This! never touches the
+    # raw file or its own loader. See beat_tracking.py. Falls back to
+    # librosa automatically (or when BEAT_TRACKER=librosa is set).
+    beat_times, downbeat_times, beat_tracker = track_beats(y, sr)
+
+    if beat_tracker == "librosa":
+        # Classical tracker is prone to double/half-tempo errors, so fold
+        # the whole song into [MIN_BPM, MAX_BPM) as before.
+        beat_times, tempo_factor = _fix_octave(beat_times)
+    else:
+        # Beat This! doesn't show octave errors; don't second-guess it.
+        tempo_factor = 1.0
+
+    if len(beat_times) >= 2:
+        bpm = round(60.0 / float(np.median(np.diff(beat_times))), 1)
+    else:
+        bpm = 0.0
     tempo_curve = _local_bpm(beat_times)
 
     # ---- energy curve (RMS loudness over time) ----
@@ -676,9 +710,13 @@ def analyze_audio(audio_bytes: bytes) -> dict:
 
     return {
         "duration": round(duration, 2),
+        "source_duration": round(source_duration, 2),
+        "clip_start": round(clip_start, 2),
         "bpm": bpm,
         "tempo_factor": tempo_factor,
+        "beat_tracker": beat_tracker,
         "beat_times": beat_times,
+        "downbeat_times": downbeat_times,
         "tempo_curve": tempo_curve,
         "energy_curve": energy_curve,
         "sections": sections,
@@ -686,7 +724,10 @@ def analyze_audio(audio_bytes: bytes) -> dict:
 
 
 @app.post("/analyze-audio")
-async def analyze_audio_endpoint(file: UploadFile = File(...)):
+async def analyze_audio_endpoint(
+    file: UploadFile = File(...),
+    start: float = Form(0.0),
+):
     if file.content_type not in ("audio/mpeg", "audio/mp3"):
         raise HTTPException(
             status_code=400,
@@ -701,8 +742,11 @@ async def analyze_audio_endpoint(file: UploadFile = File(...)):
     if len(audio_bytes) > MAX_BYTES:
         raise HTTPException(status_code=400, detail="File too large (max 30MB)")
 
+    if start < 0:
+        raise HTTPException(status_code=400, detail="start cannot be negative")
+
     try:
-        result = analyze_audio(audio_bytes)
+        result = analyze_audio(audio_bytes, clip_start=start)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

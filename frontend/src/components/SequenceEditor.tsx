@@ -25,7 +25,7 @@ const pillClass =
   "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
 const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
 const linkClass =
-  "inline-flex cursor-pointer items-center rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
+  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60";
 const navClass = `${pillClass} inline-flex items-center gap-2`;
 // Small action buttons above the pin chips (Select all / Turn all off).
 const miniPillClass =
@@ -121,6 +121,12 @@ function SequenceEditor({
 
   const analysis = animationNode.audioAnalysis;
   const duration = analysis?.duration ?? 0;
+  // Keyframes/beats/sections are all measured from the start of the
+  // analyzed clip (0 = clip start), but the stored audio file (see
+  // audioStore.ts) is the ORIGINAL, untrimmed song — so every place that
+  // touches the <audio> element's own currentTime needs to add/subtract
+  // this offset to stay in sync with clip-relative time everywhere else.
+  const clipStart = analysis?.clipStart ?? 0;
 
   // Free the loaded audio file when it's replaced or this tab closes.
   useEffect(() => {
@@ -152,14 +158,14 @@ function SequenceEditor({
 
     const audio = audioUrl ? audioRef.current : null;
     if (audio) {
-      audio.currentTime = clockRef.current.startTime;
+      audio.currentTime = clipStart + clockRef.current.startTime;
       audio.play().catch(() => setIsPlaying(false));
     }
 
     let frameId = 0;
     const tick = () => {
       const now = audio
-        ? audio.currentTime
+        ? audio.currentTime - clipStart
         : clockRef.current.startTime +
           (performance.now() - clockRef.current.startMs) / 1000;
 
@@ -177,7 +183,7 @@ function SequenceEditor({
       cancelAnimationFrame(frameId);
       if (audio) audio.pause();
     };
-  }, [isPlaying, audioUrl, duration]);
+  }, [isPlaying, audioUrl, duration, clipStart]);
 
   if (!analysis) {
     return (
@@ -262,7 +268,8 @@ function SequenceEditor({
     const clamped = Math.min(duration, Math.max(0, t));
     setTime(clamped);
     clockRef.current = { startMs: performance.now(), startTime: clamped };
-    if (audioRef.current && audioUrl) audioRef.current.currentTime = clamped;
+    if (audioRef.current && audioUrl)
+      audioRef.current.currentTime = clipStart + clamped;
   };
 
   const stepBeat = (direction: 1 | -1) => {

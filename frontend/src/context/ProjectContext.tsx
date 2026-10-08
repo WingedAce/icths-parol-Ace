@@ -51,6 +51,7 @@ type ProjectContextType = {
     audioFileName: string,
     audioAnalysis: AudioAnalysis,
   ) => void;
+  setNodeAudioOriginal: (id: string, audioAnalysisOriginal: AudioAnalysis) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
 };
@@ -442,6 +443,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // Separate from setNodeAudio on purpose: this is called once, right
+  // after a FRESH backend analysis, never from a ½×/⅔×/1.5×/2× correction
+  // — so audioAnalysisOriginal always stays exactly what was detected,
+  // regardless of how many corrections get applied afterward.
+  function setNodeAudioOriginal(id: string, audioAnalysisOriginal: AudioAnalysis) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, audioAnalysisOriginal } : node,
+        );
+      }
+
+      return next;
+    });
+  }
+
   function clearNodeAudio(id: string) {
     setNodesByParent((previous) => {
       const next = { ...previous };
@@ -449,7 +468,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
-            ? { ...node, audioFileName: undefined, audioAnalysis: undefined }
+            ? {
+                ...node,
+                audioFileName: undefined,
+                audioAnalysis: undefined,
+                audioAnalysisOriginal: undefined,
+              }
             : node,
         );
       }
@@ -505,6 +529,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setNodeTricolorGroups,
         clearNodeZones,
         setNodeAudio,
+        setNodeAudioOriginal,
         clearNodeAudio,
         setNodeFrames,
       }}
