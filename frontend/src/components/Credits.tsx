@@ -292,6 +292,21 @@ function Credits({ onClose }: CreditsProps) {
           ))}
         </div>
 
+        {/* Who owns this website. Not part of "Special thanks", and set in a
+            different (sans-serif, spaced-out) font than the names. */}
+        <div className="mt-14 flex flex-col items-center gap-3 sm:mt-16">
+          <span
+            aria-hidden="true"
+            className="h-px w-24 bg-gradient-to-r from-transparent via-amber-200/50 to-transparent"
+          />
+          <p className="font-sans text-[11px] uppercase tracking-[0.4em] text-amber-200/70 sm:text-xs">
+            Developed in
+          </p>
+          <p className="max-w-md font-sans text-sm font-semibold uppercase leading-relaxed tracking-[0.2em] text-white/90 sm:text-lg">
+            Information and Communication Technology High School
+          </p>
+        </div>
+
         {/* mt-auto keeps Back at the very bottom on tall screens */}
         <div className="mt-auto pt-16">
           <button

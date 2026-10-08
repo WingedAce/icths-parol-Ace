@@ -142,6 +142,14 @@ function App() {
           </button>
         </form>
 
+        <button
+          type="button"
+          onClick={() => navigate("/developer")}
+          className="mt-3 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+        >
+          Developer Window
+        </button>
+
       </div>
     </main>
   );
