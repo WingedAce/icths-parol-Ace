@@ -387,6 +387,21 @@ function ZoneMapper({
     setNotice("");
   }
 
+  function unassignSelectedZones() {
+    if (selected.size === 0) return;
+
+    const next = pinMappings.filter(
+      (mapping) => !selected.has(mapping.zoneId),
+    );
+
+    if (next.length === pinMappings.length) return;
+
+    commitMappings(next);
+    setWarning("");
+    setNotice("");
+  }
+
+
   function resetAllPins() {
     const hasPins =
       (node.pinMappings?.length ?? 0) > 0 ||
@@ -395,12 +410,12 @@ function ZoneMapper({
       hasPins &&
       !window.confirm(
         "Reset all pin assignments?\n\n" +
-          "This removes the pin, LED color and LED count of every zone, " +
-          "and all tricolor merges. The design is shared by all three " +
-          "rounds, so Round 1, Round 2 and Round 3 are all affected.\n\n" +
-          "The keyframes in each round are kept, but they will not match " +
-          "any pin until you assign the pins again.\n\n" +
-          "Continue?",
+        "This removes the pin, LED color and LED count of every zone, " +
+        "and all tricolor merges. The design is shared by all three " +
+        "rounds, so Round 1, Round 2 and Round 3 are all affected.\n\n" +
+        "The keyframes in each round are kept, but they will not match " +
+        "any pin until you assign the pins again.\n\n" +
+        "Continue?",
       )
     ) {
       return;
@@ -552,9 +567,9 @@ function ZoneMapper({
   const pendingLoad =
     typedPin !== null && selected.size > 0
       ? pinMappings
-          .filter((m) => m.pin === typedPin && !selected.has(m.zoneId))
-          .reduce((sum, m) => sum + ledsInZone(m), 0) +
-        Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0)
+        .filter((m) => m.pin === typedPin && !selected.has(m.zoneId))
+        .reduce((sum, m) => sum + ledsInZone(m), 0) +
+      Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0)
       : null;
 
   const mergedPinSet = new Set(tricolorGroups.flatMap((g) => g.pins));
@@ -569,21 +584,21 @@ function ZoneMapper({
       ? currentTotal
       : typedPin !== null
         ? totalLeds(
-            [
-              ...pinMappings.filter((m) => !selected.has(m.zoneId)),
-              ...Array.from(selected).map((zoneId) => ({
-                zoneId,
-                pin: typedPin,
-                ledCount: draftOf(zoneId),
-              })),
-            ],
-            tricolorGroups,
-          )
+          [
+            ...pinMappings.filter((m) => !selected.has(m.zoneId)),
+            ...Array.from(selected).map((zoneId) => ({
+              zoneId,
+              pin: typedPin,
+              ledCount: draftOf(zoneId),
+            })),
+          ],
+          tricolorGroups,
+        )
         : currentTotal +
-          Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0) -
-          pinMappings
-            .filter((m) => selected.has(m.zoneId))
-            .reduce((sum, m) => sum + ledsInZone(m), 0);
+        Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0) -
+        pinMappings
+          .filter((m) => selected.has(m.zoneId))
+          .reduce((sum, m) => sum + ledsInZone(m), 0);
   const shownTotal = Math.max(currentTotal, projectedTotal);
   const budgetState =
     shownTotal > LED_PAROL_LIMIT
@@ -876,13 +891,12 @@ function ZoneMapper({
                   }}
                 />
                 <div
-                  className={`absolute inset-y-0 left-0 rounded-full transition-all ${
-                    budgetState === "over"
-                      ? "bg-red-400"
-                      : budgetState === "near"
-                        ? "bg-amber-300"
-                        : "bg-white/70"
-                  }`}
+                  className={`absolute inset-y-0 left-0 rounded-full transition-all ${budgetState === "over"
+                    ? "bg-red-400"
+                    : budgetState === "near"
+                      ? "bg-amber-300"
+                      : "bg-white/70"
+                    }`}
                   style={{
                     width: `${Math.min(100, (currentTotal / LED_PAROL_LIMIT) * 100)}%`,
                   }}
@@ -890,13 +904,12 @@ function ZoneMapper({
               </div>
 
               <p
-                className={`mt-2 text-[11px] ${
-                  budgetState === "over"
-                    ? "text-red-400"
-                    : budgetState === "near"
-                      ? "text-amber-300/80"
-                      : "text-white/35"
-                }`}
+                className={`mt-2 text-[11px] ${budgetState === "over"
+                  ? "text-red-400"
+                  : budgetState === "near"
+                    ? "text-amber-300/80"
+                    : "text-white/35"
+                  }`}
               >
                 {selected.size > 0 && projectedTotal !== currentTotal
                   ? `Assigning this selection makes it ${projectedTotal} LEDs. `
@@ -947,11 +960,10 @@ function ZoneMapper({
                         key={zoneId}
                         onMouseEnter={() => setHoverZone(zoneId)}
                         onMouseLeave={() => setHoverZone(null)}
-                        className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
-                          isHot
-                            ? "bg-white/[0.12] ring-1 ring-white/30"
-                            : "bg-white/[0.03]"
-                        }`}
+                        className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${isHot
+                          ? "bg-white/[0.12] ring-1 ring-white/30"
+                          : "bg-white/[0.03]"
+                          }`}
                       >
                         <div
                           className="flex min-w-0 items-center gap-2.5"
@@ -1001,13 +1013,12 @@ function ZoneMapper({
 
                 {pendingLoad !== null && (
                   <p
-                    className={`mt-2 text-[11px] ${
-                      pendingLoad > LED_MAX_PER_PIN
-                        ? "text-red-400"
-                        : pendingLoad > LED_WARN_LIMIT
-                          ? "text-amber-300/80"
-                          : "text-white/40"
-                    }`}
+                    className={`mt-2 text-[11px] ${pendingLoad > LED_MAX_PER_PIN
+                      ? "text-red-400"
+                      : pendingLoad > LED_WARN_LIMIT
+                        ? "text-amber-300/80"
+                        : "text-white/40"
+                      }`}
                   >
                     Pin {formatPin(typedPin as number)} would drive {pendingLoad} LED
                     {pendingLoad === 1 ? "" : "s"}
@@ -1038,11 +1049,10 @@ function ZoneMapper({
                       key={option.id}
                       onClick={() => changePinHeader(option.id)}
                       aria-pressed={active}
-                      className={`cursor-pointer rounded-full border px-4 py-1.5 font-serif text-sm transition ${
-                        active
-                          ? "border-white/40 bg-white/[0.08] text-white"
-                          : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white"
-                      }`}
+                      className={`cursor-pointer rounded-full border px-4 py-1.5 font-serif text-sm transition ${active
+                        ? "border-white/40 bg-white/[0.08] text-white"
+                        : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white"
+                        }`}
                     >
                       {option.label}
                     </button>
@@ -1110,13 +1120,12 @@ function ZoneMapper({
                     <button
                       key={pin}
                       onClick={() => showPinInInput(pin)}
-                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs transition ${
-                        isActive
-                          ? "border-white/40 bg-white/[0.12] text-white"
-                          : isAssigned
-                            ? "border-white/20 bg-white/[0.06] text-white/70"
-                            : "border-white/10 bg-white/[0.02] text-white/40 hover:border-white/25 hover:text-white"
-                      }`}
+                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs transition ${isActive
+                        ? "border-white/40 bg-white/[0.12] text-white"
+                        : isAssigned
+                          ? "border-white/20 bg-white/[0.06] text-white/70"
+                          : "border-white/10 bg-white/[0.02] text-white/40 hover:border-white/25 hover:text-white"
+                        }`}
                     >
                       {formatPin(pin)}
                       {isPwmPin(pin) ? "~" : ""}
@@ -1135,11 +1144,10 @@ function ZoneMapper({
                     <button
                       key={page.title}
                       onClick={() => setPinPage(index)}
-                      className={`h-1.5 rounded-full transition-all ${
-                        index === pinPage
-                          ? "w-5 bg-white/70"
-                          : "w-1.5 bg-white/20 hover:bg-white/40"
-                      }`}
+                      className={`h-1.5 rounded-full transition-all ${index === pinPage
+                        ? "w-5 bg-white/70"
+                        : "w-1.5 bg-white/20 hover:bg-white/40"
+                        }`}
                       aria-label={`Go to pin page ${index + 1}`}
                     />
                   ))}
@@ -1148,6 +1156,7 @@ function ZoneMapper({
             </div>
 
             <div className="flex gap-2">
+
               <button
                 onClick={assignPin}
                 disabled={selected.size === 0}
@@ -1155,6 +1164,19 @@ function ZoneMapper({
               >
                 Assign pin
               </button>
+
+              <button
+                onClick={unassignSelectedZones}
+                disabled={
+                  selected.size === 0 ||
+                  !pinMappings.some((mapping) => selected.has(mapping.zoneId))
+                }
+                title="Remove pin assignments from selected zones"
+                className="cursor-pointer rounded-xl border border-red-400/20 px-4 py-3 font-serif text-sm text-red-300/80 transition hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-200 disabled:cursor-default disabled:opacity-30"
+              >
+                Unassign pin
+              </button>
+
               <button
                 onClick={clearSelection}
                 disabled={selected.size === 0}
@@ -1162,6 +1184,7 @@ function ZoneMapper({
               >
                 Deselect
               </button>
+
             </div>
 
             {warning && <p className="text-xs text-red-400">{warning}</p>}
@@ -1181,9 +1204,8 @@ function ZoneMapper({
                     return (
                       <div
                         key={pin}
-                        className={`flex items-center gap-1 rounded-full border bg-white/[0.03] ${
-                          ticked ? "border-white/50" : "border-white/10"
-                        }`}
+                        className={`flex items-center gap-1 rounded-full border bg-white/[0.03] ${ticked ? "border-white/50" : "border-white/10"
+                          }`}
                       >
                         <input
                           type="checkbox"
