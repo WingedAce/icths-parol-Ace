@@ -10,10 +10,12 @@ import { workspaces as initialWorkspaces } from "../data/workspaces";
 import { deleteImage, loadAllImages, saveImage } from "../lib/imageStore";
 import type {
   AudioAnalysis,
+  BpmChange,
   Frame,
   NodeType,
   PinMapping,
   ProjectNode,
+  TimingMode,
   TricolorGroup,
   Workspace,
   WorkspaceType,
@@ -54,6 +56,12 @@ type ProjectContextType = {
   setNodeAudioOriginal: (id: string, audioAnalysisOriginal: AudioAnalysis) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
+  // Timing mode and BPM change points of a song. Only the keys that are
+  // given change; give a key as undefined to clear it.
+  setNodeTiming: (
+    id: string,
+    timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
+  ) => void;
   // Locks or unlocks groups (designs). Used by the Developer Window.
   setNodesLocked: (ids: string[], locked: boolean) => void;
 };
@@ -475,6 +483,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 audioFileName: undefined,
                 audioAnalysis: undefined,
                 audioAnalysisOriginal: undefined,
+                // The change points belong to the old beats.
+                bpmChanges: undefined,
               }
             : node,
         );
@@ -495,6 +505,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           return next;
         });
       }
+
+  function setNodeTiming(
+    id: string,
+    timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
+  ) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, ...timing } : node,
+        );
+      }
+      return next;
+    });
+  }
 
   function setNodesLocked(ids: string[], locked: boolean) {
     const idSet = new Set(ids);
@@ -550,6 +575,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setNodeAudioOriginal,
         clearNodeAudio,
         setNodeFrames,
+        setNodeTiming,
         setNodesLocked,
       }}
     >

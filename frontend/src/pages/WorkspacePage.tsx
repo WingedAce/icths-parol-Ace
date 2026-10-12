@@ -79,6 +79,7 @@ function WorkspacePage() {
     setNodeAudioOriginal,
     clearNodeAudio,
     setNodeFrames,
+    setNodeTiming,
   } = useProjects();
 
   const workspace: Workspace | undefined = workspaces.find(
@@ -665,8 +666,9 @@ function WorkspacePage() {
                     fileName,
                     analysis,
                   );
-                  // A new song starts with no keyframes.
+                  // A new song starts with no keyframes and no tempo changes.
                   setNodeFrames(animationChild.id, []);
+                  setNodeTiming(animationChild.id, { bpmChanges: undefined });
                 }}
                 onFreshAnalysis={(analysis: AudioAnalysis) =>
                   setNodeAudioOriginal(animationChild.id, analysis)
@@ -677,20 +679,27 @@ function WorkspacePage() {
                     animationChild.audioFileName ?? "",
                     analysis,
                   );
-                  // The beats moved, so the keyframes follow them.
-                  setNodeFrames(
-                    animationChild.id,
-                    remapFramesToBeats(
-                      animationChild.frames ?? [],
-                      analysis.beatTimes,
-                    ),
-                  );
+                  // The base beats were redone, so any BPM change points on the
+                  // timeline are cleared (the Song tab asked first).
+                  setNodeTiming(animationChild.id, { bpmChanges: undefined });
+                  // Beat timing: the keyframes follow the beats. Manual
+                  // timing: they stay exactly where they are.
+                  if ((animationChild.timingMode ?? "beat") !== "manual") {
+                    setNodeFrames(
+                      animationChild.id,
+                      remapFramesToBeats(
+                        animationChild.frames ?? [],
+                        analysis.beatTimes,
+                      ),
+                    );
+                  }
                 }}
                 onClear={() => {
                   clearNodeAudio(animationChild.id);
                   setNodeFrames(animationChild.id, []);
                 }}
                 frameCount={(animationChild.frames ?? []).length}
+                bpmChangeCount={(animationChild.bpmChanges ?? []).length}
                 onResetKeyframes={() =>
                   setNodeFrames(animationChild.id, [])
                 }
@@ -708,6 +717,9 @@ function WorkspacePage() {
                       animationChild.id,
                       frames,
                     )
+                  }
+                  onTimingChange={(timing) =>
+                    setNodeTiming(animationChild.id, timing)
                   }
                 />
               </div>
@@ -743,6 +755,7 @@ function WorkspacePage() {
                 audioAnalysis={
                   animationChild.audioAnalysis
                 }
+                bpmChanges={animationChild.bpmChanges}
                 songName={animationChild.audioFileName ?? animationChild.name}
               />
             )}
@@ -770,6 +783,7 @@ function WorkspacePage() {
                     analysis,
                   );
                   setNodeFrames(currentNode.id, []);
+                  setNodeTiming(currentNode.id, { bpmChanges: undefined });
                 }}
                 onFreshAnalysis={(analysis: AudioAnalysis) =>
                   setNodeAudioOriginal(currentNode.id, analysis)
@@ -780,14 +794,18 @@ function WorkspacePage() {
                     currentNode.audioFileName ?? "",
                     analysis,
                   );
-                  setNodeFrames(
-                    currentNode.id,
-                    remapFramesToBeats(
-                      currentNode.frames ?? [],
-                      analysis.beatTimes,
-                    ),
-                  );
+                  setNodeTiming(currentNode.id, { bpmChanges: undefined });
+                  if ((currentNode.timingMode ?? "beat") !== "manual") {
+                    setNodeFrames(
+                      currentNode.id,
+                      remapFramesToBeats(
+                        currentNode.frames ?? [],
+                        analysis.beatTimes,
+                      ),
+                    );
+                  }
                 }}
+                bpmChangeCount={(currentNode.bpmChanges ?? []).length}
                 onClear={() => {
                   clearNodeAudio(currentNode.id);
                   setNodeFrames(currentNode.id, []);

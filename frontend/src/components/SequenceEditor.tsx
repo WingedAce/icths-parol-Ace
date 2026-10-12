@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 
 import ParolPreview from "./ParolPreview";
-import { buildInbetweens, makeKeyFrames } from "../utils/audioTiming";
+import {
+  buildInbetweens,
+  makeKeyFrames,
+  remapFramesToBeats,
+} from "../utils/audioTiming";
+import {
+  MAX_CHANGE_BPM,
+  MIN_CHANGE_BPM,
+  changeAt,
+  effectiveAnalysis,
+  isValidChangeBpm,
+  segmentBpmAt,
+  snapFramesFrom,
+  sortChanges,
+} from "../utils/bpmChanges";
 import { loadAudio, saveAudio } from "../lib/audioStore";
 import {
   FULL_LEVEL,
@@ -13,13 +27,19 @@ import {
 } from "../utils/pins";
 import type {
   AudioSection,
+  BpmChange,
   Frame,
   ProjectNode,
+  TimingMode,
   Transition,
 } from "../types";
 
 // Two times closer than this (in seconds) count as "the same moment".
 const SAME_MOMENT = 0.02;
+// A keyframe this close (in seconds) to a beat counts as sitting on it.
+const ON_BEAT = 0.001;
+// How close a dragged keyframe may get to the keyframe next to it.
+const MIN_KEY_GAP = 0.025;
 
 const pillClass =
   "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
@@ -61,6 +81,11 @@ type SequenceEditorProps = {
   // The Song node: owns the audio analysis and the keyframes.
   animationNode: ProjectNode;
   onFramesChange: (frames: Frame[]) => void;
+  // Saves the timing mode and/or the BPM change points on the Song node.
+  onTimingChange: (timing: {
+    timingMode?: TimingMode;
+    bpmChanges?: BpmChange[];
+  }) => void;
 };
 
 // m:ss.t  (tenths of a second, because beats are only ~0.5s apart)
@@ -70,6 +95,21 @@ function formatTime(seconds: number) {
   const secs = Math.floor((tenths % 600) / 10);
   return `${minutes}:${String(secs).padStart(2, "0")}.${tenths % 10}`;
 }
+
+// m:ss.hh  (hundredths, for keyframes placed at an exact time)
+function formatTimeFine(seconds: number) {
+  const hundredths = Math.round(seconds * 100);
+  const minutes = Math.floor(hundredths / 6000);
+  const secs = Math.floor((hundredths % 6000) / 100);
+  return `${minutes}:${String(secs).padStart(2, "0")}.${String(
+    hundredths % 100,
+  ).padStart(2, "0")}`;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// 125 -> "125", 145.5 -> "145.5"
+const fmtBpm = (n: number) => String(Math.round(n * 10) / 10);
 
 // Index of the beat closest to a time.
 function nearestIndex(beats: number[], t: number) {
@@ -104,10 +144,101 @@ function Chevron({ direction }: { direction: "left" | "right" }) {
   );
 }
 
+type BpmPopoverProps = {
+  // Where it sits: under the timeline bar or under the control row.
+  anchor: "bar" | "row";
+  // "Beat 17 · 1:02.4"
+  title: string;
+  // BPM of the change point that is already on this beat, if there is one.
+  existing?: number;
+  // The tempo at this beat right now, shown as a hint.
+  currentBpm: number;
+  onSave: (bpm: number) => void;
+  onRemove: () => void;
+  onClose: () => void;
+};
+
+// Small box for typing a new BPM (or editing/removing a change point). It is
+// closed from outside (Esc, a click elsewhere) by SequenceEditor.
+function BpmPopover({
+  anchor,
+  title,
+  existing,
+  currentBpm,
+  onSave,
+  onRemove,
+  onClose,
+}: BpmPopoverProps) {
+  const [text, setText] = useState(existing !== undefined ? String(existing) : "");
+  const [error, setError] = useState("");
+
+  return (
+    <div
+      data-bpm-popover=""
+      className={`absolute z-30 w-64 max-w-full rounded-xl border border-white/15 bg-[#0b0b0b] p-4 shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${
+        anchor === "bar"
+          ? "left-1/2 top-full mt-2 -translate-x-1/2"
+          : "left-0 top-full mt-2"
+      }`}
+    >
+      <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+        {existing !== undefined ? "Tempo change at" : "Set BPM from"}
+      </p>
+      <p className="mt-1 font-serif text-sm text-white">{title}</p>
+
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const value = Number(text);
+          if (text.trim() === "" || !isValidChangeBpm(value)) {
+            setError(`Enter a BPM from ${MIN_CHANGE_BPM} to ${MAX_CHANGE_BPM}.`);
+            return;
+          }
+          onSave(value);
+        }}
+        className="mt-3 flex flex-wrap items-center gap-2"
+      >
+        <input
+          type="number"
+          step="any"
+          autoFocus
+          placeholder={`Now ${fmtBpm(currentBpm)}`}
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            setError("");
+          }}
+          className="w-24 rounded-full border border-white/10 bg-transparent px-3 py-1 text-center text-xs text-white/80 outline-none focus:border-white/30"
+        />
+        <button type="submit" className={miniPillClass}>
+          {existing !== undefined ? "Save" : "Set"}
+        </button>
+        <button type="button" onClick={onClose} className={linkClass}>
+          Cancel
+        </button>
+      </form>
+
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+
+      {existing !== undefined && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className={`mt-3 ${linkClass}`}
+          title="Go back to the tempo this stretch had before"
+        >
+          Remove this change
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SequenceEditor({
   groupNode,
   animationNode,
   onFramesChange,
+  onTimingChange,
 }: SequenceEditorProps) {
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
@@ -119,7 +250,27 @@ function SequenceEditor({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clockRef = useRef({ startMs: 0, startTime: 0 });
 
-  const analysis = animationNode.audioAnalysis;
+  // The small BPM box: which beat it is for and where it is shown.
+  const [popover, setPopover] = useState<{
+    anchor: "bar" | "row";
+    beatTime: number;
+  } | null>(null);
+  // A keyframe being dragged (Manual timing): where it is right now.
+  const [drag, setDrag] = useState<{ id: string; time: number } | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{
+    id: string;
+    startX: number;
+    moved: boolean;
+    lo: number;
+    hi: number;
+    time: number;
+  } | null>(null);
+
+  // The stored beats with the song's BPM change points applied. Everything
+  // below (playhead, beat labels, in-betweens) uses this beat grid.
+  const baseAnalysis = animationNode.audioAnalysis;
+  const analysis = effectiveAnalysis(baseAnalysis, animationNode.bpmChanges);
   const duration = analysis?.duration ?? 0;
   // Keyframes/beats/sections are all measured from the start of the
   // analyzed clip (0 = clip start), but the stored audio file (see
@@ -150,6 +301,30 @@ function SequenceEditor({
       cancelled = true
     };
   }, [animationNode.id]);
+
+  // The BPM box closes on Esc or a click anywhere else.
+  useEffect(() => {
+    if (!popover) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPopover(null);
+    };
+    const onDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-bpm-popover], [data-bpm-trigger]")
+      ) {
+        return;
+      }
+      setPopover(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [popover]);
 
   // Playback loop: moves the playhead forward in real time. If an audio
   // file is loaded, the audio is the clock so lights and sound stay locked.
@@ -263,6 +438,31 @@ function SequenceEditor({
     ? frames.find((f) => f.time > keyframeHere.time + SAME_MOMENT)
     : undefined;
 
+  // ---- Timing mode and tempo changes ----
+  const isManual = animationNode.timingMode === "manual";
+  const changes = sortChanges(animationNode.bpmChanges);
+  const segments = analysis.tempoSegments;
+  // The tempo in effect at a time.
+  const bpmAt = (t: number) =>
+    segments ? segmentBpmAt(segments, t) : (sectionAt(t)?.bpm ?? analysis.bpm);
+
+  // Keyframes may sit between beats (placed in Manual timing). They are still
+  // shown, played and exported at their exact time.
+  const isOffGrid = (t: number) =>
+    Math.abs(beats[nearestIndex(beats, t)] - t) > ON_BEAT;
+  const offGridCount = frames.filter((f) => isOffGrid(f.time)).length;
+  // Tenths of a second are enough on the beat grid; off-beat times and Manual
+  // timing show hundredths.
+  const fmtKey = (t: number) =>
+    isManual || isOffGrid(t) ? formatTimeFine(t) : formatTime(t);
+
+  // "125 → 145 → 120 BPM", or the BPM here plus a count when there are many.
+  const segmentLabel = !segments
+    ? ""
+    : segments.length <= 4
+      ? `${segments.map((seg) => fmtBpm(seg.bpm)).join(" → ")} BPM`
+      : `${fmtBpm(segmentBpmAt(segments, time))} BPM here · ${segments.length - 1} tempo changes`;
+
   // ---- Moving the playhead ----
   const seek = (t: number) => {
     const clamped = Math.min(duration, Math.max(0, t));
@@ -270,6 +470,17 @@ function SequenceEditor({
     clockRef.current = { startMs: performance.now(), startTime: clamped };
     if (audioRef.current && audioUrl)
       audioRef.current.currentTime = clipStart + clamped;
+  };
+
+  // Manual timing: fine playhead movement.
+  const nudge = (delta: number) => seek(round2(time + delta));
+
+  // The time under a pointer, measured along the timeline bar.
+  const timeFromClientX = (clientX: number) => {
+    const rect = barRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return time;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return ratio * duration;
   };
 
   const stepBeat = (direction: 1 | -1) => {
@@ -292,6 +503,7 @@ function SequenceEditor({
   };
 
   const togglePlay = () => {
+    setPopover(null);
     if (isPlaying) {
       setIsPlaying(false);
       return;
@@ -304,8 +516,10 @@ function SequenceEditor({
   const sortByTime = (list: Frame[]) => [...list].sort((a, b) => a.time - b.time);
 
   const addKeyframe = () => {
-    // Keyframes always sit exactly on a beat.
-    const snapped = beats[beatIndex];
+    // Beat timing: keyframes always sit exactly on a beat. Manual timing: at
+    // the exact playhead time (on the beat itself if the playhead is on one).
+    const snapped =
+      isManual && isOffGrid(time) ? round2(time) : beats[beatIndex];
     if (frames.some((f) => Math.abs(f.time - snapped) < SAME_MOMENT)) {
       seek(snapped);
       return;
@@ -385,6 +599,83 @@ function SequenceEditor({
     }
   };
 
+  // Manual timing: drop a dragged keyframe at its new exact time.
+  const moveKeyframe = (id: string, newTime: number) => {
+    onFramesChange(
+      sortByTime(
+        frames.map((f) =>
+          f.id === id
+            ? { ...f, time: newTime, sectionId: sectionAt(newTime)?.id ?? f.sectionId }
+            : f,
+        ),
+      ),
+    );
+    seek(newTime);
+  };
+
+  // ---- BPM change points ----
+  const applyChanges = (nextChanges: BpmChange[], fromTime: number) => {
+    if (!baseAnalysis) return;
+    const nextBeats = effectiveAnalysis(baseAnalysis, nextChanges).beatTimes;
+    // Beat timing: from that beat on, the keyframes follow the new beats.
+    // Manual timing: no keyframe moves at all.
+    if (!isManual && frames.length > 0) {
+      onFramesChange(sortByTime(snapFramesFrom(frames, fromTime, nextBeats)));
+    }
+    onTimingChange({
+      bpmChanges: nextChanges.length > 0 ? nextChanges : undefined,
+    });
+    setPopover(null);
+  };
+
+  const saveChange = (beatTime: number, bpm: number) =>
+    applyChanges(
+      sortChanges([
+        ...changes.filter((c) => c !== changeAt(changes, beatTime)),
+        { beatTime, bpm },
+      ]),
+      beatTime,
+    );
+
+  const removeChange = (beatTime: number) =>
+    applyChanges(
+      changes.filter((c) => c !== changeAt(changes, beatTime)),
+      beatTime,
+    );
+
+  const toggleRowPopover = () => {
+    if (popover?.anchor === "row") setPopover(null);
+    else setPopover({ anchor: "row", beatTime: beats[beatIndex] });
+  };
+
+  const resetToBeats = () => {
+    if (
+      window.confirm(
+        "Move every keyframe to its nearest beat? Keyframes between beats will shift.",
+      )
+    ) {
+      onFramesChange(remapFramesToBeats(frames, beats));
+    }
+  };
+
+  // The BPM box, shown under the bar or under the control row.
+  const renderPopover = (anchor: "bar" | "row") => {
+    if (!popover || popover.anchor !== anchor) return null;
+    const index = nearestIndex(beats, popover.beatTime);
+    return (
+      <BpmPopover
+        key={popover.beatTime}
+        anchor={anchor}
+        title={`Beat ${index + 1} · ${formatTime(beats[index])}`}
+        existing={changeAt(changes, beats[index])?.bpm}
+        currentBpm={bpmAt(beats[index])}
+        onSave={(bpm) => saveChange(beats[index], bpm)}
+        onRemove={() => removeChange(beats[index])}
+        onClose={() => setPopover(null)}
+      />
+    );
+  };
+
   return (
     <div className="flex flex-col gap-6">
       {/* Hidden player, only used when the user loads the song file */}
@@ -392,11 +683,15 @@ function SequenceEditor({
 
       {/* Readout */}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-serif text-3xl text-white">{formatTime(time)}</p>
+        <p className="font-serif text-3xl text-white">
+          {isManual ? formatTimeFine(time) : formatTime(time)}
+        </p>
         <p className="text-xs text-white/40">
           Beat {beatIndex + 1} of {beats.length}
           {sectionIndex >= 0 && ` · Section ${sectionIndex + 1}`}
-          {showBpm && section && ` · ${Math.round(section.bpm)} BPM`}
+          {segments
+            ? ` · ${fmtBpm(bpmAt(time))} BPM`
+            : showBpm && section && ` · ${Math.round(section.bpm)} BPM`}
         </p>
       </div>
 
@@ -411,11 +706,20 @@ function SequenceEditor({
 
       {/* Timeline strip: section lines, keyframe markers, playhead */}
       <div>
-        <p className={labelClass}>
-          Timeline · {frames.length} keyframe{frames.length === 1 ? "" : "s"} ·{" "}
-          {inbetweens.length} in-between{inbetweens.length === 1 ? "" : "s"}
-        </p>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+            Timeline · {frames.length} keyframe{frames.length === 1 ? "" : "s"} ·{" "}
+            {inbetweens.length} in-between{inbetweens.length === 1 ? "" : "s"}
+          </p>
+          {segmentLabel && (
+            <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+              {segmentLabel}
+            </p>
+          )}
+        </div>
+        <div className="relative">
         <div
+          ref={barRef}
           className="relative h-12 w-full cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]"
           onClick={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
@@ -423,7 +727,13 @@ function SequenceEditor({
               1,
               Math.max(0, (event.clientX - rect.left) / rect.width),
             );
-            seek(beats[nearestIndex(beats, ratio * duration)]);
+            // Beat timing: land on the nearest beat. Manual timing: the exact
+            // spot that was clicked.
+            seek(
+              isManual
+                ? round2(ratio * duration)
+                : beats[nearestIndex(beats, ratio * duration)],
+            );
           }}
         >
           {analysis.sections.map((s, index) =>
@@ -436,6 +746,33 @@ function SequenceEditor({
             ),
           )}
 
+          {/* Manual timing: the beats as a quiet guide. Click a dot to change
+              the tempo from that beat on. */}
+          {isManual &&
+            beats.map((beat, i) => {
+              const before = i > 0 ? beat - beats[i - 1] : Infinity;
+              const after = i < beats.length - 1 ? beats[i + 1] - beat : Infinity;
+              const room = Math.min(before, after);
+              const width = Number.isFinite(room) ? (room / span) * 100 : 2;
+              return (
+                <button
+                  key={`beat-${i}`}
+                  type="button"
+                  data-bpm-trigger=""
+                  title={`Beat ${i + 1} · ${formatTime(beat)} — click to set the tempo from here`}
+                  onClick={(event) => {
+                    if (isPlaying) return;
+                    event.stopPropagation();
+                    setPopover({ anchor: "bar", beatTime: beat });
+                  }}
+                  className="group absolute top-1/2 flex h-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
+                  style={{ left: `${(beat / span) * 100}%`, width: `${width}%` }}
+                >
+                  <span className="h-1 w-1 rounded-full bg-white/15 transition group-hover:scale-[2] group-hover:bg-white/80" />
+                </button>
+              );
+            })}
+
           {inbetweens.map((frame) => (
             <div
               key={frame.id}
@@ -444,21 +781,95 @@ function SequenceEditor({
             />
           ))}
 
-          {frames.map((frame) => (
-            <button
-              key={frame.id}
-              title={formatTime(frame.time)}
-              onClick={(event) => {
-                event.stopPropagation();
-                seek(frame.time);
-              }}
-              className={`absolute inset-y-2 w-2 -translate-x-1/2 cursor-pointer rounded-full transition ${
-                frame.id === keyframeHere?.id
-                  ? "bg-white"
-                  : "bg-white/40 hover:bg-white/80"
-              }`}
-              style={{ left: `${(frame.time / span) * 100}%` }}
+          {frames.map((frame, index) => {
+            // Manual timing: a keyframe can be dragged along the bar. It stays
+            // between its neighbours so the order (and the transitions) never
+            // change. A plain click still just moves the playhead there.
+            const canDrag = isManual && !isPlaying;
+            const shownTime = drag?.id === frame.id ? drag.time : frame.time;
+            return (
+              <button
+                key={frame.id}
+                title={fmtKey(shownTime)}
+                onPointerDown={(event) => {
+                  if (!canDrag) return;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  const previous = frames[index - 1];
+                  const next = frames[index + 1];
+                  dragRef.current = {
+                    id: frame.id,
+                    startX: event.clientX,
+                    moved: false,
+                    lo: previous ? previous.time + MIN_KEY_GAP : 0,
+                    hi: next ? next.time - MIN_KEY_GAP : duration,
+                    time: frame.time,
+                  };
+                }}
+                onPointerMove={(event) => {
+                  const d = dragRef.current;
+                  if (!d || d.id !== frame.id) return;
+                  if (!d.moved && Math.abs(event.clientX - d.startX) < 4) return;
+                  d.moved = true;
+                  d.time = Math.min(
+                    d.hi,
+                    Math.max(d.lo, round2(timeFromClientX(event.clientX))),
+                  );
+                  setDrag({ id: d.id, time: d.time });
+                }}
+                onPointerUp={() => {
+                  const d = dragRef.current;
+                  dragRef.current = null;
+                  setDrag(null);
+                  if (!d || d.id !== frame.id) return;
+                  if (d.moved) moveKeyframe(d.id, d.time);
+                  else seek(frame.time);
+                }}
+                onPointerCancel={() => {
+                  dragRef.current = null;
+                  setDrag(null);
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!canDrag) seek(frame.time);
+                }}
+                className={`absolute inset-y-2 w-2 -translate-x-1/2 cursor-pointer rounded-full transition ${
+                  canDrag ? "touch-none" : ""
+                } ${
+                  frame.id === keyframeHere?.id
+                    ? "bg-white"
+                    : "bg-white/40 hover:bg-white/80"
+                }`}
+                style={{ left: `${(shownTime / span) * 100}%` }}
+              />
+            );
+          })}
+
+          {/* Tempo changes: a thin line and a small BPM label */}
+          {changes.map((change) => (
+            <div
+              key={`change-line-${change.beatTime}`}
+              className="pointer-events-none absolute inset-y-0 w-px bg-white/25"
+              style={{ left: `${(change.beatTime / span) * 100}%` }}
             />
+          ))}
+          {changes.map((change) => (
+            <button
+              key={`change-${change.beatTime}`}
+              type="button"
+              data-bpm-trigger=""
+              title={`Tempo changes to ${fmtBpm(change.bpm)} BPM at Beat ${
+                nearestIndex(beats, change.beatTime) + 1
+              } · ${formatTime(change.beatTime)} — click to edit or remove`}
+              onClick={(event) => {
+                if (isPlaying) return;
+                event.stopPropagation();
+                setPopover({ anchor: "bar", beatTime: change.beatTime });
+              }}
+              className="absolute top-0 z-20 -translate-x-1/2 cursor-pointer rounded-b-md border border-t-0 border-white/20 bg-black/70 px-1 text-[9px] leading-4 text-white/70 transition hover:border-white/40 hover:text-white"
+              style={{ left: `${(change.beatTime / span) * 100}%` }}
+            >
+              {fmtBpm(change.bpm)}
+            </button>
           ))}
 
           <div
@@ -466,17 +877,32 @@ function SequenceEditor({
             style={{ left: `${(time / span) * 100}%` }}
           />
         </div>
+        {renderPopover("bar")}
+        </div>
 
-        {/* Beat slider: moving it always lands exactly on a beat */}
-        <input
-          type="range"
-          min={0}
-          max={beats.length - 1}
-          step={1}
-          value={beatIndex}
-          onChange={(event) => seek(beats[Number(event.target.value)])}
-          className="mt-4 w-full accent-white"
-        />
+        {isManual ? (
+          /* Manual timing: the slider moves in hundredths of a second */
+          <input
+            type="range"
+            min={0}
+            max={duration}
+            step={0.01}
+            value={time}
+            onChange={(event) => seek(Number(event.target.value))}
+            className="mt-4 w-full accent-white"
+          />
+        ) : (
+          /* Beat slider: moving it always lands exactly on a beat */
+          <input
+            type="range"
+            min={0}
+            max={beats.length - 1}
+            step={1}
+            value={beatIndex}
+            onChange={(event) => seek(beats[Number(event.target.value)])}
+            className="mt-4 w-full accent-white"
+          />
+        )}
       </div>
 
       {/* Transport */}
@@ -511,16 +937,110 @@ function SequenceEditor({
           Keyframe
           <Chevron direction="right" />
         </button>
+        {isManual && (
+          <>
+            <button
+              onClick={() => nudge(-0.01)}
+              title="Move the playhead back 0.01 seconds"
+              className={`${miniPillClass} self-center`}
+            >
+              −0.01s
+            </button>
+            <button
+              onClick={() => nudge(0.01)}
+              title="Move the playhead forward 0.01 seconds"
+              className={`${miniPillClass} self-center`}
+            >
+              +0.01s
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Timing mode and tempo changes: the one extra row */}
+      <div>
+        <div className="relative flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Timing mode"
+            className="inline-flex rounded-full border border-white/10 p-0.5"
+          >
+            {(
+              [
+                {
+                  value: "beat",
+                  label: "Beat timing",
+                  hint: "New keyframes snap to the beats.",
+                },
+                {
+                  value: "manual",
+                  label: "Manual timing",
+                  hint: "Place keyframes at any exact time. The dots on the bar are only a guide.",
+                },
+              ] as const
+            ).map((option) => {
+              const active = (isManual ? "manual" : "beat") === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  title={option.hint}
+                  aria-pressed={active}
+                  onClick={() => onTimingChange({ timingMode: option.value })}
+                  className={`cursor-pointer rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.15em] transition ${
+                    active
+                      ? "border-white/40 bg-white/[0.08] text-white"
+                      : "border-transparent text-white/50 hover:text-white"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            data-bpm-trigger=""
+            onClick={toggleRowPopover}
+            disabled={isPlaying}
+            title="Change the tempo from the beat nearest the playhead onward"
+            className={miniPillClass}
+          >
+            Set BPM
+          </button>
+
+          {offGridCount > 0 && (
+            <button
+              type="button"
+              onClick={resetToBeats}
+              title={`Move ${offGridCount} keyframe${offGridCount === 1 ? "" : "s"} that sit between beats to the nearest beat`}
+              className={linkClass}
+            >
+              Reset to beats
+            </button>
+          )}
+
+          {renderPopover("row")}
+        </div>
+
+        {isManual && (
+          <p className="mt-2 text-[11px] text-white/25">
+            Click the bar or nudge to pick an exact time.
+          </p>
+        )}
       </div>
 
       {/* Keyframe at the playhead */}
       <div>
         <p className={labelClass}>
           {keyframeHere
-            ? `Keyframe at ${formatTime(keyframeHere.time)}`
+            ? `Keyframe at ${fmtKey(keyframeHere.time)}`
             : inbetweenHere
               ? "In-between beat (generated)"
-              : "No keyframe at this beat"}
+              : isManual
+                ? "No keyframe at this time"
+                : "No keyframe at this beat"}
         </p>
 
         {!keyframeHere && (
@@ -531,7 +1051,9 @@ function SequenceEditor({
           >
             {inbetweenHere
               ? "Make this beat a keyframe"
-              : `Add keyframe at beat ${beatIndex + 1}`}
+              : isManual
+                ? `Add keyframe at ${formatTimeFine(time)}`
+                : `Add keyframe at beat ${beatIndex + 1}`}
           </button>
         )}
 

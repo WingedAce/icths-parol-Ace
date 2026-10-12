@@ -68,6 +68,9 @@ type AudioUploaderProps = {
   // Shows a "Reset keyframes" button (the song stays).
   frameCount?: number;
   onResetKeyframes?: () => void;
+  // How many BPM change points the Preview timeline has. Any tempo
+  // correction below clears them, so it asks first when there are some.
+  bpmChangeCount?: number;
 };
 
 function formatDuration(seconds: number) {
@@ -84,6 +87,7 @@ function AudioUploader({
   onClear,
   frameCount = 0,
   onResetKeyframes,
+  bpmChangeCount = 0,
 }: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -222,6 +226,22 @@ function AudioUploader({
     });
   }
 
+  // Every tempo correction redoes the base beats, which also clears the BPM
+  // change points on the Preview timeline. Returns false if the student
+  // backed out.
+  function changeTempo(next: AudioAnalysis) {
+    if (
+      bpmChangeCount > 0 &&
+      !window.confirm(
+        "This also clears the BPM change points on the Preview timeline. Continue?",
+      )
+    ) {
+      return false;
+    }
+    onTempoChange(next);
+    return true;
+  }
+
   function togglePreview() {
     const audio = previewRef.current;
     if (!audio) return;
@@ -277,7 +297,7 @@ function AudioUploader({
                 <button
                   key={label}
                   onClick={() =>
-                    onTempoChange(scaleAllTempo(node.audioAnalysis!, factor))
+                    changeTempo(scaleAllTempo(node.audioAnalysis!, factor))
                   }
                   title={`If the detected tempo should be ${label} what's shown`}
                   className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
@@ -292,8 +312,9 @@ function AudioUploader({
                 event.preventDefault();
                 const value = Number(manualBpmInput);
                 if (!value || value <= 0) return;
-                onTempoChange(setAllTempo(node.audioAnalysis!, value));
-                setManualBpmInput("");
+                if (changeTempo(setAllTempo(node.audioAnalysis!, value))) {
+                  setManualBpmInput("");
+                }
               }}
               className="mt-2 flex items-center justify-center gap-1"
             >
@@ -317,7 +338,7 @@ function AudioUploader({
 
             {node.audioAnalysisOriginal && (
               <button
-                onClick={() => onTempoChange(node.audioAnalysisOriginal!)}
+                onClick={() => changeTempo(node.audioAnalysisOriginal!)}
                 title="Undo every correction and go back to what was originally detected"
                 className="mt-2 cursor-pointer text-[10px] text-white/30 underline underline-offset-2 transition hover:text-white/60"
               >
@@ -350,7 +371,7 @@ function AudioUploader({
                     <button
                       key={label}
                       onClick={() =>
-                        onTempoChange(
+                        changeTempo(
                           scaleSectionTempo(
                             node.audioAnalysis!,
                             section.id,
@@ -369,13 +390,14 @@ function AudioUploader({
                       event.preventDefault();
                       const value = Number(sectionBpmInputs[section.id]);
                       if (!value || value <= 0) return;
-                      onTempoChange(
+                      const applied = changeTempo(
                         setSectionTempo(
                           node.audioAnalysis!,
                           section.id,
                           value,
                         ),
                       );
+                      if (!applied) return;
                       setSectionBpmInputs((prev) => ({
                         ...prev,
                         [section.id]: "",

@@ -5,6 +5,7 @@ import type {
   TricolorGroup,
 } from "../types";
 import { buildInbetweens } from "./audioTiming";
+import { segmentBpmAt } from "./bpmChanges";
 import { groupOfPin, isPwmPin, levelOf, FULL_LEVEL } from "./pins";
 
 // Turns the song's keyframes into the list of "at this millisecond, put this
@@ -125,8 +126,13 @@ export function buildSequence(
     const parts = [`${t.toFixed(2)}s`];
     if (best >= 0 && bestDistance < 0.05) parts.push(`beat ${best + 1}`);
     if (section) {
+      // With BPM change points the tempo can change inside a section, so the
+      // note uses the tempo in effect at this time.
+      const bpmHere = analysis.tempoSegments
+        ? segmentBpmAt(analysis.tempoSegments, t)
+        : section.bpm;
       parts.push(
-        `section ${sectionNo} (${Math.round(section.bpm * 10) / 10} BPM)`,
+        `section ${sectionNo} (${Math.round(bpmHere * 10) / 10} BPM)`,
       );
     }
     return parts.join(" · ");

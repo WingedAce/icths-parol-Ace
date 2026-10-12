@@ -37,6 +37,13 @@ export type ProjectNode = {
   // student undo back to it even after several corrections.
   audioAnalysisOriginal?: AudioAnalysis;
   frames?: Frame[];
+  // How keyframes are placed on this song's Preview timeline. Missing means
+  // "beat" (the original behavior), so old projects still load.
+  timingMode?: TimingMode;
+  // Tempo changes the student set on the Preview timeline. The stored beats
+  // (audioAnalysis) are never edited; the beat grid actually used is worked
+  // out from them plus these (see utils/bpmChanges.ts).
+  bpmChanges?: BpmChange[];
   // Set from the Developer Window. A locked group (design) cannot be opened,
   // edited or deleted by anyone until it is unlocked again.
   locked?: boolean;
@@ -62,6 +69,25 @@ export type AudioAnalysis = {
   tempoCurve: { time: number; bpm: number }[]; // local BPM at each beat
   energyCurve: { time: number; energy: number }[];
   sections: AudioSection[];
+  // Derived, never saved: only present on the analysis returned by
+  // effectiveAnalysis() when the song has BPM change points. One entry per
+  // stretch of constant tempo, with the time it starts.
+  tempoSegments?: TempoSegment[];
+};
+
+// "beat": new keyframes snap to the beat grid. "manual": keyframes can sit at
+// any exact time and the beats are only a guide.
+export type TimingMode = "beat" | "manual";
+
+// From this beat on, the beat grid is regenerated at `bpm`.
+export type BpmChange = {
+  beatTime: number;
+  bpm: number;
+};
+
+export type TempoSegment = {
+  start: number;
+  bpm: number;
 };
 
 export type Zone = {
