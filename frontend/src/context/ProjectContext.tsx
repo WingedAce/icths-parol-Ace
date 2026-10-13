@@ -10,10 +10,12 @@ import { workspaces as initialWorkspaces } from "../data/workspaces";
 import { deleteImage, loadAllImages, saveImage } from "../lib/imageStore";
 import type {
   AudioAnalysis,
+  BpmChange,
   Frame,
   NodeType,
   PinMapping,
   ProjectNode,
+  TimingMode,
   TricolorGroup,
   Workspace,
   WorkspaceType,
@@ -27,10 +29,16 @@ type ProjectContextType = {
   addWorkspace: (name: string, type: WorkspaceType) => string;
   renameWorkspace: (id: string, name: string) => void;
   deleteWorkspace: (id: string) => void;
-  addNode: (parentId: string, name: string, type: NodeType) => string;
+  addNode: (
+    parentId: string,
+    name: string,
+    type: NodeType,
+    round?: number,
+  ) => string;
   renameNode: (id: string, name: string) => void;
   deleteNode: (id: string) => void;
   setNodeImage: (id: string, imageDataUrl: string) => void;
+  removeNodeImage: (id: string) => void;
   setNodeZones: (
     id: string,
     zones: Zone[],
@@ -45,8 +53,17 @@ type ProjectContextType = {
     audioFileName: string,
     audioAnalysis: AudioAnalysis,
   ) => void;
+  setNodeAudioOriginal: (id: string, audioAnalysisOriginal: AudioAnalysis) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
+  // Timing mode and BPM change points of a song. Only the keys that are
+  // given change; give a key as undefined to clear it.
+  setNodeTiming: (
+    id: string,
+    timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
+  ) => void;
+  // Locks or unlocks groups (designs). Used by the Developer Window.
+  setNodesLocked: (ids: string[], locked: boolean) => void;
 };
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
@@ -212,21 +229,38 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     parentId: string,
     name: string,
     type: NodeType,
+    round?: number,
   ) {
     const node: ProjectNode = {
       id: crypto.randomUUID(),
       name,
       type,
       parentId,
+      ...(round ? { round } : {}),
     };
 
-    setNodesByParent((previous) => ({
-      ...previous,
-      [parentId]: [
-        ...(previous[parentId] ?? []),
-        node,
-      ],
-    }));
+    setNodesByParent((previous) => {
+      // A group has one song slot per round. A fast double click must not
+      // make a second slot for the same round.
+      if (
+        type === "animation" &&
+        (previous[parentId] ?? []).some(
+          (item) =>
+            item.type === "animation" &&
+            (item.round ?? 1) === (round ?? 1),
+        )
+      ) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [parentId]: [
+          ...(previous[parentId] ?? []),
+          node,
+        ],
+      };
+    });
 
     return node.id;
   }
@@ -274,7 +308,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
-            ? { ...node, imageDataUrl }
+            ? {
+                ...node,
+                imageDataUrl,
+                // Zones, pins and merges all belong to the old drawing, so
+                // a new image starts clean. (First upload: nothing to clear.)
+                zones: undefined,
+                imageWidth: undefined,
+                imageHeight: undefined,
+                pinMappings: [],
+                tricolorGroups: [],
+              }
             : node,
         );
       }
@@ -284,6 +328,36 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     saveImage(id, imageDataUrl).catch((error) => {
       console.error("Failed to save drawing to IndexedDB:", error);
+    });
+  }
+
+  // Takes the drawing away completely, together with everything detected
+  // from it, so the group goes back to the upload screen.
+  function removeNodeImage(id: string) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id
+            ? {
+                ...node,
+                imageDataUrl: undefined,
+                zones: undefined,
+                imageWidth: undefined,
+                imageHeight: undefined,
+                pinMappings: [],
+                tricolorGroups: [],
+              }
+            : node,
+        );
+      }
+
+      return next;
+    });
+
+    deleteImage(id).catch((error) => {
+      console.error("Failed to delete drawing from IndexedDB:", error);
     });
   }
 
@@ -379,6 +453,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  // Separate from setNodeAudio on purpose: this is called once, right
+  // after a FRESH backend analysis, never from a ½×/⅔×/1.5×/2× correction
+  // — so audioAnalysisOriginal always stays exactly what was detected,
+  // regardless of how many corrections get applied afterward.
+  function setNodeAudioOriginal(id: string, audioAnalysisOriginal: AudioAnalysis) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, audioAnalysisOriginal } : node,
+        );
+      }
+
+      return next;
+    });
+  }
+
   function clearNodeAudio(id: string) {
     setNodesByParent((previous) => {
       const next = { ...previous };
@@ -386,7 +478,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
-            ? { ...node, audioFileName: undefined, audioAnalysis: undefined }
+            ? {
+                ...node,
+                audioFileName: undefined,
+                audioAnalysis: undefined,
+                audioAnalysisOriginal: undefined,
+                // The change points belong to the old beats.
+                bpmChanges: undefined,
+              }
             : node,
         );
       }
@@ -406,6 +505,37 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           return next;
         });
       }
+
+  function setNodeTiming(
+    id: string,
+    timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
+  ) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, ...timing } : node,
+        );
+      }
+      return next;
+    });
+  }
+
+  function setNodesLocked(ids: string[], locked: boolean) {
+    const idSet = new Set(ids);
+
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          idSet.has(node.id) ? { ...node, locked } : node,
+        );
+      }
+
+      return next;
+    });
+  }
 
   function getChildren(parentId: string) {
     return nodesByParent[parentId] ?? [];
@@ -436,13 +566,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         renameNode,
         deleteNode,
         setNodeImage,
+        removeNodeImage,
         setNodeZones,
         setNodePinMappings,
         setNodeTricolorGroups,
         clearNodeZones,
         setNodeAudio,
+        setNodeAudioOriginal,
         clearNodeAudio,
         setNodeFrames,
+        setNodeTiming,
+        setNodesLocked,
       }}
     >
       {children}

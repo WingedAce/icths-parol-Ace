@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import ParolPreview from "./ParolPreview";
 import { beatsBetween, buildInbetweens } from "../utils/audioTiming";
+import { effectiveAnalysis } from "../utils/bpmChanges";
 import {
   FULL_LEVEL,
   MIN_LEVEL,
@@ -922,7 +923,12 @@ function KeyframeGallery({
 }: KeyframeGalleryProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const analysis = animationNode.audioAnalysis;
+  // The beat grid with any BPM change points applied, so the in-betweens
+  // follow the same beats as the Preview tab.
+  const analysis = effectiveAnalysis(
+    animationNode.audioAnalysis,
+    animationNode.bpmChanges,
+  );
 
   const keyframes = (animationNode.frames ?? [])
     .filter((f) => f.kind === "key")

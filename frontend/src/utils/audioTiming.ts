@@ -169,3 +169,54 @@ export function buildInbetweens(
 
   return result;
 }
+// After the tempo is halved or doubled the beats change, so every keyframe
+// (and every hand-made in-between) moves to the nearest beat of the new
+// grid. Two keyframes never land on the same beat; the later one moves to
+// the next free beat, and one that has no beat left is dropped.
+export function remapFramesToBeats(frames: Frame[], beats: number[]): Frame[] {
+  if (frames.length === 0 || beats.length === 0) return frames;
+
+  const nearest = (t: number) => {
+    let best = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < beats.length; i++) {
+      const d = Math.abs(beats[i] - t);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = i;
+      }
+    }
+    return best;
+  };
+
+  const sorted = [...frames].sort((a, b) => a.time - b.time);
+  const result: Frame[] = [];
+  let lastIndex = -1;
+
+  for (const frame of sorted) {
+    const index = Math.max(nearest(frame.time), lastIndex + 1);
+    if (index >= beats.length) break;
+    lastIndex = index;
+
+    let manualSteps = frame.manualSteps;
+    if (manualSteps) {
+      // Steps that land on the same beat: the later one wins.
+      const byTime = new Map<number, (typeof manualSteps)[number]>();
+      for (const step of manualSteps) {
+        const time = beats[nearest(step.time)];
+        byTime.set(time, { ...step, time });
+      }
+      manualSteps = Array.from(byTime.values()).sort(
+        (x, y) => x.time - y.time,
+      );
+    }
+
+    result.push({
+      ...frame,
+      time: beats[index],
+      ...(manualSteps ? { manualSteps } : {}),
+    });
+  }
+
+  return result;
+}

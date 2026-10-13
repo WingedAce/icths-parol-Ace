@@ -17,6 +17,9 @@ export type ProjectNode = {
   name: string;
   type: NodeType;
   parentId: string;
+  // For a group's "animation" nodes: which round (1-3) this song and its
+  // keyframes belong to. Missing means round 1, so old projects still load.
+  round?: number;
   imageDataUrl?: string;
   imageWidth?: number;
   imageHeight?: number;
@@ -29,7 +32,21 @@ export type ProjectNode = {
   // actual MP3 bytes are never stored, only the analysis result).
   audioFileName?: string;
   audioAnalysis?: AudioAnalysis;
+  // Snapshot of what the backend originally detected, set once per
+  // upload and never touched by ½×/⅔×/1.5×/2× corrections — lets the
+  // student undo back to it even after several corrections.
+  audioAnalysisOriginal?: AudioAnalysis;
   frames?: Frame[];
+  // How keyframes are placed on this song's Preview timeline. Missing means
+  // "beat" (the original behavior), so old projects still load.
+  timingMode?: TimingMode;
+  // Tempo changes the student set on the Preview timeline. The stored beats
+  // (audioAnalysis) are never edited; the beat grid actually used is worked
+  // out from them plus these (see utils/bpmChanges.ts).
+  bpmChanges?: BpmChange[];
+  // Set from the Developer Window. A locked group (design) cannot be opened,
+  // edited or deleted by anyone until it is unlocked again.
+  locked?: boolean;
 };
 
 export type AudioSection = {
@@ -42,11 +59,35 @@ export type AudioSection = {
 
 export type AudioAnalysis = {
   duration: number;
+  // Only present when the source song was longer than the analysis cap
+  // (see MAX_CLIP_SECONDS in backend/main.py) — tells the UI what window
+  // of the original song this analysis actually covers.
+  sourceDuration?: number;
+  clipStart?: number;
   bpm: number;
   beatTimes: number[];
   tempoCurve: { time: number; bpm: number }[]; // local BPM at each beat
   energyCurve: { time: number; energy: number }[];
   sections: AudioSection[];
+  // Derived, never saved: only present on the analysis returned by
+  // effectiveAnalysis() when the song has BPM change points. One entry per
+  // stretch of constant tempo, with the time it starts.
+  tempoSegments?: TempoSegment[];
+};
+
+// "beat": new keyframes snap to the beat grid. "manual": keyframes can sit at
+// any exact time and the beats are only a guide.
+export type TimingMode = "beat" | "manual";
+
+// From this beat on, the beat grid is regenerated at `bpm`.
+export type BpmChange = {
+  beatTime: number;
+  bpm: number;
+};
+
+export type TempoSegment = {
+  start: number;
+  bpm: number;
 };
 
 export type Zone = {

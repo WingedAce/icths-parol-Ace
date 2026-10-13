@@ -12,6 +12,7 @@ function App() {
   const [batch, setBatch] = useState("");
   const [section, setSection] = useState("");
   const [groupNumber, setGroupNumber] = useState("");
+  const [lockedMessage, setLockedMessage] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -60,6 +61,16 @@ function App() {
         item.type === "group" &&
         item.name.toLowerCase() === groupLabel.toLowerCase(),
     );
+
+    // A group whose design was locked in the Developer Window can't be opened.
+    if (groupNode?.locked) {
+      setLockedMessage(
+        `${groupLabel} (${sectionName}, Batch ${batchName}) is locked. Ask your teacher to unlock it.`,
+      );
+      return;
+    }
+
+    setLockedMessage("");
 
     const groupNodeId =
       groupNode?.id ??
@@ -134,6 +145,15 @@ function App() {
             />
           </div>
 
+          {lockedMessage && (
+            <p
+              role="alert"
+              className="rounded-xl border border-[#ff3b41]/60 bg-[#ff3b41]/10 px-4 py-3 text-xs leading-relaxed text-[#ff8a8e]"
+            >
+              🔒 {lockedMessage}
+            </p>
+          )}
+
           <button
             type="submit"
             className="mt-4 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90"
@@ -141,6 +161,14 @@ function App() {
             Continue
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={() => navigate("/developer")}
+          className="mt-3 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+        >
+          Developer Window
+        </button>
 
       </div>
     </main>

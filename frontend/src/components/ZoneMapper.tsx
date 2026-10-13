@@ -14,6 +14,8 @@ import {
   isAnalogPin,
   isPwmPin,
   LED_MAX_PER_PIN,
+  LED_PAROL_LIMIT,
+  LED_PAROL_WARN,
   LED_WARN_LIMIT,
   groupOfPin,
   ledsInZone,
@@ -69,6 +71,33 @@ async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
 // Default color of a freshly merged tricolor LED in the previews.
 const DEFAULT_TRICOLOR = "#ffffff";
 
+// A tiny picture of one zone's shape, cropped to its bounding box. Lets the
+// LED list show *which* zone a row is, since the zone ids (58, 133...) mean
+// nothing to the person using the app.
+function ZoneThumb({ zone }: { zone: Zone }) {
+  const xs = zone.polygon.map((p) => p[0]);
+  const ys = zone.polygon.map((p) => p[1]);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const w = Math.max(Math.max(...xs) - minX, 1);
+  const h = Math.max(Math.max(...ys) - minY, 1);
+  const pad = Math.max(w, h) * 0.15;
+
+  return (
+    <svg
+      viewBox={`${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`}
+      className="h-7 w-7 shrink-0 rounded-md bg-black/60"
+      aria-hidden="true"
+    >
+      <polygon
+        points={zone.polygon.map((p) => p.join(",")).join(" ")}
+        fill="#e8e4d8"
+        fillOpacity={0.9}
+      />
+    </svg>
+  );
+}
+
 function clampLeds(n: number) {
   if (!Number.isFinite(n)) return 1;
   return Math.min(LED_MAX_PER_PIN, Math.max(1, Math.round(n)));
@@ -87,8 +116,12 @@ function ZoneMapper({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pinInput, setPinInput] = useState("");
   const [warning, setWarning] = useState("");
-  // Non-blocking heads-up (more than 6 LEDs on a pin).
+  // Non-blocking heads-up (more than 15 LEDs on a pin).
   const [notice, setNotice] = useState("");
+
+  // The zone being pointed at, either in the LED list or on the drawing.
+  // Both sides light up together so a row can be matched to its zone.
+  const [hoverZone, setHoverZone] = useState<number | null>(null);
 
   // LED count typed for each selected zone, keyed by zone id. Filled when a
   // zone is clicked (from its saved count, or 1) and saved on "Assign pin".
@@ -324,16 +357,31 @@ function ZoneMapper({
       ...(existingType ? { pinType: existingType } : {}),
     }));
 
-    commitMappings([...withoutSelected, ...added]);
+    const nextMappings = [...withoutSelected, ...added];
+    const nextTotal = totalLeds(nextMappings, tricolorGroups);
+
+    commitMappings(nextMappings);
     setSelected(new Set());
     setLedDraft({});
     setPinInput("");
     setWarning("");
-    setNotice(
-      load > LED_WARN_LIMIT
-        ? `Warning: pin ${formatPin(pin)} now drives ${load} LEDs. More than ${LED_WARN_LIMIT} on one pin can cause problems (dim LEDs, too much current). Consider splitting them across pins.`
-        : "",
-    );
+
+    const messages: string[] = [];
+    if (load > LED_WARN_LIMIT) {
+      messages.push(
+        `Pin ${formatPin(pin)} now drives ${load} LEDs. More than ${LED_WARN_LIMIT} on one pin can cause problems (dim LEDs, too much current). Consider splitting them across pins.`,
+      );
+    }
+    if (nextTotal > LED_PAROL_LIMIT) {
+      messages.push(
+        `The parol now has ${nextTotal} LEDs, which is over the ${LED_PAROL_LIMIT} LED limit.`,
+      );
+    } else if (nextTotal >= LED_PAROL_WARN) {
+      messages.push(
+        `The parol now has ${nextTotal} LEDs, close to the ${LED_PAROL_LIMIT} LED limit (${LED_PAROL_LIMIT - nextTotal} left).`,
+      );
+    }
+    setNotice(messages.length > 0 ? `Warning: ${messages.join(" ")}` : "");
   }
 
   function clearSelection() {
@@ -343,7 +391,40 @@ function ZoneMapper({
     setNotice("");
   }
 
+  function unassignSelectedZones() {
+    if (selected.size === 0) return;
+
+    const next = pinMappings.filter(
+      (mapping) => !selected.has(mapping.zoneId),
+    );
+
+    if (next.length === pinMappings.length) return;
+
+    commitMappings(next);
+    setWarning("");
+    setNotice("");
+  }
+
+
   function resetAllPins() {
+    const hasPins =
+      (node.pinMappings?.length ?? 0) > 0 ||
+      (node.tricolorGroups?.length ?? 0) > 0;
+    if (
+      hasPins &&
+      !window.confirm(
+        "Reset all pin assignments?\n\n" +
+        "This removes the pin, LED color and LED count of every zone, " +
+        "and all tricolor merges. The design is shared by all three " +
+        "rounds, so Round 1, Round 2 and Round 3 are all affected.\n\n" +
+        "The keyframes in each round are kept, but they will not match " +
+        "any pin until you assign the pins again.\n\n" +
+        "Continue?",
+      )
+    ) {
+      return;
+    }
+
     onPinMappingsChange([]);
     onTricolorGroupsChange([]);
     setSelected(new Set());
@@ -490,12 +571,50 @@ function ZoneMapper({
   const pendingLoad =
     typedPin !== null && selected.size > 0
       ? pinMappings
-          .filter((m) => m.pin === typedPin && !selected.has(m.zoneId))
-          .reduce((sum, m) => sum + ledsInZone(m), 0) +
-        Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0)
+        .filter((m) => m.pin === typedPin && !selected.has(m.zoneId))
+        .reduce((sum, m) => sum + ledsInZone(m), 0) +
+      Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0)
       : null;
 
   const mergedPinSet = new Set(tricolorGroups.flatMap((g) => g.pins));
+
+  // ---- LED budget for the whole parol ----
+  const currentTotal = totalLeds(pinMappings, tricolorGroups);
+  // What the total becomes if the selected zones are assigned now. With a
+  // valid pin typed this is exact (tricolor pins count 3x); without one it's
+  // the plain difference in LEDs.
+  const projectedTotal =
+    selected.size === 0
+      ? currentTotal
+      : typedPin !== null
+        ? totalLeds(
+          [
+            ...pinMappings.filter((m) => !selected.has(m.zoneId)),
+            ...Array.from(selected).map((zoneId) => ({
+              zoneId,
+              pin: typedPin,
+              ledCount: draftOf(zoneId),
+            })),
+          ],
+          tricolorGroups,
+        )
+        : currentTotal +
+        Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0) -
+        pinMappings
+          .filter((m) => selected.has(m.zoneId))
+          .reduce((sum, m) => sum + ledsInZone(m), 0);
+  const shownTotal = Math.max(currentTotal, projectedTotal);
+  const budgetState =
+    shownTotal > LED_PAROL_LIMIT
+      ? "over"
+      : shownTotal >= LED_PAROL_WARN
+        ? "near"
+        : "ok";
+
+  // Selected zones in the order they were clicked. Their position here is
+  // the number shown on the drawing and in the LED list (1, 2, 3...).
+  const selectedList = Array.from(selected);
+  const zoneById = new Map(zones.map((z) => [z.id, z]));
 
   // Any zone whose bounding-box diagonal is under ~3% of the drawing's
   // overall size gets an invisible, larger "assist" circle centered on it,
@@ -570,17 +689,22 @@ function ZoneMapper({
                       : 0.4
                     : 0;
 
+                const isHot = isSelected && hoverZone === zone.id;
+
                 return (
                   <g key={zone.id}>
                     <polygon
                       points={zone.polygon.map((p) => p.join(",")).join(" ")}
-                      fill={fill}
-                      fillOpacity={fillOpacity}
-                      stroke="none"
+                      fill={isHot ? "#ffffff" : fill}
+                      fillOpacity={isHot ? 0.85 : fillOpacity}
+                      stroke={isHot ? "#ffffff" : "none"}
+                      strokeWidth={pinStrokeWidth}
                       className="cursor-pointer"
                       onClick={() => toggleSelect(zone.id)}
+                      onMouseEnter={() => setHoverZone(zone.id)}
+                      onMouseLeave={() => setHoverZone(null)}
                     />
-                    {showPinNumbers && pin !== undefined && (
+                    {showPinNumbers && pin !== undefined && !isSelected && (
                       <text
                         x={zone.cx}
                         y={zone.cy}
@@ -600,6 +724,53 @@ function ZoneMapper({
                   </g>
                 );
               })}
+              {/* Numbered markers on the selected zones. The number matches
+                  the row in "LEDs in each zone". */}
+              {selectedList.map((zoneId, index) => {
+                const zone = zoneById.get(zoneId);
+                if (!zone) return null;
+                const hot = hoverZone === zoneId;
+
+                // Keep the marker small enough that the zone's shape still
+                // shows: it shrinks with the zone (never below a readable
+                // minimum, never above the max).
+                const zxs = zone.polygon.map((pt) => pt[0]);
+                const zys = zone.polygon.map((pt) => pt[1]);
+                const zoneSpan = Math.min(
+                  Math.max(...zxs) - Math.min(...zxs),
+                  Math.max(...zys) - Math.min(...zys),
+                );
+                const markerR = Math.min(
+                  pinFontSize * 0.52,
+                  Math.max(pinFontSize * 0.3, zoneSpan * 0.26),
+                );
+
+                return (
+                  <g key={`marker-${zoneId}`} style={{ pointerEvents: "none" }}>
+                    <circle
+                      cx={zone.cx}
+                      cy={zone.cy}
+                      r={markerR}
+                      fill={hot ? "#ffffff" : "#e8e4d8"}
+                      fillOpacity={0.92}
+                      stroke="#000"
+                      strokeWidth={pinStrokeWidth * 0.4}
+                    />
+                    <text
+                      x={zone.cx}
+                      y={zone.cy}
+                      fontSize={markerR * 1.15}
+                      fontWeight={700}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="#000"
+                    >
+                      {index + 1}
+                    </text>
+                  </g>
+                );
+              })}
+
               {/* Assist circles drawn LAST (on top in SVG draw order) so a tap
                   near a tiny zone's center always wins the hit-test, even when
                   a larger neighboring zone's polygon also covers that same
@@ -618,6 +789,8 @@ function ZoneMapper({
                     fill="transparent"
                     className="cursor-pointer"
                     onClick={() => toggleSelect(zone.id)}
+                    onMouseEnter={() => setHoverZone(zone.id)}
+                    onMouseLeave={() => setHoverZone(null)}
                   />
                 );
               })}
@@ -680,8 +853,76 @@ function ZoneMapper({
                 {selected.size} zone{selected.size === 1 ? "" : "s"} selected
               </p>
               <p className="mt-1 text-[11px] text-white/30">
-                Total pins assigned: {groupedPins.length} · Total LEDs:{" "}
-                {totalLeds(pinMappings, tricolorGroups)}
+                Total pins assigned: {groupedPins.length}
+              </p>
+            </div>
+
+            {/* LED budget: how many LEDs the parol has so far */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+                  LEDs in the parol
+                </p>
+                <p className="font-serif text-sm text-white/80">
+                  <b
+                    className={
+                      budgetState === "over"
+                        ? "text-red-400"
+                        : budgetState === "near"
+                          ? "text-amber-300"
+                          : "text-white"
+                    }
+                  >
+                    {currentTotal}
+                  </b>{" "}
+                  / {LED_PAROL_LIMIT}
+                </p>
+              </div>
+
+              <div
+                className="relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={LED_PAROL_LIMIT}
+                aria-valuenow={currentTotal}
+                aria-label="LEDs used out of the limit"
+              >
+                {/* What this selection would add, shown lighter underneath */}
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full bg-white/25"
+                  style={{
+                    width: `${Math.min(100, (projectedTotal / LED_PAROL_LIMIT) * 100)}%`,
+                  }}
+                />
+                <div
+                  className={`absolute inset-y-0 left-0 rounded-full transition-all ${budgetState === "over"
+                    ? "bg-red-400"
+                    : budgetState === "near"
+                      ? "bg-amber-300"
+                      : "bg-white/70"
+                    }`}
+                  style={{
+                    width: `${Math.min(100, (currentTotal / LED_PAROL_LIMIT) * 100)}%`,
+                  }}
+                />
+              </div>
+
+              <p
+                className={`mt-2 text-[11px] ${budgetState === "over"
+                  ? "text-red-400"
+                  : budgetState === "near"
+                    ? "text-amber-300/80"
+                    : "text-white/35"
+                  }`}
+              >
+                {selected.size > 0 && projectedTotal !== currentTotal
+                  ? `Assigning this selection makes it ${projectedTotal} LEDs. `
+                  : ""}
+                {budgetState === "over"
+                  ? `Over the ${LED_PAROL_LIMIT} LED limit by ${shownTotal - LED_PAROL_LIMIT}. Remove some LEDs before building.`
+                  : budgetState === "near"
+                    ? `Close to the ${LED_PAROL_LIMIT} LED limit — ${LED_PAROL_LIMIT - shownTotal} left.`
+                    : `${LED_PAROL_LIMIT - shownTotal} LEDs left before the ${LED_PAROL_LIMIT} LED limit.`}
               </p>
             </div>
 
@@ -708,53 +949,80 @@ function ZoneMapper({
                     </label>
                   )}
                 </div>
-                <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
-                  {Array.from(selected).map((zoneId) => (
-                    <div
-                      key={zoneId}
-                      className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-3 py-1.5"
-                    >
-                      <span className="text-xs text-white/50">Zone {zoneId}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setZoneLeds(zoneId, draftOf(zoneId) - 1)}
-                          disabled={draftOf(zoneId) <= 1}
-                          aria-label={`Fewer LEDs in zone ${zoneId}`}
-                          className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                <p className="mb-2 text-[11px] text-white/30">
+                  Each number matches the marker on the drawing. Point at a
+                  row to light up its zone.
+                </p>
+                <div className="flex max-h-60 flex-col gap-1.5 overflow-y-auto pr-1">
+                  {selectedList.map((zoneId, index) => {
+                    const zone = zoneById.get(zoneId);
+                    const currentPin = zoneToPin.get(zoneId);
+                    const isHot = hoverZone === zoneId;
+                    const n = index + 1;
+                    return (
+                      <div
+                        key={zoneId}
+                        onMouseEnter={() => setHoverZone(zoneId)}
+                        onMouseLeave={() => setHoverZone(null)}
+                        className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${isHot
+                          ? "bg-white/[0.12] ring-1 ring-white/30"
+                          : "bg-white/[0.03]"
+                          }`}
+                      >
+                        <div
+                          className="flex min-w-0 items-center gap-2.5"
+                          title={`Zone ${zoneId}`}
                         >
-                          −
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          max={LED_MAX_PER_PIN}
-                          value={draftOf(zoneId)}
-                          onChange={(e) => setZoneLeds(zoneId, Number(e.target.value))}
-                          aria-label={`LEDs in zone ${zoneId}`}
-                          className="w-12 rounded-lg border border-white/10 bg-white/[0.03] py-1 text-center text-white outline-none focus:border-white/30"
-                        />
-                        <button
-                          onClick={() => setZoneLeds(zoneId, draftOf(zoneId) + 1)}
-                          disabled={draftOf(zoneId) >= LED_MAX_PER_PIN}
-                          aria-label={`More LEDs in zone ${zoneId}`}
-                          className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
-                        >
-                          +
-                        </button>
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#e8e4d8] text-[10px] font-semibold text-black">
+                            {n}
+                          </span>
+                          {zone && <ZoneThumb zone={zone} />}
+                          <span className="truncate text-xs text-white/50">
+                            {currentPin !== undefined
+                              ? `On pin ${formatPin(currentPin)}`
+                              : "No pin yet"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setZoneLeds(zoneId, draftOf(zoneId) - 1)}
+                            disabled={draftOf(zoneId) <= 1}
+                            aria-label={`Fewer LEDs in zone ${n}`}
+                            className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            max={LED_MAX_PER_PIN}
+                            value={draftOf(zoneId)}
+                            onChange={(e) => setZoneLeds(zoneId, Number(e.target.value))}
+                            aria-label={`LEDs in zone ${n}`}
+                            className="w-12 rounded-lg border border-white/10 bg-white/[0.03] py-1 text-center text-white outline-none focus:border-white/30"
+                          />
+                          <button
+                            onClick={() => setZoneLeds(zoneId, draftOf(zoneId) + 1)}
+                            disabled={draftOf(zoneId) >= LED_MAX_PER_PIN}
+                            aria-label={`More LEDs in zone ${n}`}
+                            className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {pendingLoad !== null && (
                   <p
-                    className={`mt-2 text-[11px] ${
-                      pendingLoad > LED_MAX_PER_PIN
-                        ? "text-red-400"
-                        : pendingLoad > LED_WARN_LIMIT
-                          ? "text-amber-300/80"
-                          : "text-white/40"
-                    }`}
+                    className={`mt-2 text-[11px] ${pendingLoad > LED_MAX_PER_PIN
+                      ? "text-red-400"
+                      : pendingLoad > LED_WARN_LIMIT
+                        ? "text-amber-300/80"
+                        : "text-white/40"
+                      }`}
                   >
                     Pin {formatPin(typedPin as number)} would drive {pendingLoad} LED
                     {pendingLoad === 1 ? "" : "s"}
@@ -785,11 +1053,10 @@ function ZoneMapper({
                       key={option.id}
                       onClick={() => changePinHeader(option.id)}
                       aria-pressed={active}
-                      className={`cursor-pointer rounded-full border px-4 py-1.5 font-serif text-sm transition ${
-                        active
-                          ? "border-white/40 bg-white/[0.08] text-white"
-                          : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white"
-                      }`}
+                      className={`cursor-pointer rounded-full border px-4 py-1.5 font-serif text-sm transition ${active
+                        ? "border-white/40 bg-white/[0.08] text-white"
+                        : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white"
+                        }`}
                     >
                       {option.label}
                     </button>
@@ -857,13 +1124,12 @@ function ZoneMapper({
                     <button
                       key={pin}
                       onClick={() => showPinInInput(pin)}
-                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs transition ${
-                        isActive
-                          ? "border-white/40 bg-white/[0.12] text-white"
-                          : isAssigned
-                            ? "border-white/20 bg-white/[0.06] text-white/70"
-                            : "border-white/10 bg-white/[0.02] text-white/40 hover:border-white/25 hover:text-white"
-                      }`}
+                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs transition ${isActive
+                        ? "border-white/40 bg-white/[0.12] text-white"
+                        : isAssigned
+                          ? "border-white/20 bg-white/[0.06] text-white/70"
+                          : "border-white/10 bg-white/[0.02] text-white/40 hover:border-white/25 hover:text-white"
+                        }`}
                     >
                       {formatPin(pin)}
                       {isPwmPin(pin) ? "~" : ""}
@@ -882,11 +1148,10 @@ function ZoneMapper({
                     <button
                       key={page.title}
                       onClick={() => setPinPage(index)}
-                      className={`h-1.5 rounded-full transition-all ${
-                        index === pinPage
-                          ? "w-5 bg-white/70"
-                          : "w-1.5 bg-white/20 hover:bg-white/40"
-                      }`}
+                      className={`h-1.5 rounded-full transition-all ${index === pinPage
+                        ? "w-5 bg-white/70"
+                        : "w-1.5 bg-white/20 hover:bg-white/40"
+                        }`}
                       aria-label={`Go to pin page ${index + 1}`}
                     />
                   ))}
@@ -895,6 +1160,7 @@ function ZoneMapper({
             </div>
 
             <div className="flex gap-2">
+
               <button
                 onClick={assignPin}
                 disabled={selected.size === 0}
@@ -902,6 +1168,19 @@ function ZoneMapper({
               >
                 Assign pin
               </button>
+
+              <button
+                onClick={unassignSelectedZones}
+                disabled={
+                  selected.size === 0 ||
+                  !pinMappings.some((mapping) => selected.has(mapping.zoneId))
+                }
+                title="Remove pin assignments from selected zones"
+                className="cursor-pointer rounded-xl border border-red-400/20 px-4 py-3 font-serif text-sm text-red-300/80 transition hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-200 disabled:cursor-default disabled:opacity-30"
+              >
+                Unassign pin
+              </button>
+
               <button
                 onClick={clearSelection}
                 disabled={selected.size === 0}
@@ -909,6 +1188,7 @@ function ZoneMapper({
               >
                 Deselect
               </button>
+
             </div>
 
             {warning && <p className="text-xs text-red-400">{warning}</p>}
@@ -928,9 +1208,8 @@ function ZoneMapper({
                     return (
                       <div
                         key={pin}
-                        className={`flex items-center gap-1 rounded-full border bg-white/[0.03] ${
-                          ticked ? "border-white/50" : "border-white/10"
-                        }`}
+                        className={`flex items-center gap-1 rounded-full border bg-white/[0.03] ${ticked ? "border-white/50" : "border-white/10"
+                          }`}
                       >
                         <input
                           type="checkbox"

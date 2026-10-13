@@ -7,6 +7,7 @@ import { useProjects } from "../context/ProjectContext";
 import parolIcon from "../assets/parol-icon.png";
 
 import ZoneMapper from "../components/ZoneMapper";
+import ConfirmDialog from "../components/ConfirmDialog.tsx";
 
 import PinSetup from "../components/PinSetup";
 
@@ -18,6 +19,8 @@ import KeyframeGallery from "../components/KeyframeGallery";
 
 import CodeGenerator from "../components/CodeGenerator";
 
+import { remapFramesToBeats } from "../utils/audioTiming";
+
 import type { AudioAnalysis } from "../types";
 
 import type {
@@ -27,6 +30,24 @@ import type {
   Workspace,
   Zone,
 } from "../types";
+
+type GroupTab = "zones" | "pins" | "song" | "preview" | "gallery" | "code";
+type Round = 1 | 2 | 3;
+
+const ROUNDS: Round[] = [1, 2, 3];
+
+// Zone Map and Pins are set up once (Round 1) and shared by every round, so
+// only Round 1 shows them. Every round has its own song, keyframes and code.
+const GROUP_TABS: { id: GroupTab; label: string; round1Only?: boolean }[] = [
+  { id: "zones", label: "Zone Map", round1Only: true },
+  { id: "pins", label: "Pins", round1Only: true },
+  { id: "song", label: "Song" },
+  { id: "preview", label: "Preview" },
+  { id: "gallery", label: "Gallery" },
+  { id: "code", label: "Code" },
+];
+
+const needsSongSlot = (tab: GroupTab) => tab !== "zones" && tab !== "pins";
 
 const typeLabels: Record<NodeType, string> = {
   section: "Class Section",
@@ -49,13 +70,16 @@ function WorkspacePage() {
     renameWorkspace,
     deleteWorkspace,
     setNodeImage,
+    removeNodeImage,
     setNodeZones,
     setNodePinMappings,
     setNodeTricolorGroups,
     clearNodeZones,
     setNodeAudio,
+    setNodeAudioOriginal,
     clearNodeAudio,
     setNodeFrames,
+    setNodeTiming,
   } = useProjects();
 
   const workspace: Workspace | undefined = workspaces.find(
@@ -72,11 +96,23 @@ function WorkspacePage() {
 
   const [isDragging, setIsDragging] = useState(false);
 
-  const [groupTab, setGroupTab] = useState<
-    "zones" | "pins" | "song" | "preview" | "gallery" | "code"
-  >("zones");
+  const [groupTab, setGroupTab] = useState<GroupTab>("zones");
+
+  // The chosen round belongs to the group it was picked in: opening another
+  // group starts on Round 1 again.
+  const [roundState, setRoundState] = useState<{ path: string; round: Round }>(
+    { path: nestedPath ?? "", round: 1 },
+  );
+  const round: Round =
+    roundState.path === (nestedPath ?? "") ? roundState.round : 1;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Hidden input for "Replace image" (the drop area above only exists while
+  // there is no image yet).
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  // Bumped on every replace/remove so the Zone Map starts fresh instead of
+  // keeping selections from the old drawing.
+  const [imageVersion, setImageVersion] = useState(0);
 
   if (!workspace) {
     return (
@@ -113,42 +149,44 @@ function WorkspacePage() {
   const currentNode =
     nodeChain[nodeChain.length - 1];
 
-  // A Group's single "Song" slot.
+  // The group's song slot for the chosen round. Old projects have one slot
+  // with no round saved; that one is Round 1.
   const animationChild =
     currentNode?.type === "group"
       ? getChildren(currentNode.id).find(
-          (item) => item.type === "animation",
+          (item) =>
+            item.type === "animation" && (item.round ?? 1) === round,
         )
       : undefined;
 
-  function openSongTab() {
+  // Makes the song slot of a round the first time it is needed.
+  function ensureSongSlot(forRound: Round) {
     if (!currentNode || currentNode.type !== "group") return;
 
-    if (!animationChild) {
-      addNode(currentNode.id, "Song", "animation");
-    }
+    const exists = getChildren(currentNode.id).some(
+      (item) =>
+        item.type === "animation" && (item.round ?? 1) === forRound,
+    );
 
-    setGroupTab("song");
+    if (!exists) {
+      addNode(currentNode.id, "Song", "animation", forRound);
+    }
   }
 
-  function openPreviewTab() {
-    if (!currentNode || currentNode.type !== "group") return;
-
-    if (!animationChild) {
-      addNode(currentNode.id, "Song", "animation");
-    }
-
-    setGroupTab("preview");
+  function selectTab(tab: GroupTab) {
+    if (needsSongSlot(tab)) ensureSongSlot(round);
+    setGroupTab(tab);
   }
 
-  function openGalleryTab() {
-    if (!currentNode || currentNode.type !== "group") return;
+  function selectRound(next: Round) {
+    // Rounds 2 and 3 have no Zone Map / Pins, so start them on Song.
+    const nextTab: GroupTab =
+      next > 1 && !needsSongSlot(groupTab) ? "song" : groupTab;
 
-    if (!animationChild) {
-      addNode(currentNode.id, "Song", "animation");
-    }
+    if (needsSongSlot(nextTab)) ensureSongSlot(next);
 
-    setGroupTab("gallery");
+    setRoundState({ path: nestedPath ?? "", round: next });
+    setGroupTab(nextTab);
   }
 
   // Decide what the user is allowed to create here.
@@ -210,10 +248,25 @@ function WorkspacePage() {
     }
   }
 
+  // True if this node, or anything inside it, is a locked design.
+  function containsLocked(node: ProjectNode): boolean {
+    if (node.locked) return true;
+    return getChildren(node.id).some(containsLocked);
+  }
+
   function handleDeleteNode(
     id: string,
     name: string,
   ) {
+    const target = currentItems.find((item) => item.id === id);
+
+    if (target && containsLocked(target)) {
+      window.alert(
+        `"${name}" has a locked design inside it, so it can't be deleted. Unlock it in the Developer Window first.`,
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete "${name}" and everything inside it?`,
     );
@@ -238,6 +291,13 @@ function WorkspacePage() {
   }
 
   function handleDeleteWorkspace() {
+    if (getChildren(currentWorkspace.id).some(containsLocked)) {
+      window.alert(
+        `"${currentWorkspace.name}" has a locked design inside it, so it can't be deleted. Unlock it in the Developer Window first.`,
+      );
+      return;
+    }
+
     const confirmed = window.confirm(
       `Delete "${currentWorkspace.name}" and everything inside it?`,
     );
@@ -246,6 +306,53 @@ function WorkspacePage() {
       deleteWorkspace(currentWorkspace.id);
       navigate("/");
     }
+  }
+
+  // Zones, pin assignments and tricolor merges are made from the drawing, so
+  // replacing, removing or re-scanning it throws them away. The design is
+  // shared by all three rounds, so ask first (in the popup, and say so) if
+  // there is any. With nothing to lose it just goes ahead.
+  const [discardDialog, setDiscardDialog] = useState<{
+    action: "replace" | "remove" | "rescan";
+    onConfirm: () => void;
+  } | null>(null);
+
+  function askBeforeDiscarding(
+    action: "replace" | "remove" | "rescan",
+    onConfirm: () => void,
+  ) {
+    const hasWork =
+      (currentNode?.zones?.length ?? 0) > 0 ||
+      (currentNode?.pinMappings?.length ?? 0) > 0;
+
+    if (!hasWork) {
+      onConfirm();
+      return;
+    }
+
+    setDiscardDialog({ action, onConfirm });
+  }
+
+  function handleReplaceFile(file: File | null | undefined) {
+    if (!file) return;
+    // Check the type first so a wrong file doesn't ask for confirmation.
+    if (file.type !== "image/png") {
+      handleFile(file);
+      return;
+    }
+    askBeforeDiscarding("replace", () => {
+      setImageVersion((v) => v + 1);
+      handleFile(file);
+    });
+  }
+
+  function handleRemoveImage() {
+    if (!currentNode) return;
+    const id = currentNode.id;
+    askBeforeDiscarding("remove", () => {
+      setImageVersion((v) => v + 1);
+      removeNodeImage(id);
+    });
   }
 
   function handleFile(
@@ -335,77 +442,86 @@ function WorkspacePage() {
 
         <div className="mt-10 h-px w-full bg-white/10" />
 
-        {currentNode?.type === "group" ? (
+        {nodeChain.some((node) => node.locked) ? (
+          <section className="mx-auto mt-16 max-w-md rounded-3xl border-2 border-[#ff3b41] bg-[#ff3b41]/[0.06] px-8 py-12 text-center shadow-[0_0_30px_rgba(255,59,65,0.25)]">
+            <p className="text-4xl">🔒</p>
+            <h2 className="mt-4 font-serif text-3xl font-light">
+              This design is locked
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-white/50">
+              It can't be opened or changed right now. Ask your teacher to
+              unlock it in the Developer Window.
+            </p>
+            <button
+              onClick={() => navigate("/")}
+              className="mt-8 cursor-pointer rounded-xl bg-white px-6 py-3 text-sm text-black transition hover:bg-white/90"
+            >
+              Back to start
+            </button>
+          </section>
+        ) : currentNode?.type === "group" ? (
           <section className="mt-12">
-            <div className="mb-10 flex gap-2">
-              <button
-                onClick={() => setGroupTab("zones")}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
-                  groupTab === "zones"
-                    ? "border-white/40 bg-white/[0.08] text-white"
-                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                }`}
-              >
-                Zone Map
-              </button>
+            <div className="mb-10">
+              {/* Round picker */}
+              <div className="mb-8 flex flex-col items-start gap-3">
+                <div
+                  role="tablist"
+                  aria-label="Round"
+                  className="inline-flex rounded-2xl border border-white/10 bg-white/[0.03] p-1"
+                >
+                  {ROUNDS.map((r) => (
+                    <button
+                      key={r}
+                      role="tab"
+                      aria-selected={round === r}
+                      onClick={() => selectRound(r)}
+                      className={`cursor-pointer rounded-xl px-6 py-2.5 font-serif text-sm tracking-wide transition sm:px-9 ${
+                        round === r
+                          ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.15)]"
+                          : "text-white/50 hover:bg-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      Round {r}
+                    </button>
+                  ))}
+                </div>
 
-              <button
-                onClick={() => setGroupTab("pins")}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
-                  groupTab === "pins"
-                    ? "border-white/40 bg-white/[0.08] text-white"
-                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                }`}
-              >
-                Pins
-              </button>
+                {round > 1 && (
+                  <p className="text-xs text-white/30">
+                    Zone Map and Pins are set up once in Round 1 and shared by
+                    every round. This round has its own song, keyframes and
+                    code.
+                  </p>
+                )}
+              </div>
 
-              <button
-                onClick={openSongTab}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
-                  groupTab === "song"
-                    ? "border-white/40 bg-white/[0.08] text-white"
-                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                }`}
+              {/* Step tabs */}
+              <div
+                role="tablist"
+                aria-label="Steps"
+                className="flex gap-1 overflow-x-auto border-b border-white/10 sm:overflow-visible"
               >
-                Song
-              </button>
-
-              <button
-                onClick={openPreviewTab}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
-                  groupTab === "preview"
-                    ? "border-white/40 bg-white/[0.08] text-white"
-                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                }`}
-              >
-                Preview
-              </button>
-
-              <button
-                onClick={openGalleryTab}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
-                  groupTab === "gallery"
-                    ? "border-white/40 bg-white/[0.08] text-white"
-                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                }`}
-              >
-                Gallery
-              </button>
-
-              <button
-                onClick={() => setGroupTab("code")}
-                className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.2em] transition ${
-                  groupTab === "code"
-                    ? "border-white/40 bg-white/[0.08] text-white"
-                    : "border-white/10 text-white/40 hover:border-white/25 hover:text-white"
-                }`}
-              >
-                Code
-              </button>
+                {GROUP_TABS.filter((tab) => round === 1 || !tab.round1Only).map(
+                  (tab) => (
+                    <button
+                      key={tab.id}
+                      role="tab"
+                      aria-selected={groupTab === tab.id}
+                      onClick={() => selectTab(tab.id)}
+                      className={`relative -mb-px shrink-0 cursor-pointer whitespace-nowrap rounded-t-xl border border-b-0 px-5 py-3 text-xs uppercase tracking-[0.2em] transition sm:px-7 ${
+                        groupTab === tab.id
+                          ? "border-white/20 bg-gradient-to-b from-white/[0.09] to-[#050505] text-white shadow-[inset_0_2px_0_0_rgba(253,230,138,0.8)]"
+                          : "border-transparent text-white/40 hover:bg-white/[0.04] hover:text-white"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ),
+                )}
+              </div>
             </div>
 
-            {groupTab === "zones" && (
+            {round === 1 && groupTab === "zones" && (
               <>
                 {!currentNode.imageDataUrl ? (
                   <div
@@ -465,7 +581,34 @@ function WorkspacePage() {
                     />
                   </div>
                 ) : (
+                  <>
+                  <div className="mx-auto mb-6 flex max-w-6xl flex-wrap items-center justify-end gap-2">
+                    <button
+                      onClick={() => replaceInputRef.current?.click()}
+                      className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/25 hover:text-white"
+                    >
+                      Upload another image
+                    </button>
+                    <button
+                      onClick={handleRemoveImage}
+                      className="cursor-pointer rounded-full border border-red-400/20 px-4 py-1.5 text-[11px] uppercase tracking-wider text-red-300/70 transition hover:border-red-400/40 hover:text-red-300"
+                    >
+                      Remove image
+                    </button>
+                    <input
+                      ref={replaceInputRef}
+                      type="file"
+                      accept="image/png"
+                      className="hidden"
+                      onChange={(event) => {
+                        handleReplaceFile(event.target.files?.[0]);
+                        // So picking the same file again still fires onChange.
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
                   <ZoneMapper
+                    key={imageVersion}
                     node={currentNode}
                     onZonesReady={(
                       zones: Zone[],
@@ -490,15 +633,17 @@ function WorkspacePage() {
                     onTricolorGroupsChange={(groups) =>
                       setNodeTricolorGroups(currentNode.id, groups)
                     }
-                    onClearZones={() =>
-                      clearNodeZones(currentNode.id)
-                    }
+                    onClearZones={() => {
+                      const id = currentNode.id;
+                      askBeforeDiscarding("rescan", () => clearNodeZones(id));
+                    }}
                   />
+                  </>
                 )}
               </>
             )}
 
-            {groupTab === "pins" && (
+            {round === 1 && groupTab === "pins" && (
               <PinSetup
                 node={currentNode}
                 onPinMappingsChange={(pinMappings: PinMapping[]) =>
@@ -510,19 +655,53 @@ function WorkspacePage() {
 
             {groupTab === "song" && animationChild && (
               <AudioUploader
+                key={animationChild.id}
                 node={animationChild}
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
-                ) =>
+                ) => {
                   setNodeAudio(
                     animationChild.id,
                     fileName,
                     analysis,
-                  )
+                  );
+                  // A new song starts with no keyframes and no tempo changes.
+                  setNodeFrames(animationChild.id, []);
+                  setNodeTiming(animationChild.id, { bpmChanges: undefined });
+                }}
+                onFreshAnalysis={(analysis: AudioAnalysis) =>
+                  setNodeAudioOriginal(animationChild.id, analysis)
                 }
-                onClear={() =>
-                  clearNodeAudio(animationChild.id)
+                onTempoChange={(analysis: AudioAnalysis) => {
+                  setNodeAudio(
+                    animationChild.id,
+                    animationChild.audioFileName ?? "",
+                    analysis,
+                  );
+                  // The base beats were redone, so any BPM change points on the
+                  // timeline are cleared (the Song tab asked first).
+                  setNodeTiming(animationChild.id, { bpmChanges: undefined });
+                  // Beat timing: the keyframes follow the beats. Manual
+                  // timing: they stay exactly where they are.
+                  if ((animationChild.timingMode ?? "beat") !== "manual") {
+                    setNodeFrames(
+                      animationChild.id,
+                      remapFramesToBeats(
+                        animationChild.frames ?? [],
+                        analysis.beatTimes,
+                      ),
+                    );
+                  }
+                }}
+                onClear={() => {
+                  clearNodeAudio(animationChild.id);
+                  setNodeFrames(animationChild.id, []);
+                }}
+                frameCount={(animationChild.frames ?? []).length}
+                bpmChangeCount={(animationChild.bpmChanges ?? []).length}
+                onResetKeyframes={() =>
+                  setNodeFrames(animationChild.id, [])
                 }
               />
             )}
@@ -530,6 +709,7 @@ function WorkspacePage() {
             {groupTab === "preview" && animationChild && (
               <div className="mx-auto max-w-3xl">
                 <SequenceEditor
+                  key={animationChild.id}
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) =>
@@ -538,6 +718,9 @@ function WorkspacePage() {
                       frames,
                     )
                   }
+                  onTimingChange={(timing) =>
+                    setNodeTiming(animationChild.id, timing)
+                  }
                 />
               </div>
             )}
@@ -545,6 +728,7 @@ function WorkspacePage() {
             {groupTab === "gallery" && animationChild && (
               <div className="mx-auto max-w-5xl">
                 <KeyframeGallery
+                  key={animationChild.id}
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) =>
@@ -559,13 +743,20 @@ function WorkspacePage() {
 
             {groupTab === "code" && animationChild && (
               <CodeGenerator
+                key={animationChild.id}
+                round={round}
                 pinMappings={
                   currentNode.pinMappings ?? []
                 }
+                tricolorGroups={
+                  currentNode.tricolorGroups ?? []
+                }
+                frames={animationChild.frames ?? []}
                 audioAnalysis={
                   animationChild.audioAnalysis
                 }
-                songName={animationChild.name}
+                bpmChanges={animationChild.bpmChanges}
+                songName={animationChild.audioFileName ?? animationChild.name}
               />
             )}
           </section>
@@ -585,16 +776,40 @@ function WorkspacePage() {
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
-                ) =>
+                ) => {
                   setNodeAudio(
                     currentNode.id,
                     fileName,
                     analysis,
-                  )
+                  );
+                  setNodeFrames(currentNode.id, []);
+                  setNodeTiming(currentNode.id, { bpmChanges: undefined });
+                }}
+                onFreshAnalysis={(analysis: AudioAnalysis) =>
+                  setNodeAudioOriginal(currentNode.id, analysis)
                 }
-                onClear={() =>
-                  clearNodeAudio(currentNode.id)
-                }
+                onTempoChange={(analysis: AudioAnalysis) => {
+                  setNodeAudio(
+                    currentNode.id,
+                    currentNode.audioFileName ?? "",
+                    analysis,
+                  );
+                  setNodeTiming(currentNode.id, { bpmChanges: undefined });
+                  if ((currentNode.timingMode ?? "beat") !== "manual") {
+                    setNodeFrames(
+                      currentNode.id,
+                      remapFramesToBeats(
+                        currentNode.frames ?? [],
+                        analysis.beatTimes,
+                      ),
+                    );
+                  }
+                }}
+                bpmChangeCount={(currentNode.bpmChanges ?? []).length}
+                onClear={() => {
+                  clearNodeAudio(currentNode.id);
+                  setNodeFrames(currentNode.id, []);
+                }}
               />
             </div>
 
@@ -610,11 +825,28 @@ function WorkspacePage() {
                 className="group relative aspect-[4/3]"
               >
                 <button
-                  onClick={() => openNode(item.id)}
-                  className="absolute inset-0 w-full cursor-pointer rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-left transition duration-500 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06]"
+                  onClick={() => {
+                    if (item.locked) {
+                      window.alert(
+                        `"${item.name}" is locked. Ask your teacher to unlock it.`,
+                      );
+                      return;
+                    }
+                    openNode(item.id);
+                  }}
+                  className={`absolute inset-0 w-full rounded-2xl border p-7 text-left transition duration-500 ${
+                    item.locked
+                      ? "cursor-not-allowed border-2 border-[#ff3b41] bg-[#ff3b41]/[0.05] shadow-[0_0_18px_rgba(255,59,65,0.3)]"
+                      : "cursor-pointer border-white/10 bg-white/[0.03] hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06]"
+                  }`}
                 >
                   <div className="flex h-full flex-col justify-end">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+                    <p
+                      className={`text-[10px] uppercase tracking-[0.3em] ${
+                        item.locked ? "text-[#ff8a8e]" : "text-white/30"
+                      }`}
+                    >
+                      {item.locked ? "🔒 Locked · " : ""}
                       {typeLabels[item.type]}
                     </p>
 
@@ -715,6 +947,44 @@ function WorkspacePage() {
               </button>
             </div>
           </div>
+        )}
+
+        {discardDialog && (
+          <ConfirmDialog
+            title={
+              discardDialog.action === "replace"
+                ? "Replace image?"
+                : discardDialog.action === "remove"
+                  ? "Remove image?"
+                  : "Re-scan drawing?"
+            }
+            checkboxLabel="I understand this affects all three rounds"
+            onCancel={() => setDiscardDialog(null)}
+            onConfirm={() => {
+              const { onConfirm } = discardDialog;
+              setDiscardDialog(null);
+              onConfirm();
+            }}
+          >
+            <p>
+              {discardDialog.action === "replace"
+                ? "Replacing the image"
+                : discardDialog.action === "remove"
+                  ? "Removing the image"
+                  : "Re-scanning the drawing"}{" "}
+              will delete its detected zones, pin assignments and tricolor
+              merges.
+            </p>
+            <p>
+              This design is shared by all three rounds, so Round 1, Round 2
+              and Round 3 are all affected.
+            </p>
+            <p>
+              The song and keyframes of each round are kept, but the keyframes
+              may point to pins that no longer exist. Set up the pins again,
+              then check the keyframes in every round.
+            </p>
+          </ConfirmDialog>
         )}
       </div>
     </main>
