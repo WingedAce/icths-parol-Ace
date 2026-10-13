@@ -116,7 +116,7 @@ function ZoneMapper({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pinInput, setPinInput] = useState("");
   const [warning, setWarning] = useState("");
-  // Non-blocking heads-up (more than 6 LEDs on a pin).
+  // Non-blocking heads-up (more than 15 LEDs on a pin).
   const [notice, setNotice] = useState("");
 
   // The zone being pointed at, either in the LED list or on the drawing.
@@ -375,6 +375,10 @@ function ZoneMapper({
     if (nextTotal > LED_PAROL_LIMIT) {
       messages.push(
         `The parol now has ${nextTotal} LEDs, which is over the ${LED_PAROL_LIMIT} LED limit.`,
+      );
+    } else if (nextTotal >= LED_PAROL_WARN) {
+      messages.push(
+        `The parol now has ${nextTotal} LEDs, close to the ${LED_PAROL_LIMIT} LED limit (${LED_PAROL_LIMIT - nextTotal} left).`,
       );
     }
     setNotice(messages.length > 0 ? `Warning: ${messages.join(" ")}` : "");
