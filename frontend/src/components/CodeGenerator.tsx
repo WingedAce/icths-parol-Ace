@@ -13,6 +13,7 @@ import { effectiveAnalysis } from "../utils/bpmChanges";
 import {
   LED_MAX_PER_PIN,
   LED_PAROL_LIMIT,
+  LED_PAROL_WARN,
   formatPin,
   pinLedLoad,
   totalLeds,
@@ -95,7 +96,7 @@ function analyzePins(pinMappings: PinMapping[]): {
     }
   }
 
-  // Same hard limit as the Zone Map: no pin may drive more than 10 LEDs.
+  // Same hard limit as the Zone Map: no pin may drive more than 20 LEDs.
   for (const pin of new Set(pinMappings.map((m) => m.pin))) {
     const load = pinLedLoad(pinMappings, pin);
     if (load > LED_MAX_PER_PIN) {
@@ -275,7 +276,9 @@ function CodeGenerator({
   const parolWarning =
     parolLeds > LED_PAROL_LIMIT
       ? `The parol has ${parolLeds} LEDs, which is over the ${LED_PAROL_LIMIT} LED limit.`
-      : "";
+      : parolLeds >= LED_PAROL_WARN
+        ? `The parol has ${parolLeds} LEDs, close to the ${LED_PAROL_LIMIT} LED limit.`
+        : "";
 
   function handleGenerate() {
     if (!hasPins) return;
