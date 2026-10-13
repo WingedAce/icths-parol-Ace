@@ -97,9 +97,9 @@ export function describePins(
 // ---- LED counts per pin ----
 
 // More than this many LEDs on one pin shows a warning...
-export const LED_WARN_LIMIT = 6;
+export const LED_WARN_LIMIT = 15;
 // ...and more than this is not allowed at all.
-export const LED_MAX_PER_PIN = 10;
+export const LED_MAX_PER_PIN = 20;
 
 // The whole parol is meant to stay at or under this many LEDs. Going over
 // only shows a warning; the student can still keep going.
@@ -149,7 +149,7 @@ export function groupOfPin<T extends { pins: number[] }>(
 
 
 // The only LED colors available for the build — the palette is fixed to
-// these eight, so there's no free color picker.
+// these seven, so there's no free color picker.
 export const PIN_COLORS = [
   { name: "Red", hex: "#ff4d4d" },
   { name: "Blue", hex: "#0a9bff" },
@@ -158,5 +158,4 @@ export const PIN_COLORS = [
   { name: "Orange", hex: "#ff8a1f" },
   { name: "White", hex: "#ffffff" },
   { name: "Pink", hex: "#ff6fb5" },
-  { name: "Purple", hex: "#b86bff" },
 ] as const;
