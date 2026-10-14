@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
+import ColorLockGate from "./components/ColorLockGate";
 import { useProjects } from "./context/ProjectContext";
 
 function App() {
@@ -13,10 +14,20 @@ function App() {
   const [section, setSection] = useState("");
   const [groupNumber, setGroupNumber] = useState("");
   const [lockedMessage, setLockedMessage] = useState("");
+  const [showLock, setShowLock] = useState(false);
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
+    if (!batch.trim() || !section.trim() || !groupNumber.trim()) {
+      return;
+    }
+
+    // Nothing is opened or created until the color combo lock is passed.
+    setShowLock(true);
+  }
+
+  function proceed() {
     const batchName = batch.trim();
     const sectionName = section.trim();
     const groupNumberValue = groupNumber.trim();
@@ -171,6 +182,16 @@ function App() {
         </button>
 
       </div>
+
+      {showLock && (
+        <ColorLockGate
+          onSuccess={() => {
+            setShowLock(false);
+            proceed();
+          }}
+          onCancel={() => setShowLock(false)}
+        />
+      )}
     </main>
   );
 }
