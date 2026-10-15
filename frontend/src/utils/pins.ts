@@ -97,9 +97,9 @@ export function describePins(
 // ---- LED counts per pin ----
 
 // More than this many LEDs on one pin shows a warning...
-export const LED_WARN_LIMIT = 6;
+export const LED_WARN_LIMIT = 16;
 // ...and more than this is not allowed at all.
-export const LED_MAX_PER_PIN = 10;
+export const LED_MAX_PER_PIN = 20;
 
 // The whole parol is meant to stay at or under this many LEDs. Going over
 // only shows a warning; the student can still keep going.
@@ -110,8 +110,7 @@ export const LED_PAROL_WARN = 270;
 // LEDs in one zone. A zone with no saved count has 1.
 export const ledsInZone = (m: { ledCount?: number }) => m.ledCount ?? 1;
 
-// Total LEDs a pin has to drive, across all of its zones. A tricolor LED puts
-// one LED on each of its 3 pins, so this is also the pin's load for tricolor.
+// Total LEDs a pin has to drive, across all of its zones.
 export function pinLedLoad(
   pinMappings: { pin: number; ledCount?: number }[],
   pin: number,
@@ -121,22 +120,13 @@ export function pinLedLoad(
     .reduce((sum, m) => sum + ledsInZone(m), 0);
 }
 
-// Total LEDs in the whole parol. A tricolor LED equals 3 LEDs, so a merged
-// group of 3 pins counts 3 x (tricolor LEDs on it); the tricolor count is the
-// biggest load among its 3 pins.
+// Total LEDs in the whole parol: just the LEDs of every zone added up. One
+// tricolor LED is exactly one LED, and merging pins into a tricolor LED never
+// changes the count (e.g. zones with 1, 1 and 2 LEDs make 4).
 export function totalLeds(
   pinMappings: { pin: number; ledCount?: number }[],
-  groups: { pins: number[] }[],
 ): number {
-  const merged = new Set(groups.flatMap((g) => g.pins));
-  let total = 0;
-  for (const pin of new Set(pinMappings.map((m) => m.pin))) {
-    if (!merged.has(pin)) total += pinLedLoad(pinMappings, pin);
-  }
-  for (const g of groups) {
-    total += 3 * Math.max(...g.pins.map((p) => pinLedLoad(pinMappings, p)), 0);
-  }
-  return total;
+  return pinMappings.reduce((sum, m) => sum + ledsInZone(m), 0);
 }
 
 // The tricolor group a pin belongs to, if any.
