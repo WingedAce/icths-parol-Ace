@@ -116,7 +116,7 @@ function ZoneMapper({
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [pinInput, setPinInput] = useState("");
   const [warning, setWarning] = useState("");
-  // Non-blocking heads-up (more than 15 LEDs on a pin).
+  // Non-blocking heads-up (more than 6 LEDs on a pin).
   const [notice, setNotice] = useState("");
 
   // The zone being pointed at, either in the LED list or on the drawing.
