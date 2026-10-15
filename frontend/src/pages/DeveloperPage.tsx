@@ -5,6 +5,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ParolPreview from "../components/ParolPreview";
 import { useProjects } from "../context/ProjectContext";
 import type { ProjectNode } from "../types";
+import { hasColorLockData, resetColorLock } from "../utils/accessLock";
 
 // One registered design = one group that has a drawing (or detected zones).
 type Design = {
@@ -13,11 +14,16 @@ type Design = {
   where: string;
 };
 
-type PendingDelete = { kind: "all" } | { kind: "selected" } | null;
+type PendingDelete =
+  | { kind: "all" }
+  | { kind: "selected" }
+  | { kind: "reset" }
+  | null;
 
 // "delete" = picking designs to delete, "lock" = picking designs to lock or
-// unlock. null = not picking anything.
-type Mode = "delete" | "lock" | null;
+// unlock, "reset" = picking designs whose color combo lock should be cleared.
+// null = not picking anything.
+type Mode = "delete" | "lock" | "reset" | null;
 
 const hasDesign = (node: ProjectNode) =>
   !!node.imageDataUrl || (node.zones?.length ?? 0) > 0;
@@ -121,12 +127,18 @@ function DeveloperPage() {
   );
   const chosenToLock = chosen.filter((d) => !isLocked(d));
   const chosenToUnlock = chosen.filter(isLocked);
+  // Only groups that already have a color combo (or a wrong-guess record) have
+  // something to reset.
+  const resettable = designs.filter((d) => hasColorLockData(d.node.id));
+  const chosenToReset = chosen.filter((d) => hasColorLockData(d.node.id));
 
   const selecting = mode !== null;
 
   function toggle(design: Design) {
     // A locked design can't be picked for deleting.
     if (mode === "delete" && isLocked(design)) return;
+    // Nothing to reset for a group that has no color combo yet.
+    if (mode === "reset" && !hasColorLockData(design.node.id)) return;
     const id = design.node.id;
     setSelected((previous) => {
       const next = new Set(previous);
@@ -151,6 +163,13 @@ function DeveloperPage() {
       list.map((d) => d.node.id),
       locked,
     );
+    stopSelecting();
+  }
+
+  // Clears each group's color combo + lockout. The designs are kept; the group
+  // simply creates a new combo the next time it's opened.
+  function resetColorLocks(list: Design[]) {
+    for (const design of list) resetColorLock(design.node.id);
     stopSelecting();
   }
 
@@ -199,7 +218,10 @@ function DeveloperPage() {
             {designs.map((design) => {
               const locked = isLocked(design);
               // In delete mode a locked design can't be picked.
-              const pickable = selecting && !(mode === "delete" && locked);
+              const pickable =
+                selecting &&
+                !(mode === "delete" && locked) &&
+                !(mode === "reset" && !hasColorLockData(design.node.id));
               const isSelected = pickable && selected.has(design.node.id);
               return (
                 <li key={design.node.id}>
@@ -221,13 +243,15 @@ function DeveloperPage() {
                     className={`relative rounded-2xl border p-2 transition ${
                       pickable ? "cursor-pointer" : ""
                     } ${
+                      selecting && !pickable && !locked ? "opacity-50" : ""
+                    } ${
                       // Locked designs always have red edges.
                       locked
                         ? `border-2 border-[#ff3b41] shadow-[0_0_18px_rgba(255,59,65,0.35)] ${
                             isSelected ? "bg-white/[0.08] ring-2 ring-white/70" : ""
                           } ${selecting && !pickable ? "opacity-50" : ""}`
                         : isSelected
-                          ? mode === "lock"
+                          ? mode !== "delete"
                             ? "border-white bg-white/[0.08] ring-2 ring-white/50"
                             : "border-[#ff5a5f] bg-[#ff5a5f]/10 ring-2 ring-[#ff5a5f]/40"
                           : selecting
@@ -246,7 +270,7 @@ function DeveloperPage() {
                         aria-hidden="true"
                         className={`absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${
                           isSelected
-                            ? mode === "lock"
+                            ? mode !== "delete"
                               ? "border-white bg-white text-black"
                               : "border-[#ff5a5f] bg-[#ff5a5f] text-white"
                             : "border-white/40 bg-black/60 text-transparent"
@@ -276,7 +300,7 @@ function DeveloperPage() {
 
       {/* Stays at the bottom of the screen, like the buttons in the layout */}
       <div className="sticky bottom-0 mt-8 border-t border-white/10 bg-[#050505]/90 px-6 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-center gap-3 sm:gap-6">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3 sm:gap-6">
           {mode === "delete" ? (
             <>
               <button
@@ -291,6 +315,22 @@ function DeveloperPage() {
                 className="cursor-pointer rounded-full bg-[#ff5a5f] px-6 py-3 font-serif text-base font-semibold text-white transition hover:bg-[#f0484d] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-[#ff5a5f] sm:px-8"
               >
                 Delete selected ({chosen.length})
+              </button>
+            </>
+          ) : mode === "reset" ? (
+            <>
+              <button
+                onClick={stopSelecting}
+                className="cursor-pointer rounded-full border border-white/20 px-6 py-3 font-serif text-base text-white/80 transition hover:border-white/50 hover:text-white sm:px-8"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setPending({ kind: "reset" })}
+                disabled={chosenToReset.length === 0}
+                className="cursor-pointer rounded-full bg-white px-6 py-3 font-serif text-base font-semibold text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white sm:px-8"
+              >
+                Reset color lock ({chosenToReset.length})
               </button>
             </>
           ) : mode === "lock" ? (
@@ -326,6 +366,13 @@ function DeveloperPage() {
                 <LockIcon /> Lock Design
               </button>
               <button
+                onClick={() => startMode("reset")}
+                disabled={resettable.length === 0}
+                className="cursor-pointer rounded-full border border-white/25 px-6 py-3 font-serif text-base font-semibold text-white transition hover:border-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-30 sm:px-8"
+              >
+                Reset Color Lock
+              </button>
+              <button
                 onClick={() => setPending({ kind: "all" })}
                 disabled={unlockedDesigns.length === 0}
                 className="cursor-pointer rounded-full border border-[#ff5a5f]/50 px-6 py-3 font-serif text-base font-semibold text-[#ff8a8e] transition hover:bg-[#ff5a5f]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent sm:px-8"
@@ -346,6 +393,13 @@ function DeveloperPage() {
           <p className="mt-3 text-center text-[11px] text-white/35">
             Tap the designs you want to delete. Locked designs can't be
             deleted until you unlock them.
+          </p>
+        )}
+        {mode === "reset" && (
+          <p className="mt-3 text-center text-[11px] text-white/35">
+            Tap the groups that forgot their color combo, then press Reset. Dimmed
+            designs have no color lock yet. The design is kept; the group makes
+            a new combo the next time it opens.
           </p>
         )}
         {mode === "lock" && (
@@ -380,6 +434,30 @@ function DeveloperPage() {
           <p>
             For each group, the drawing, zones, pin assignments, colors and the
             song and keyframes of all three rounds are removed.
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {pending?.kind === "reset" && chosenToReset.length > 0 && (
+        <ConfirmDialog
+          title={`Reset ${chosenToReset.length} color ${chosenToReset.length === 1 ? "lock" : "locks"}?`}
+          checkboxLabel="I understand the old color combo will stop working"
+          confirmLabel="Reset"
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            setPending(null);
+            resetColorLocks(chosenToReset);
+          }}
+        >
+          <ul className="list-inside list-disc">
+            {chosenToReset.map((d) => (
+              <li key={d.node.id}>{nameOf(d)}</li>
+            ))}
+          </ul>
+          <p>
+            The old color combo and any wrong-guess lockout are cleared. The
+            next time the group opens its design, it creates a new combo. The
+            design itself is not changed.
           </p>
         </ConfirmDialog>
       )}
