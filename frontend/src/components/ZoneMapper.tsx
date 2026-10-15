@@ -358,7 +358,7 @@ function ZoneMapper({
     }));
 
     const nextMappings = [...withoutSelected, ...added];
-    const nextTotal = totalLeds(nextMappings, tricolorGroups);
+    const nextTotal = totalLeds(nextMappings);
 
     commitMappings(nextMappings);
     setSelected(new Set());
@@ -579,25 +579,21 @@ function ZoneMapper({
   const mergedPinSet = new Set(tricolorGroups.flatMap((g) => g.pins));
 
   // ---- LED budget for the whole parol ----
-  const currentTotal = totalLeds(pinMappings, tricolorGroups);
+  const currentTotal = totalLeds(pinMappings);
   // What the total becomes if the selected zones are assigned now. With a
-  // valid pin typed this is exact (tricolor pins count 3x); without one it's
-  // the plain difference in LEDs.
+  // valid pin typed or not, it's the plain difference in LEDs.
   const projectedTotal =
     selected.size === 0
       ? currentTotal
       : typedPin !== null
-        ? totalLeds(
-          [
-            ...pinMappings.filter((m) => !selected.has(m.zoneId)),
-            ...Array.from(selected).map((zoneId) => ({
-              zoneId,
-              pin: typedPin,
-              ledCount: draftOf(zoneId),
-            })),
-          ],
-          tricolorGroups,
-        )
+        ? totalLeds([
+          ...pinMappings.filter((m) => !selected.has(m.zoneId)),
+          ...Array.from(selected).map((zoneId) => ({
+            zoneId,
+            pin: typedPin,
+            ledCount: draftOf(zoneId),
+          })),
+        ])
         : currentTotal +
         Array.from(selected).reduce((sum, id) => sum + draftOf(id), 0) -
         pinMappings
@@ -1260,7 +1256,7 @@ function ZoneMapper({
                   </button>
                   <p className="text-[11px] text-white/35">
                     {mergeSel.length}/3 pins ticked — merging needs exactly 3.
-                    One tricolor LED counts as 3 LEDs.
+                    One tricolor LED is one LED; merging doesn't change the count.
                   </p>
                 </div>
               </div>
@@ -1273,11 +1269,9 @@ function ZoneMapper({
                 </p>
                 <div className="flex flex-col gap-2">
                   {tricolorGroups.map((g) => {
-                    const each = Math.max(
-                      ...g.pins.map((p) => pinLedLoad(pinMappings, p)),
-                    );
-                    const uneven = g.pins.some(
-                      (p) => pinLedLoad(pinMappings, p) !== each,
+                    const groupLeds = g.pins.reduce(
+                      (sum, p) => sum + pinLedLoad(pinMappings, p),
+                      0,
                     );
                     return (
                       <div
@@ -1294,7 +1288,7 @@ function ZoneMapper({
                             <b className="text-white">
                               {g.pins.map(formatPin).join(" + ")}
                             </b>{" "}
-                            — {each * 3} LEDs ({each} tricolor)
+                            — {groupLeds} LED{groupLeds === 1 ? "" : "s"}
                           </p>
                           <button
                             onClick={() => unmerge(g.id)}
@@ -1303,12 +1297,6 @@ function ZoneMapper({
                             Unmerge
                           </button>
                         </div>
-                        {uneven && (
-                          <p className="mt-1 text-[11px] text-amber-300/80">
-                            ⚠ The 3 pins have different LED counts. Each tricolor LED uses
-                            one LED on every pin, so they should match.
-                          </p>
-                        )}
                       </div>
                     );
                   })}

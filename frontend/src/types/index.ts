@@ -121,7 +121,8 @@ export type PinMapping = {
   ledCount?: number;
 };
 
-// Three pins merged into one tricolor LED. One tricolor LED counts as 3 LEDs.
+// Three pins merged into one tricolor LED. One tricolor LED is exactly one LED;
+// merging never changes the LED count.
 // The group has one color that the user can change in the previews; the
 // zones of all three pins light up in that color.
 export type TricolorGroup = {
