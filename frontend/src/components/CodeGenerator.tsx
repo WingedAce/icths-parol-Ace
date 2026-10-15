@@ -272,7 +272,7 @@ function CodeGenerator({
 
   // Over the whole-parol limit is only a warning (same as the Zone Map), so
   // it never blocks generating the code.
-  const parolLeds = totalLeds(pinMappings, tricolorGroups);
+  const parolLeds = totalLeds(pinMappings);
   const parolWarning =
     parolLeds > LED_PAROL_LIMIT
       ? `The parol has ${parolLeds} LEDs, which is over the ${LED_PAROL_LIMIT} LED limit.`
