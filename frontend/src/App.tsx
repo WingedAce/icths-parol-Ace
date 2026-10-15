@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 
 import ColorLockGate from "./components/ColorLockGate";
 import { useProjects } from "./context/ProjectContext";
+import GmailVerification from "./components/GmailVerification";
 
 function App() {
   const navigate = useNavigate();
@@ -15,6 +16,9 @@ function App() {
   const [groupNumber, setGroupNumber] = useState("");
   const [lockedMessage, setLockedMessage] = useState("");
   const [showLock, setShowLock] = useState(false);
+
+  const [showGmailVerification, setShowGmailVerification] =
+    useState(false);
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -38,10 +42,6 @@ function App() {
 
     const groupLabel = `Group ${groupNumberValue}`;
 
-    // Find or create the workspace for this batch. Keying the top level by
-    // batch (not section) is what keeps different years from colliding: the
-    // same "Section" + "Group Number" typed next year lands under a brand
-    // new workspace instead of reusing last year's saved parol design.
     let workspace = workspaces.find(
       (item) =>
         item.type === "batch" &&
@@ -51,7 +51,6 @@ function App() {
     const workspaceId =
       workspace?.id ?? addWorkspace(batchName, "batch");
 
-    // Find or create the hidden section-level node
     const sectionChildren = getChildren(workspaceId);
 
     let sectionNode = sectionChildren.find(
@@ -64,7 +63,6 @@ function App() {
       sectionNode?.id ??
       addNode(workspaceId, sectionName, "section");
 
-    // Find or create the group node
     const groupChildren = getChildren(sectionNodeId);
 
     let groupNode = groupChildren.find(
@@ -73,7 +71,6 @@ function App() {
         item.name.toLowerCase() === groupLabel.toLowerCase(),
     );
 
-    // A group whose design was locked in the Developer Window can't be opened.
     if (groupNode?.locked) {
       setLockedMessage(
         `${groupLabel} (${sectionName}, Batch ${batchName}) is locked. Ask your teacher to unlock it.`,
@@ -87,8 +84,66 @@ function App() {
       groupNode?.id ??
       addNode(sectionNodeId, groupLabel, "group");
 
+    // Store the destination temporarily, then verify Gmail.
+    setShowGmailVerification(true);
+
+    // Keep these IDs available for the verification callback.
+    setPendingDestination({
+      workspaceId,
+      sectionNodeId,
+      groupNodeId,
+    });
+  }
+
+  const [pendingDestination, setPendingDestination] = useState<{
+    workspaceId: string;
+    sectionNodeId: string;
+    groupNodeId: string;
+  } | null>(null);
+
+  function handleGmailVerified() {
+    if (!pendingDestination) {
+      return;
+    }
+
     navigate(
-      `/workspace/${workspaceId}/${sectionNodeId}/${groupNodeId}`,
+      `/workspace/${pendingDestination.workspaceId}/${pendingDestination.sectionNodeId}/${pendingDestination.groupNodeId}`,
+    );
+  }
+
+  if (showGmailVerification) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
+        <div className="w-full max-w-sm">
+
+          <div className="mb-12 text-center">
+            <p className="mb-5 text-[10px] uppercase tracking-[0.45em] text-white/30">
+              Group Verification
+            </p>
+
+            <h1 className="font-serif text-5xl font-light tracking-[-0.04em]">
+              Verify Gmail
+            </h1>
+
+            <p className="mt-4 text-sm leading-relaxed text-white/40">
+              Verify your Gmail address before entering your group workspace.
+            </p>
+          </div>
+
+          <GmailVerification
+            onVerified={handleGmailVerified}
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowGmailVerification(false)}
+            className="mt-4 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+          >
+            Back
+          </button>
+
+        </div>
+      </main>
     );
   }
 

@@ -13,6 +13,12 @@ handoff doc.
 """
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from pydantic import BaseModel
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import io
@@ -23,9 +29,7 @@ import librosa
 import numpy as np
 from beat_tracking import track_beats
 
-
 app = FastAPI(title="I-Parol Segmentation API")
-
 
 # Wide open for now (class project on a free tier) — tighten to the
 # real frontend origin(s) once the Vercel/Netlify URL is known.
