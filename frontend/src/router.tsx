@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, createBrowserRouter } from "react-router";
+import { Navigate, createBrowserRouter, useParams } from "react-router";
 
 import App from "./App";
 import DevPinGate from "./components/DevPinGate";
@@ -7,10 +7,23 @@ import DeveloperPage from "./pages/DeveloperPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import { hasSessionPass } from "./utils/accessLock";
 
-// Workspaces can only be reached through the title screen's color combo lock
-// (typing or bookmarking a workspace URL sends you back to the title screen).
+// Every group URL has its own color combo lock. A workspace page opens only
+// if that group's lock was passed in this tab; typing or bookmarking a URL (or
+// browsing up to a section/batch list) sends you back to the title screen.
 function RequireColorLock({ children }: { children: ReactNode }) {
-  return hasSessionPass() ? <>{children}</> : <Navigate to="/" replace />;
+  const { "*": nestedPath } = useParams();
+
+  // /workspace/<batch>/<section>/<group>/...  ->  the group is the 2nd id of
+  // the splat.
+  const groupId = (nestedPath ?? "")
+    .split("/")
+    .filter((id) => id.length > 0)[1];
+
+  return groupId && hasSessionPass(groupId) ? (
+    <>{children}</>
+  ) : (
+    <Navigate to="/" replace />
+  );
 }
 
 export const router = createBrowserRouter([

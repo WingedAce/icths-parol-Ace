@@ -33,22 +33,31 @@ function hexOf(name: string): string {
 }
 
 type Props = {
+  /** The group's node id: every group URL has its own color combo. */
+  groupId: string;
+  /** Shown under the title, e.g. "Group 3 · Section A · Batch 2026". */
+  label: string;
   onSuccess: () => void;
   onCancel: () => void;
 };
 
-export default function ColorLockGate({ onSuccess, onCancel }: Props) {
-  // First time on this device: no combo saved yet, so the student creates one.
-  const [isSetup] = useState(() => !hasColorCombo());
+export default function ColorLockGate({
+  groupId,
+  label,
+  onSuccess,
+  onCancel,
+}: Props) {
+  // First time opening this group: no combo saved for it yet, so one is created.
+  const [isSetup] = useState(() => !hasColorCombo(groupId));
 
   const [phase, setPhase] = useState<Phase>(() =>
-    getLockState("color").lockedUntil ? "locked" : "pick",
+    getLockState("color", groupId).lockedUntil ? "locked" : "pick",
   );
   const [lockedUntil, setLockedUntil] = useState<number | null>(
-    () => getLockState("color").lockedUntil,
+    () => getLockState("color", groupId).lockedUntil,
   );
   const [failsLeft, setFailsLeft] = useState(
-    () => getLockState("color").failsLeft,
+    () => getLockState("color", groupId).failsLeft,
   );
 
   const [order, setOrder] = useState<Swatch[]>(shuffled);
@@ -65,24 +74,24 @@ export default function ColorLockGate({ onSuccess, onCancel }: Props) {
   async function finish(combo: string[]) {
     try {
       if (isSetup) {
-        const saved = await saveColorCombo(combo);
+        const saved = await saveColorCombo(groupId, combo);
         if (!saved) {
           setPhase("error");
           return;
         }
-        grantSessionPass();
+        grantSessionPass(groupId);
         onSuccess();
         return;
       }
 
-      if (await checkColorCombo(combo)) {
-        clearFailures("color");
-        grantSessionPass();
+      if (await checkColorCombo(groupId, combo)) {
+        clearFailures("color", groupId);
+        grantSessionPass(groupId);
         onSuccess();
         return;
       }
 
-      const state = registerFailure("color");
+      const state = registerFailure("color", groupId);
       setFailsLeft(state.failsLeft);
       setLockedUntil(state.lockedUntil);
       setPhase(state.lockedUntil ? "locked" : "retry");
@@ -111,9 +120,11 @@ export default function ColorLockGate({ onSuccess, onCancel }: Props) {
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#050505] px-6 py-10 text-white"
     >
       <div className="w-full max-w-sm text-center">
-        <p className="mb-4 text-[10px] uppercase tracking-[0.45em] text-white/30">
+        <p className="mb-2 text-[10px] uppercase tracking-[0.45em] text-white/30">
           Color Combo Lock
         </p>
+
+        <p className="mb-5 text-xs text-white/50">{label}</p>
 
         {phase === "pick" && (
           <>
@@ -123,7 +134,7 @@ export default function ColorLockGate({ onSuccess, onCancel }: Props) {
 
             <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
               {isSetup
-                ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. You'll need this exact order every time you continue.`
+                ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. This group will need this exact order every time it's opened.`
                 : `Tap your ${COLOR_COMBO_LENGTH} colors in the right order.`}
             </p>
 
@@ -218,7 +229,7 @@ export default function ColorLockGate({ onSuccess, onCancel }: Props) {
 
             <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
               That wasn't your color combo. You have {failsLeft} of{" "}
-              {COLOR_MAX_FAILS} tries left before this device is locked for 24
+              {COLOR_MAX_FAILS} tries left before this group is locked for 24
               hours.
             </p>
 

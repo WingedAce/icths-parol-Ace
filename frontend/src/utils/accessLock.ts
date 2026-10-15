@@ -1,4 +1,5 @@
-// Client-side access locks: the student color combo and the developer PIN.
+// Client-side access locks: a color combo for each group's URL, and the
+// developer PIN.
 //
 // Everything is kept in this browser's localStorage, so it survives reloads
 // and closing the site. Secrets are salted + hashed (never stored as plain
@@ -39,8 +40,8 @@ const CONFIG = {
   },
 } as const;
 
-// Set once the student color lock is passed; lets the workspace page tell a
-// student who came through the lock from someone typing a direct URL.
+// Groups whose color lock was passed in this tab; lets the workspace page tell
+// a student who came through the lock from someone typing a direct URL.
 // sessionStorage = per tab, cleared when the tab/browser closes.
 const SESSION_KEY = "parol.session.pass.v1";
 
@@ -55,6 +56,11 @@ export type LockState = {
 };
 
 // ---------- storage helpers ----------
+
+// Each group URL has its own color lock, so its data lives under its own key.
+function keyFor(base: string, scope?: string): string {
+  return scope ? `${base}:${scope}` : base;
+}
 
 function readJson<T>(key: string): T | null {
   try {
@@ -127,30 +133,66 @@ async function hashSecret(salt: string, value: string): Promise<string> {
     .padStart(8, "0")}`;
 }
 
-async function saveSecret(kind: LockKind, value: string): Promise<boolean> {
+async function saveSecret(
+  kind: LockKind,
+  value: string,
+  scope?: string,
+): Promise<boolean> {
   const salt = randomSalt();
   const hash = await hashSecret(salt, value);
-  return writeJson(CONFIG[kind].secretKey, { salt, hash } satisfies Secret);
+  return writeJson(keyFor(CONFIG[kind].secretKey, scope), {
+    salt,
+    hash,
+  } satisfies Secret);
 }
 
-async function checkSecret(kind: LockKind, value: string): Promise<boolean> {
-  const secret = readJson<Secret>(CONFIG[kind].secretKey);
+async function checkSecret(
+  kind: LockKind,
+  value: string,
+  scope?: string,
+): Promise<boolean> {
+  const secret = readJson<Secret>(keyFor(CONFIG[kind].secretKey, scope));
   if (!secret) return false;
   return (await hashSecret(secret.salt, value)) === secret.hash;
 }
 
-// ---------- student color combo ----------
+// ---------- color combo (one per group URL) ----------
+// `groupId` is the group's node id, the last id in its /workspace/... URL.
 
-export function hasColorCombo(): boolean {
-  return readJson<Secret>(CONFIG.color.secretKey) !== null;
+export function hasColorCombo(groupId: string): boolean {
+  return readJson<Secret>(keyFor(CONFIG.color.secretKey, groupId)) !== null;
 }
 
-export function saveColorCombo(combo: readonly string[]): Promise<boolean> {
-  return saveSecret("color", combo.join(","));
+export function saveColorCombo(
+  groupId: string,
+  combo: readonly string[],
+): Promise<boolean> {
+  return saveSecret("color", combo.join(","), groupId);
 }
 
-export function checkColorCombo(combo: readonly string[]): Promise<boolean> {
-  return checkSecret("color", combo.join(","));
+export function checkColorCombo(
+  groupId: string,
+  combo: readonly string[],
+): Promise<boolean> {
+  return checkSecret("color", combo.join(","), groupId);
+}
+
+/** True when a group has a saved color combo or any wrong-guess/lockout record. */
+export function hasColorLockData(groupId: string): boolean {
+  return (
+    hasColorCombo(groupId) ||
+    readJson<Attempts>(keyFor(CONFIG.color.attemptsKey, groupId)) !== null
+  );
+}
+
+/**
+ * Developer reset: forgets a group's color combo and its wrong-guess count /
+ * lockout, so the next time the group is opened it creates a new combo.
+ * The design itself is untouched.
+ */
+export function resetColorLock(groupId: string) {
+  removeKey(keyFor(CONFIG.color.secretKey, groupId));
+  removeKey(keyFor(CONFIG.color.attemptsKey, groupId));
 }
 
 // ---------- developer PIN ----------
@@ -169,9 +211,10 @@ export function checkDevPin(pin: string): Promise<boolean> {
 
 // ---------- wrong-guess counters + lockouts ----------
 
-export function getLockState(kind: LockKind): LockState {
+export function getLockState(kind: LockKind, scope?: string): LockState {
   const cfg = CONFIG[kind];
-  const attempts = readJson<Attempts>(cfg.attemptsKey);
+  const attemptsKey = keyFor(cfg.attemptsKey, scope);
+  const attempts = readJson<Attempts>(attemptsKey);
 
   if (!attempts) {
     return { lockedUntil: null, failsLeft: cfg.maxFails };
@@ -183,7 +226,7 @@ export function getLockState(kind: LockKind): LockState {
 
   if (attempts.lockedUntil) {
     // The lockout has run out: start fresh.
-    removeKey(cfg.attemptsKey);
+    removeKey(attemptsKey);
     return { lockedUntil: null, failsLeft: cfg.maxFails };
   }
 
@@ -194,44 +237,55 @@ export function getLockState(kind: LockKind): LockState {
 }
 
 /** Records one wrong guess and returns the updated state. */
-export function registerFailure(kind: LockKind): LockState {
+export function registerFailure(kind: LockKind, scope?: string): LockState {
   const cfg = CONFIG[kind];
-  const current = getLockState(kind);
+  const attemptsKey = keyFor(cfg.attemptsKey, scope);
+  const current = getLockState(kind, scope);
   if (current.lockedUntil) return current;
 
-  const previous = readJson<Attempts>(cfg.attemptsKey)?.fails ?? 0;
+  const previous = readJson<Attempts>(attemptsKey)?.fails ?? 0;
   const fails = previous + 1;
 
   if (fails >= cfg.maxFails) {
     const lockedUntil = Date.now() + cfg.lockoutMs;
-    writeJson(cfg.attemptsKey, { fails, lockedUntil } satisfies Attempts);
+    writeJson(attemptsKey, { fails, lockedUntil } satisfies Attempts);
     return { lockedUntil, failsLeft: 0 };
   }
 
-  writeJson(cfg.attemptsKey, { fails, lockedUntil: null } satisfies Attempts);
+  writeJson(attemptsKey, { fails, lockedUntil: null } satisfies Attempts);
   return { lockedUntil: null, failsLeft: cfg.maxFails - fails };
 }
 
-export function clearFailures(kind: LockKind) {
-  removeKey(CONFIG[kind].attemptsKey);
+export function clearFailures(kind: LockKind, scope?: string) {
+  removeKey(keyFor(CONFIG[kind].attemptsKey, scope));
 }
 
-// ---------- per-tab "passed the color lock" flag ----------
+// ---------- per-tab "passed this group's color lock" flag ----------
 
-export function grantSessionPass() {
+function readPassedGroups(): string[] {
   try {
-    window.sessionStorage.setItem(SESSION_KEY, "1");
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function grantSessionPass(groupId: string) {
+  try {
+    const passed = readPassedGroups();
+    if (!passed.includes(groupId)) passed.push(groupId);
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(passed));
   } catch {
     // ignore
   }
 }
 
-export function hasSessionPass(): boolean {
-  try {
-    return window.sessionStorage.getItem(SESSION_KEY) === "1";
-  } catch {
-    return false;
-  }
+export function hasSessionPass(groupId: string): boolean {
+  return readPassedGroups().includes(groupId);
 }
 
 export function formatUnlockTime(timestamp: number): string {
