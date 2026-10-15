@@ -97,9 +97,9 @@ export function describePins(
 // ---- LED counts per pin ----
 
 // More than this many LEDs on one pin shows a warning...
-export const LED_WARN_LIMIT = 6;
+export const LED_WARN_LIMIT = 16;
 // ...and more than this is not allowed at all.
-export const LED_MAX_PER_PIN = 10;
+export const LED_MAX_PER_PIN = 20;
 
 // The whole parol is meant to stay at or under this many LEDs. Going over
 // only shows a warning; the student can still keep going.
