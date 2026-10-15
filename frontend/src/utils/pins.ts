@@ -124,7 +124,7 @@ export function pinLedLoad(
 // tricolor LED is exactly one LED, and merging pins into a tricolor LED never
 // changes the count (e.g. zones with 1, 1 and 2 LEDs make 4).
 export function totalLeds(
-  pinMappings: { pin: number; ledCount?: number }[],
+  pinMappings: { pin: number; ledCount?: number; }[] tricolorGroups: TricolorGroup[],
 ): number {
   return pinMappings.reduce((sum, m) => sum + ledsInZone(m), 0);
 }
