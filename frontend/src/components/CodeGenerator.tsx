@@ -96,7 +96,7 @@ function analyzePins(pinMappings: PinMapping[]): {
     }
   }
 
-  // Same hard limit as the Zone Map: no pin may drive more than 20 LEDs.
+  // Same hard limit as the Zone Map: no pin may drive more than 10 LEDs.
   for (const pin of new Set(pinMappings.map((m) => m.pin))) {
     const load = pinLedLoad(pinMappings, pin);
     if (load > LED_MAX_PER_PIN) {
