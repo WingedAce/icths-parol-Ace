@@ -1,13 +1,20 @@
+
 import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
 import { workspaces as initialWorkspaces } from "../data/workspaces";
 import { deleteImage, loadAllImages, saveImage } from "../lib/imageStore";
+import {
+  fetchCloud,
+  pushNodeDiff,
+  pushWorkspaceDiff,
+} from "../lib/cloudSync";
 import type {
   AudioAnalysis,
   BpmChange,
@@ -53,47 +60,20 @@ type ProjectContextType = {
     audioFileName: string,
     audioAnalysis: AudioAnalysis,
   ) => void;
-  setNodeAudioOriginal: (id: string, audioAnalysisOriginal: AudioAnalysis) => void;
+  setNodeAudioOriginal: (
+    id: string,
+    audioAnalysisOriginal: AudioAnalysis,
+  ) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
-  // Timing mode and BPM change points of a song. Only the keys that are
-  // given change; give a key as undefined to clear it.
   setNodeTiming: (
     id: string,
     timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
   ) => void;
-  // Locks or unlocks groups (designs). Used by the Developer Window.
   setNodesLocked: (ids: string[], locked: boolean) => void;
 };
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
-
-const WORKSPACES_KEY = "parol-editor:workspaces";
-const NODES_KEY = "parol-editor:nodes";
-
-function loadWorkspaces(): Workspace[] {
-  try {
-    const raw = localStorage.getItem(WORKSPACES_KEY);
-    if (!raw) return initialWorkspaces;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-    return initialWorkspaces;
-  } catch {
-    return initialWorkspaces;
-  }
-}
-
-function loadNodes(): Record<string, ProjectNode[]> {
-  try {
-    const raw = localStorage.getItem(NODES_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
 
 function deleteBranch(
   nodes: Record<string, ProjectNode[]>,
@@ -114,85 +94,102 @@ function deleteBranch(
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] =
-    useState<Workspace[]>(loadWorkspaces);
+    useState<Workspace[]>(initialWorkspaces);
 
   const [nodesByParent, setNodesByParent] =
-    useState<Record<string, ProjectNode[]>>(loadNodes);
+    useState<Record<string, ProjectNode[]>>({});
 
-  // Images live in IndexedDB now (see lib/imageStore.ts), not inline in this
-  // state — load them once on mount and merge them back onto their nodes.
-  // This runs after the initial (image-less) render, so a node's drawing
-  // may pop in a moment after the rest of the page — expected, not a bug.
+  const [cloudLoaded, setCloudLoaded] = useState(false);
+
+  const syncedNodes = useRef<Record<string, ProjectNode[]>>({});
+  const syncedWorkspaces = useRef<Workspace[]>([]);
+
+ 
+  // Load cloud data and drawings before enabling writes.
   useEffect(() => {
     let cancelled = false;
 
-    loadAllImages()
-      .then((images) => {
-        if (cancelled || Object.keys(images).length === 0) return;
+    async function loadInitialData() {
+      try {
+        const { workspaces: w, nodes } = await fetchCloud();
 
-        setNodesByParent((previous) => {
-          const next = { ...previous };
+        let restoredNodes = nodes;
 
-          for (const parentId of Object.keys(next)) {
-            next[parentId] = next[parentId].map((node) =>
-              images[node.id]
-                ? { ...node, imageDataUrl: images[node.id] }
-                : node,
-            );
-          }
+        try {
+          const images = await loadAllImages();
 
-          return next;
-        });
-      })
-      .catch(() => {
-        // No images saved yet, or IndexedDB unavailable — fine, just means
-        // no drawings to restore.
-      });
+          restoredNodes = Object.fromEntries(
+            Object.entries(nodes).map(([parentId, parentNodes]) => [
+              parentId,
+              parentNodes.map((node) =>
+                images[node.id]
+                  ? { ...node, imageDataUrl: images[node.id] }
+                  : node,
+              ),
+            ]),
+          );
+        } catch (error) {
+          console.error("Could not load drawings from Supabase:", error);
+        }
+
+        if (cancelled) return;
+
+        syncedWorkspaces.current = w;
+        syncedNodes.current = nodes;
+
+        setWorkspaces(w.length > 0 ? w : initialWorkspaces);
+        setNodesByParent(restoredNodes);
+        setCloudLoaded(true);
+      } catch (error) {
+        console.error("Could not load from Supabase:", error);
+      }
+    }
+
+    void loadInitialData();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // Sync only changed workspaces to Supabase.
   useEffect(() => {
-    localStorage.setItem(
-      WORKSPACES_KEY,
-      JSON.stringify(workspaces),
-    );
-  }, [workspaces]);
+    if (!cloudLoaded) return;
 
+    const timer = setTimeout(() => {
+      pushWorkspaceDiff(syncedWorkspaces.current, workspaces)
+        .then(() => {
+          syncedWorkspaces.current = workspaces;
+        })
+        .catch(console.error);
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [workspaces, cloudLoaded]);
+
+  // Sync only changed nodes to Supabase.
   useEffect(() => {
-    // Strip imageDataUrl before persisting — it lives in IndexedDB (see
-    // setNodeImage below), and leaving it here is exactly what blew past
-    // localStorage's quota and crashed the app before.
-    const stripped: Record<string, ProjectNode[]> = {};
+    if (!cloudLoaded) return;
 
-    for (const parentId of Object.keys(nodesByParent)) {
-      stripped[parentId] = nodesByParent[parentId].map(
-        ({ imageDataUrl: _imageDataUrl, ...rest }) => rest,
-      );
-    }
+    const timer = setTimeout(() => {
+      pushNodeDiff(syncedNodes.current, nodesByParent)
+        .then(() => {
+          syncedNodes.current = nodesByParent;
+        })
+        .catch(console.error);
+    }, 800);
 
-    localStorage.setItem(
-      NODES_KEY,
-      JSON.stringify(stripped),
-    );
-  }, [nodesByParent]);
+    return () => clearTimeout(timer);
+  }, [nodesByParent, cloudLoaded]);
 
-  function addWorkspace(
-    name: string,
-    type: WorkspaceType,
-  ) {
+  function addWorkspace(name: string, type: WorkspaceType) {
     const workspace: Workspace = {
       id: crypto.randomUUID(),
       name,
       type,
     };
 
-    setWorkspaces((previous) => [
-      ...previous,
-      workspace,
-    ]);
+    setWorkspaces((previous) => [...previous, workspace]);
 
     return workspace.id;
   }
@@ -200,9 +197,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   function renameWorkspace(id: string, name: string) {
     setWorkspaces((previous) =>
       previous.map((workspace) =>
-        workspace.id === id
-          ? { ...workspace, name }
-          : workspace,
+        workspace.id === id ? { ...workspace, name } : workspace,
       ),
     );
   }
@@ -216,9 +211,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const next = { ...previous };
 
       const removedIds = deleteBranch(next, id);
-      deleteImage(id).catch(() => {});
+      deleteImage(id).catch(() => { });
+
       for (const removedId of removedIds) {
-        deleteImage(removedId).catch(() => {});
+        deleteImage(removedId).catch(() => { });
       }
 
       return next;
@@ -240,8 +236,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
 
     setNodesByParent((previous) => {
-      // A group has one song slot per round. A fast double click must not
-      // make a second slot for the same round.
+      // A group has one song slot per round.
       if (
         type === "animation" &&
         (previous[parentId] ?? []).some(
@@ -255,10 +250,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       return {
         ...previous,
-        [parentId]: [
-          ...(previous[parentId] ?? []),
-          node,
-        ],
+        [parentId]: [...(previous[parentId] ?? []), node],
       };
     });
 
@@ -271,9 +263,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
-          node.id === id
-            ? { ...node, name }
-            : node,
+          node.id === id ? { ...node, name } : node,
         );
       }
 
@@ -292,16 +282,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       }
 
       const removedIds = deleteBranch(next, id);
-      deleteImage(id).catch(() => {});
+      deleteImage(id).catch(() => { });
+
       for (const removedId of removedIds) {
-        deleteImage(removedId).catch(() => {});
+        deleteImage(removedId).catch(() => { });
       }
 
       return next;
     });
   }
 
-  function setNodeImage(id: string, imageDataUrl: string) {
+
+  async function setNodeImage(id: string, imageDataUrl: string) {
+    await saveImage(id, imageDataUrl);
+
     setNodesByParent((previous) => {
       const next = { ...previous };
 
@@ -309,30 +303,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
             ? {
-                ...node,
-                imageDataUrl,
-                // Zones, pins and merges all belong to the old drawing, so
-                // a new image starts clean. (First upload: nothing to clear.)
-                zones: undefined,
-                imageWidth: undefined,
-                imageHeight: undefined,
-                pinMappings: [],
-                tricolorGroups: [],
-              }
+              ...node,
+              imageDataUrl,
+              zones: undefined,
+              imageWidth: undefined,
+              imageHeight: undefined,
+              pinMappings: [],
+              tricolorGroups: [],
+            }
             : node,
         );
       }
 
       return next;
     });
-
-    saveImage(id, imageDataUrl).catch((error) => {
-      console.error("Failed to save drawing to IndexedDB:", error);
-    });
   }
 
-  // Takes the drawing away completely, together with everything detected
-  // from it, so the group goes back to the upload screen.
+
   function removeNodeImage(id: string) {
     setNodesByParent((previous) => {
       const next = { ...previous };
@@ -341,14 +328,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
             ? {
-                ...node,
-                imageDataUrl: undefined,
-                zones: undefined,
-                imageWidth: undefined,
-                imageHeight: undefined,
-                pinMappings: [],
-                tricolorGroups: [],
-              }
+              ...node,
+              imageDataUrl: undefined,
+              zones: undefined,
+              imageWidth: undefined,
+              imageHeight: undefined,
+              pinMappings: [],
+              tricolorGroups: [],
+            }
             : node,
         );
       }
@@ -357,7 +344,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
 
     deleteImage(id).catch((error) => {
-      console.error("Failed to delete drawing from IndexedDB:", error);
+      console.error("Failed to delete drawing from Supabase Storage:", error);
     });
   }
 
@@ -373,7 +360,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
-            ? { ...node, zones, imageWidth, imageHeight, pinMappings: [], tricolorGroups: [] }
+            ? {
+              ...node,
+              zones,
+              imageWidth,
+              imageHeight,
+              pinMappings: [],
+              tricolorGroups: [],
+            }
             : node,
         );
       }
@@ -396,7 +390,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  function setNodeTricolorGroups(id: string, tricolorGroups: TricolorGroup[]) {
+  function setNodeTricolorGroups(
+    id: string,
+    tricolorGroups: TricolorGroup[],
+  ) {
     setNodesByParent((previous) => {
       const next = { ...previous };
 
@@ -418,13 +415,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
             ? {
-                ...node,
-                zones: undefined,
-                imageWidth: undefined,
-                imageHeight: undefined,
-                pinMappings: [],
-                tricolorGroups: [],
-              }
+              ...node,
+              zones: undefined,
+              imageWidth: undefined,
+              imageHeight: undefined,
+              pinMappings: [],
+              tricolorGroups: [],
+            }
             : node,
         );
       }
@@ -443,9 +440,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
-          node.id === id
-            ? { ...node, audioFileName, audioAnalysis }
-            : node,
+          node.id === id ? { ...node, audioFileName, audioAnalysis } : node,
         );
       }
 
@@ -453,11 +448,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  // Separate from setNodeAudio on purpose: this is called once, right
-  // after a FRESH backend analysis, never from a ½×/⅔×/1.5×/2× correction
-  // — so audioAnalysisOriginal always stays exactly what was detected,
-  // regardless of how many corrections get applied afterward.
-  function setNodeAudioOriginal(id: string, audioAnalysisOriginal: AudioAnalysis) {
+  function setNodeAudioOriginal(
+    id: string,
+    audioAnalysisOriginal: AudioAnalysis,
+  ) {
     setNodesByParent((previous) => {
       const next = { ...previous };
 
@@ -479,13 +473,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id
             ? {
-                ...node,
-                audioFileName: undefined,
-                audioAnalysis: undefined,
-                audioAnalysisOriginal: undefined,
-                // The change points belong to the old beats.
-                bpmChanges: undefined,
-              }
+              ...node,
+              audioFileName: undefined,
+              audioAnalysis: undefined,
+              audioAnalysisOriginal: undefined,
+              bpmChanges: undefined,
+            }
             : node,
         );
       }
@@ -494,17 +487,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
-        function setNodeFrames(id: string, frames: Frame[]) {
-        setNodesByParent((previous) => {
-          const next = { ...previous };
-          for (const parentId of Object.keys(next)) {
-            next[parentId] = next[parentId].map((node) =>
-              node.id === id ? { ...node, frames } : node,
-            );
-          }
-          return next;
-        });
+  function setNodeFrames(id: string, frames: Frame[]) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, frames } : node,
+        );
       }
+
+      return next;
+    });
+  }
 
   function setNodeTiming(
     id: string,
@@ -512,11 +507,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   ) {
     setNodesByParent((previous) => {
       const next = { ...previous };
+
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
           node.id === id ? { ...node, ...timing } : node,
         );
       }
+
       return next;
     });
   }
@@ -588,9 +585,7 @@ export function useProjects() {
   const context = useContext(ProjectContext);
 
   if (!context) {
-    throw new Error(
-      "useProjects must be used inside ProjectProvider",
-    );
+    throw new Error("useProjects must be used inside ProjectProvider");
   }
 
   return context;

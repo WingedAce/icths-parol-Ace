@@ -5,14 +5,17 @@ import { RouterProvider } from "react-router/dom";
 import { router } from "./router";
 import { ProjectProvider } from "./context/ProjectContext";
 import SchoolCredit from "./components/SchoolCredit";
+import { ensureSession } from "./lib/supabase";
 
 import "./index.css";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ProjectProvider>
-      <RouterProvider router={router} />
-      <SchoolCredit />
-    </ProjectProvider>
-  </StrictMode>,
-);
+ensureSession().finally(() => {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <ProjectProvider>
+        <RouterProvider router={router} />
+        <SchoolCredit />
+      </ProjectProvider>
+    </StrictMode>,
+  );
+});

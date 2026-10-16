@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+!.env.sample
+
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+venv/
+# Supabase temporary files
+supabase/.temp/

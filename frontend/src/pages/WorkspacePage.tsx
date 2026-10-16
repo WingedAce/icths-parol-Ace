@@ -113,6 +113,10 @@ function WorkspacePage() {
   // Bumped on every replace/remove so the Zone Map starts fresh instead of
   // keeping selections from the old drawing.
   const [imageVersion, setImageVersion] = useState(0);
+  const [discardDialog, setDiscardDialog] = useState<{
+  action: "replace" | "remove" | "rescan";
+  onConfirm: () => void;
+} | null>(null);
 
   if (!workspace) {
     return (
@@ -312,10 +316,7 @@ function WorkspacePage() {
   // replacing, removing or re-scanning it throws them away. The design is
   // shared by all three rounds, so ask first (in the popup, and say so) if
   // there is any. With nothing to lose it just goes ahead.
-  const [discardDialog, setDiscardDialog] = useState<{
-    action: "replace" | "remove" | "rescan";
-    onConfirm: () => void;
-  } | null>(null);
+ 
 
   function askBeforeDiscarding(
     action: "replace" | "remove" | "rescan",
@@ -355,35 +356,47 @@ function WorkspacePage() {
     });
   }
 
-  function handleFile(
-    file: File | null | undefined,
-  ) {
-    if (!file || !currentNode) return;
+ 
+async function handleFile(
+  file: File | null | undefined,
+) {
+  if (!file || !currentNode) return;
 
-    if (file.type !== "image/png") {
-      window.alert(
-        "Please upload a PNG file, not JPG/JPEG.\n\n" +
-          "JPEG compression blurs and adds noise around thin lines, which " +
-          "breaks or merges zones during detection. PNG is lossless, so " +
-          "your exact drawing comes through pixel-for-pixel.",
+  if (file.type !== "image/png") {
+    window.alert(
+      "Please upload a PNG file, not JPG/JPEG.\n\n" +
+        "JPEG compression can blur thin lines and interfere " +
+        "with zone detection. PNG preserves the drawing.",
+    );
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = async () => {
+    if (typeof reader.result !== "string") return;
+
+    try {
+      await setNodeImage(currentNode.id, reader.result);
+    } catch (error) {
+      console.error(
+        "Failed to save drawing to Supabase Storage:",
+        error,
       );
 
-      return;
+      window.alert(
+        "The drawing could not be saved. Please check your connection and try again.",
+      );
     }
+  };
 
-    const reader = new FileReader();
+  reader.onerror = () => {
+    console.error("Failed to read the uploaded drawing.");
+    window.alert("Could not read the PNG file. Please try again.");
+  };
 
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setNodeImage(
-          currentNode.id,
-          reader.result,
-        );
-      }
-    };
-
-    reader.readAsDataURL(file);
-  }
+  reader.readAsDataURL(file);
+}
 
   return (
     <main className="min-h-screen bg-[#050505] px-6 py-10 text-white md:px-12 lg:px-20">
