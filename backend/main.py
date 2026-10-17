@@ -18,6 +18,9 @@ from fastapi.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 import contextlib
 import io
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 import shutil
 import subprocess
 import cv2
@@ -41,6 +44,43 @@ MAX_AUDIO_JOBS = 1    # of those, at most this many may be music analysis
 BUSY_MESSAGE = "The server is too busy right now. Please try again in a few seconds."
 
 _active = {"all": 0, "audio": 0}
+
+# Run every heavy job in its OWN short-lived child process. When the job
+# ends the process exits and ALL of its memory goes straight back to the
+# system, so the server's baseline memory can never creep upward no
+# matter how many jobs run. A side benefit: if one job ever does run out
+# of memory, only that child dies — the web server itself stays up and
+# nobody else is affected. Cost: a few extra seconds per job to start the
+# child (it has to load OpenCV/librosa). Set to False to run jobs inside
+# the server process instead (faster per job, but memory can build up).
+USE_SEPARATE_PROCESS = True
+
+CRASH_MESSAGE = (
+    "The server ran out of memory while processing this file. "
+    "Please try again in a moment."
+)
+
+
+def _run_in_fresh_process(fn, *args):
+    """Run fn(*args) in a brand-new child process, then let it exit."""
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=1, mp_context=ctx) as pool:
+        return pool.submit(fn, *args).result()
+
+
+async def run_heavy(fn, *args):
+    """Run a heavy function off the event loop, isolated if configured."""
+    try:
+        if USE_SEPARATE_PROCESS:
+            return await run_in_threadpool(_run_in_fresh_process, fn, *args)
+        return await run_in_threadpool(fn, *args)
+    except BrokenProcessPool:
+        # the child was killed (almost always: out of memory)
+        raise HTTPException(
+            status_code=503,
+            detail=CRASH_MESSAGE,
+            headers={"Retry-After": "5"},
+        )
 
 
 @contextlib.asynccontextmanager
@@ -415,8 +455,8 @@ async def segment(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="File too large (max 15MB)")
 
         try:
-            # runs in a worker thread so the server stays responsive
-            result = await run_in_threadpool(segment_image, image_bytes)
+            # runs in its own process (see USE_SEPARATE_PROCESS)
+            result = await run_heavy(segment_image, image_bytes)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         finally:
@@ -802,7 +842,7 @@ async def analyze_audio_endpoint(
             raise HTTPException(status_code=400, detail="File too large (max 30MB)")
 
         try:
-            result = await run_in_threadpool(analyze_audio, audio_bytes, start)
+            result = await run_heavy(analyze_audio, audio_bytes, start)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         finally:
