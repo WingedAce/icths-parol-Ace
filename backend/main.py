@@ -15,6 +15,8 @@ handoff doc.
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.concurrency import run_in_threadpool
+import contextlib
 import io
 import shutil
 import subprocess
@@ -24,6 +26,49 @@ import numpy as np
 from beat_tracking import track_beats
 
 app = FastAPI(title="I-Parol Segmentation API")
+
+# ---- load protection ---------------------------------------------------
+# Zone detection (/segment) and music analysis (/analyze-audio) are heavy:
+# one job needs roughly 0.5 GB (zones) to 0.8 GB (music) of RAM. If too
+# many run at once the server runs out of memory and restarts, which
+# hurts EVERYONE. So only a few may run at the same time; anyone else
+# gets an instant "too busy, try again" message and their file is NOT
+# processed or kept in memory. Nothing is lost: the server stores nothing
+# for the user, the drawing/song stays in their browser, and they just
+# press the button again.
+HEAVY_JOBS = 2        # max jobs running at once (zones + music together)
+MAX_AUDIO_JOBS = 1    # of those, at most this many may be music analysis
+BUSY_MESSAGE = "The server is too busy right now. Please try again in a few seconds."
+
+_active = {"all": 0, "audio": 0}
+
+
+@contextlib.asynccontextmanager
+async def heavy_slot(kind: str):
+    """Reserve a slot for one heavy job, or fail instantly with 503.
+
+    There is no await between the check and the increment, so on the
+    single event loop two requests can never grab the same slot. The slot
+    is ALWAYS released in `finally` — on success, on an error, or if the
+    job crashes — so a failed job can never block the server.
+    """
+    if _active["all"] >= HEAVY_JOBS or (
+        kind == "audio" and _active["audio"] >= MAX_AUDIO_JOBS
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail=BUSY_MESSAGE,
+            headers={"Retry-After": "5"},
+        )
+    _active["all"] += 1
+    if kind == "audio":
+        _active["audio"] += 1
+    try:
+        yield
+    finally:
+        _active["all"] -= 1
+        if kind == "audio":
+            _active["audio"] -= 1
 
 # Wide open for now (class project on a free tier) — tighten to the
 # real frontend origin(s) once the Vercel/Netlify URL is known.
@@ -294,6 +339,7 @@ def segment_image(image_bytes: bytes) -> dict:
     walls = _bridge_gaps(walls)
 
     zone_mask = cv2.bitwise_not(walls)
+    del img_big, binary
 
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
         zone_mask, connectivity=4
@@ -318,9 +364,10 @@ def segment_image(image_bytes: bytes) -> dict:
         if area < min_area_scaled:
             continue  # noise speck
 
-        mask = (labels == i).astype(np.uint8) * 255
+        sub = (labels[y:y + ch, x:x + cw] == i).astype(np.uint8) * 255
         contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1
+            sub, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1,
+            offset=(int(x), int(y)),
         )
         if not contours:
             continue
@@ -342,6 +389,7 @@ def segment_image(image_bytes: bytes) -> dict:
             }
         )
 
+    del labels, zone_mask, walls
     return {"width": native_w, "height": native_h, "zone_count": len(zones), "zones": zones}
 
 
@@ -358,15 +406,21 @@ async def segment(file: UploadFile = File(...)):
             ),
         )
 
-    image_bytes = await file.read()
-    MAX_BYTES = 15 * 1024 * 1024
-    if len(image_bytes) > MAX_BYTES:
-        raise HTTPException(status_code=400, detail="File too large (max 15MB)")
+    # The slot is taken BEFORE the file is read into memory, so a rejected
+    # request never loads its image into RAM.
+    async with heavy_slot("segment"):
+        image_bytes = await file.read()
+        MAX_BYTES = 15 * 1024 * 1024
+        if len(image_bytes) > MAX_BYTES:
+            raise HTTPException(status_code=400, detail="File too large (max 15MB)")
 
-    try:
-        result = segment_image(image_bytes)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        try:
+            # runs in a worker thread so the server stays responsive
+            result = await run_in_threadpool(segment_image, image_bytes)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        finally:
+            del image_bytes
 
     if result["zone_count"] == 0:
         raise HTTPException(
@@ -737,18 +791,22 @@ async def analyze_audio_endpoint(
             ),
         )
 
-    audio_bytes = await file.read()
-    MAX_BYTES = 30 * 1024 * 1024  # 30MB — generous for a several-minute MP3
-    if len(audio_bytes) > MAX_BYTES:
-        raise HTTPException(status_code=400, detail="File too large (max 30MB)")
-
     if start < 0:
         raise HTTPException(status_code=400, detail="start cannot be negative")
 
-    try:
-        result = analyze_audio(audio_bytes, clip_start=start)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # Slot first, then read the file (same reason as /segment).
+    async with heavy_slot("audio"):
+        audio_bytes = await file.read()
+        MAX_BYTES = 30 * 1024 * 1024  # 30MB — generous for a several-minute MP3
+        if len(audio_bytes) > MAX_BYTES:
+            raise HTTPException(status_code=400, detail="File too large (max 30MB)")
+
+        try:
+            result = await run_in_threadpool(analyze_audio, audio_bytes, start)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        finally:
+            del audio_bytes
 
     return JSONResponse(result)
 
