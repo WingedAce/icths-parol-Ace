@@ -33,26 +33,21 @@ type CodeGeneratorProps = {
   round?: number;
 };
 
-// The pin actually wired to the student's start button, pressed at the
-// same instant the song is hit play on a separate device. This is a
-// placeholder pin — change it to whatever pin the batch actually solders
-// the button to once that's decided.
-const START_BUTTON_PIN = 53;
+// Pin 53 stays reserved (kept free of zones) even though the sketch no longer
+// uses it.
+const RESERVED_PIN_53 = 53;
 
-// How the show starts on the board.
-//  - "auto":   starts by itself a few seconds after power-up or reset, so the
-//              sketch works with no extra hardware (nothing to wire).
-//  - "button": waits until the start button (pin 53 to GND) is pressed.
-type StartMode = "auto" | "button";
+// The show starts by itself this long after power-up or after pressing the
+// board's RESET button, so the sketch needs no extra hardware.
 const AUTO_START_DELAY_MS = 5000;
 
 // Arduino Mega 2560: digital pins 0-53, then the analog pins A0-A15 which
 // are ordinary digital pins numbered 54-69 (70 total). Pins 0 and 1 are the
-// USB/serial pins (they interfere with uploading), and START_BUTTON_PIN is
-// taken by the button, so none of those can drive a zone.
+// USB/serial pins (they interfere with uploading), and pin 53 is kept
+// reserved, so none of those can drive a zone.
 const MEGA_MAX_PIN = 69;
 const ANALOG_PIN_BASE = 54; // A0 === 54, A15 === 69
-const RESERVED_PINS = new Set([0, 1, START_BUTTON_PIN]);
+const RESERVED_PINS = new Set([0, 1, RESERVED_PIN_53]);
 
 // Accepts a plain pin number (54-69 for analog) or an "A0"-"A15" label,
 // and returns the Arduino pin number, or null if it can't be understood.
@@ -88,8 +83,8 @@ function analyzePins(pinMappings: PinMapping[]): {
       problems.push(`Pin ${pin} doesn't exist on a Mega (0-${MEGA_MAX_PIN}).`);
     } else if (RESERVED_PINS.has(pin)) {
       problems.push(
-        pin === START_BUTTON_PIN
-          ? `Pin ${pin} is the start button — pick another pin for that zone.`
+        pin === RESERVED_PIN_53
+          ? `Pin ${pin} is reserved — pick another pin for that zone.`
           : `Pin ${pin} is a USB/serial pin — pick another pin for that zone.`,
       );
     } else {
@@ -134,7 +129,6 @@ function generateSketch(
   build: SequenceBuild,
   analysis: AudioAnalysis | undefined,
   round: number,
-  startMode: StartMode,
 ): string {
   const pinList = pins.join(", ");
   const durationMs = analysis ? Math.round(analysis.duration * 1000) : 0;
@@ -191,34 +185,10 @@ const uint16_t SHOW_LENGTH = 0;`;
   const playFrom =
     clipStart > 0 ? ` from ${formatClock(clipStart)}` : "";
 
-  const startSteps =
-    startMode === "button"
-      ? `//   2. Press the START button (pin ${START_BUTTON_PIN} to GND).
-//   3. Press play on the song${playFrom} at the same moment.`
-      : `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
-//      powers up or is reset. Press play on the song${playFrom} when it starts.
-//      (Press the board's RESET button to run the show again.)`;
-
-  const startSettings =
-    startMode === "button"
-      ? `// Connect a push button between this pin and GND.
-const uint8_t START_BUTTON = ${START_BUTTON_PIN};`
-      : `// The show starts this long after power-up or reset.
-const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};`;
-
-  const startSetup =
-    startMode === "button"
-      ? `  pinMode(START_BUTTON, INPUT_PULLUP);
-  Serial.println(F("Ready. Press the start button."));`
-      : `  Serial.println(F("Starting in ${AUTO_START_DELAY_MS / 1000} seconds..."));
-  delay(START_DELAY_MS);
-  startShow();`;
-
-  const startLoop =
-    startMode === "button"
-      ? `    if (digitalRead(START_BUTTON) != LOW) return;
-    startShow();`
-      : `    return; // finished. Press RESET to run again.`;
+  const startSteps = `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
+//      powers up or after you press its RESET button. Press play on the
+//      song${playFrom} when it starts.
+//      (Press RESET again to run the show again.)`;
 
   return `// I-Parol - Round ${round}
 // Song: ${oneLine(songName || "untitled")}
@@ -231,7 +201,8 @@ ${startSteps}
 
 // ---------- Settings ----------
 const uint8_t LED_PINS[] = { ${pinList} };
-${startSettings}
+// The show starts this long after power-up or reset.
+const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};
 
 // ---------- The light show ----------
 // Each row is: time in ms after the start, pin, brightness (0 = off, 255 = on).
@@ -270,13 +241,13 @@ void setup() {
     pinMode(LED_PINS[i], OUTPUT);
   }
   allOff();
-${startSetup}
+  Serial.println(F("Starting in ${AUTO_START_DELAY_MS / 1000} seconds..."));
+  delay(START_DELAY_MS);
+  startShow();
 }
 
 void loop() {
-  if (!running) {
-${startLoop}
-  }
+  if (!running) return; // finished. Press RESET to run again.
 
   uint32_t now = millis() - startTime;
 
@@ -296,43 +267,6 @@ ${startLoop}
 `;
 }
 
-// A tiny sketch for checking the wiring: lights each pin by itself, then all
-// together. If this works but the show does not, the wiring is fine.
-function generateTestSketch(pins: number[], round: number): string {
-  const pinList = pins.join(", ");
-  return `// I-Parol - wiring test (Round ${round})
-// Lights each pin by itself for 1 second, then all pins together. Repeats.
-// Open the Serial Monitor (9600) to see which pin is on.
-// Pins 54-69 are A0-A15.
-
-const uint8_t LED_PINS[] = { ${pinList} };
-
-void setup() {
-  Serial.begin(9600);
-  for (uint8_t i = 0; i < sizeof(LED_PINS); i++) {
-    pinMode(LED_PINS[i], OUTPUT);
-    digitalWrite(LED_PINS[i], LOW);
-  }
-}
-
-void loop() {
-  for (uint8_t i = 0; i < sizeof(LED_PINS); i++) {
-    Serial.print(F("Pin "));
-    Serial.println(LED_PINS[i]);
-    digitalWrite(LED_PINS[i], HIGH);
-    delay(1000);
-    digitalWrite(LED_PINS[i], LOW);
-  }
-
-  Serial.println(F("All pins on"));
-  for (uint8_t i = 0; i < sizeof(LED_PINS); i++) digitalWrite(LED_PINS[i], HIGH);
-  delay(3000);
-  for (uint8_t i = 0; i < sizeof(LED_PINS); i++) digitalWrite(LED_PINS[i], LOW);
-  delay(1000);
-}
-`;
-}
-
 function CodeGenerator({
   pinMappings,
   tricolorGroups = [],
@@ -347,7 +281,6 @@ function CodeGenerator({
   const [code, setCode] = useState<string | null>(null);
   const [build, setBuild] = useState<SequenceBuild | null>(null);
   const [showCredits, setShowCredits] = useState(false);
-  const [startMode, setStartMode] = useState<StartMode>("auto");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -373,70 +306,18 @@ function CodeGenerator({
       tricolorGroups,
     );
     setBuild(result);
-    setCode(
-      generateSketch(pins, songName, result, audioAnalysis, round, startMode),
-    );
-  }
-
-  // Changing how the show starts rewrites the sketch right away.
-  function handleStartMode(mode: StartMode) {
-    setStartMode(mode);
-    if (build) {
-      setCode(
-        generateSketch(pins, songName, build, audioAnalysis, round, mode),
-      );
-    }
-  }
-
-  function downloadText(text: string, fileName: string) {
-    const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
+    setCode(generateSketch(pins, songName, result, audioAnalysis, round));
   }
 
   function handleDownload() {
     if (!code) return;
-    downloadText(code, `arduino_sketch_round${round}.ino`);
+    const url = URL.createObjectURL(new Blob([code], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `arduino_sketch_round${round}.ino`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
-
-  function handleDownloadTest() {
-    if (!hasPins) return;
-    downloadText(
-      generateTestSketch(pins, round),
-      `arduino_wiring_test_round${round}.ino`,
-    );
-  }
-
-  const startModePicker = (
-    <div className="flex flex-col items-center gap-2">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
-        How should the show start?
-      </p>
-      <div className="flex flex-wrap justify-center gap-2">
-        {(
-          [
-            ["auto", `Automatically (${AUTO_START_DELAY_MS / 1000} s after reset)`],
-            ["button", `Start button (pin ${START_BUTTON_PIN})`],
-          ] as [StartMode, string][]
-        ).map(([mode, label]) => (
-          <button
-            key={mode}
-            onClick={() => handleStartMode(mode)}
-            className={`cursor-pointer rounded-full border px-4 py-1.5 text-[11px] transition ${
-              startMode === mode
-                ? "border-white/40 bg-white/[0.08] text-white"
-                : "border-white/10 text-white/50 hover:border-white/25 hover:text-white"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 
   async function handleCopy() {
     if (!code) return;
@@ -478,7 +359,10 @@ function CodeGenerator({
             <p className="text-xs text-amber-300/80">⚠ {parolWarning}</p>
           )}
 
-          {startModePicker}
+          <p className="max-w-md text-center text-xs text-white/40">
+            Heads up: the lights start {AUTO_START_DELAY_MS / 1000} seconds
+            after you press the RESET button on the Arduino.
+          </p>
 
           <button
             onClick={handleGenerate}
@@ -486,14 +370,6 @@ function CodeGenerator({
             className="cursor-pointer rounded-xl bg-white px-6 py-3 font-serif text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-50"
           >
             Generate Arduino code
-          </button>
-
-          <button
-            onClick={handleDownloadTest}
-            disabled={!hasPins}
-            className="cursor-pointer text-[11px] text-white/40 underline underline-offset-4 transition hover:text-white/70 disabled:cursor-default disabled:opacity-40"
-          >
-            Download a wiring test (lights every pin, no song needed)
           </button>
         </div>
       ) : (
@@ -520,16 +396,8 @@ function CodeGenerator({
               >
                 Download .ino
               </button>
-              <button
-                onClick={handleDownloadTest}
-                className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/25 hover:text-white"
-              >
-                Wiring test
-              </button>
             </div>
           </div>
-
-          {startModePicker}
 
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
             <pre className="codebox-scroll max-h-[28rem] overflow-y-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed text-white/80">
@@ -557,7 +425,7 @@ function CodeGenerator({
                 <p className="text-xs text-amber-300/80">
                   No lights are scheduled yet, so this sketch will NOT turn
                   anything on. Upload the song and turn pins on in the
-                  keyframes first (or use the wiring test to check an LED).
+                  keyframes first.
                 </p>
               )}
               {[...(parolWarning ? [parolWarning] : []), ...build.warnings].map((w) => (
@@ -566,9 +434,7 @@ function CodeGenerator({
                 </p>
               ))}
               <p className="text-[11px] text-white/25">
-                {startMode === "button"
-                  ? `Press the start button (pin ${START_BUTTON_PIN} to GND) at the same moment you press play on the song.`
-                  : `The show starts ${AUTO_START_DELAY_MS / 1000} seconds after the board is powered or reset. Press play on the song when it starts.`}
+                {`Heads up: the lights start ${AUTO_START_DELAY_MS / 1000} seconds after you press the RESET button on the Arduino. Press play on the song when they start.`}
                 {(audioAnalysis?.clipStart ?? 0) > 0 &&
                   ` Play the song from ${formatClock(audioAnalysis?.clipStart ?? 0)}, the part you picked on the Song tab.`}
               </p>
