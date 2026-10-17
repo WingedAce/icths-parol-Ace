@@ -6,7 +6,17 @@ export const supabase = createClient(
 );
 
 // Every visitor gets a session. Students are anonymous; admins sign in later.
-export async function ensureSession() {
-  const { data } = await supabase.auth.getSession();
-  if (!data.session) await supabase.auth.signInAnonymously();
+// Returns true when a session is ready, false when it could not be started
+// (so callers can retry instead of treating "no session" as "no data").
+export async function ensureSession(): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return true;
+
+    const { data: signedIn, error } = await supabase.auth.signInAnonymously();
+    if (error) return false;
+    return !!signedIn.session;
+  } catch {
+    return false;
+  }
 }
