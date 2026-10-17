@@ -25,7 +25,7 @@ const GROUPS: CreditGroup[] = [
   {
     title: "Testers",
     names: [
-      { name: "Dela Rosa Co" },
+      { name: "JM Co" },
       { name: "Caleb Prin" },
       { name: "Glenn De Guzman" },
       { name: "Lacus Ayson" },
