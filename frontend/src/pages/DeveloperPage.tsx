@@ -90,9 +90,8 @@ function DeveloperPage() {
   const { workspaces, getChildren, deleteNode, setNodesLocked } =
     useProjects();
 
-  // TODO(Supabase): this page must only open for the signed-in admins (the
-  // teacher and Sir Gerald). Until the login exists it is open to anyone who
-  // clicks the button, so do not put the site online before that is added.
+  // Access: this page is wrapped in <AdminGate> (see router.tsx), so it only
+  // opens for signed-in admins listed in the Supabase "admins" table.
 
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -198,11 +197,6 @@ function DeveloperPage() {
         <h1 className="font-serif text-4xl font-light tracking-[-0.03em] sm:text-5xl">
           Developer Window
         </h1>
-
-        <p className="mt-6 max-w-xl rounded-xl border border-amber-200/20 bg-amber-200/[0.04] px-4 py-3 text-xs leading-relaxed text-amber-100/70">
-          Testing mode: the login is not connected yet, and this window only
-          shows the designs saved in this browser.
-        </p>
 
         <p className="mb-8 mt-10 font-serif text-xl text-white/90 sm:text-2xl">
           Current designs registered :{" "}

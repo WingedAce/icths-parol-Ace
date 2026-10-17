@@ -43,7 +43,19 @@ export default function AdminGate({ children }: { children: ReactNode }) {
     return <p className="p-8">Checking access…</p>;
   }
 
-  if (status === "ok") return <>{children}</>;
+  if (status === "ok") {
+    return (
+      <>
+        {children}
+        <div className="fixed bottom-3 right-3 z-50 flex items-center gap-2 rounded-lg border bg-white px-3 py-1 text-sm shadow">
+          <span>Signed in as admin</span>
+          <button className="rounded border px-2 py-0.5" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
+      </>
+    );
+  }
 
   return (
     <div className="mx-auto mt-24 max-w-sm space-y-3 rounded-xl border p-6">
@@ -69,6 +81,9 @@ export default function AdminGate({ children }: { children: ReactNode }) {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") signIn();
+            }}
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button className="rounded border px-3 py-1" onClick={signIn}>

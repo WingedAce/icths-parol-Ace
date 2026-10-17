@@ -100,16 +100,19 @@ export default function ColorLockGate({
     }
   }
 
+  const isFull = picked.length === COLOR_COMBO_LENGTH;
+
+  // Picking colors never submits by itself, so there is time to screenshot
+  // the combo first. Only the Enter button submits.
   function handlePick(name: string) {
     if (busy || picked.length >= COLOR_COMBO_LENGTH) return;
+    setPicked([...picked, name]);
+  }
 
-    const next = [...picked, name];
-    setPicked(next);
-
-    if (next.length === COLOR_COMBO_LENGTH) {
-      setBusy(true);
-      void finish(next);
-    }
+  function handleEnter() {
+    if (busy || !isFull) return;
+    setBusy(true);
+    void finish(picked);
   }
 
   return (
@@ -134,7 +137,7 @@ export default function ColorLockGate({
 
             <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
               {isSetup
-                ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. This group will need this exact order every time it's opened.`
+                ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. This group will need this exact order every time it's opened. Take a screenshot of your colors before you press Enter.`
                 : `Tap your ${COLOR_COMBO_LENGTH} colors in the right order.`}
             </p>
 
@@ -144,19 +147,38 @@ export default function ColorLockGate({
             >
               {Array.from({ length: COLOR_COMBO_LENGTH }, (_, index) => {
                 const name = picked[index];
-                // While creating, show the chosen colors so they can be
-                // memorised; when entering, keep them hidden.
-                const background = !name
-                  ? "transparent"
-                  : isSetup
-                    ? hexOf(name)
-                    : "rgba(255,255,255,0.75)";
+
+                // While creating, show the chosen colors (with their names)
+                // so they can be memorised or screenshotted; when entering,
+                // keep them hidden.
+                if (isSetup) {
+                  return (
+                    <div
+                      key={index}
+                      className="flex w-12 flex-col items-center gap-1"
+                    >
+                      <span
+                        className="h-7 w-7 rounded-full border border-white/30"
+                        style={{
+                          backgroundColor: name ? hexOf(name) : "transparent",
+                        }}
+                      />
+                      <span className="h-3 text-[8px] uppercase tracking-[0.12em] text-white/50">
+                        {name ?? ""}
+                      </span>
+                    </div>
+                  );
+                }
 
                 return (
                   <span
                     key={index}
                     className="h-3.5 w-3.5 rounded-full border border-white/30"
-                    style={{ backgroundColor: background }}
+                    style={{
+                      backgroundColor: name
+                        ? "rgba(255,255,255,0.75)"
+                        : "transparent",
+                    }}
                   />
                 );
               })}
@@ -170,7 +192,9 @@ export default function ColorLockGate({
                   onClick={() => handlePick(color.name)}
                   disabled={busy}
                   aria-label={color.name}
-                  className="group flex cursor-pointer flex-col items-center gap-2 disabled:cursor-wait"
+                  className={`group flex cursor-pointer flex-col items-center gap-2 transition-opacity disabled:cursor-wait ${
+                    isFull ? "opacity-40" : ""
+                  }`}
                 >
                   <span
                     className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 transition group-hover:scale-105 group-active:scale-95"
@@ -199,7 +223,22 @@ export default function ColorLockGate({
               ))}
             </div>
 
-            <div className="mt-10 flex justify-center gap-3">
+            {isFull && isSetup && (
+              <p className="mx-auto mt-8 max-w-xs text-xs leading-relaxed text-white/50">
+                Screenshot your colors now, then press Enter.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={handleEnter}
+              disabled={busy || !isFull}
+              className={`${isFull && isSetup ? "mt-4" : "mt-10"} w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30`}
+            >
+              Enter
+            </button>
+
+            <div className="mt-3 flex justify-center gap-3">
               <button
                 type="button"
                 onClick={resetAttempt}
