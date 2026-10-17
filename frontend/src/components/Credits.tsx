@@ -23,13 +23,21 @@ const GROUPS: CreditGroup[] = [
     ],
   },
   {
+    title: "Testers",
+    names: [
+      { name: "Dela Rosa Co" },
+      { name: "Caleb Prin" },
+      { name: "Glenn De Guzman" },
+      { name: "Lacus Ayson" },
+    ],
+  },
+  {
     title: "Special thanks to",
     names: [
       { name: "Sir Gerald Baking" },
     ],
   },
 ];
-
 // Points of an n-pointed star, used for the parol star at the top.
 function starPoints(cx: number, cy: number, outer: number, inner: number, n: number) {
   const pts: string[] = [];
