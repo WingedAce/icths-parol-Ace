@@ -1,14 +1,9 @@
-// Client-side access locks: a color combo for each group's URL, and the
-// developer PIN.
+// Access-lock helpers: the color-combo constants, the per-tab "passed the lock"
+// flag, and the (legacy) developer PIN.
 //
-// Everything is kept in this browser's localStorage, so it survives reloads
-// and closing the site. Secrets are salted + hashed (never stored as plain
-// text), and wrong-guess counters / lockouts are persisted too, so reloading
-// the page doesn't reset them.
-//
-// NOTE: this is a deterrent, not real security. The app has no server-side
-// accounts, so anyone who clears this site's browser data resets the locks
-// (and also wipes every saved design in that browser).
+// The group color lock itself is stored in Supabase (lib/colorLock.ts) so
+// there is ONE lock per group on every device. The developer PIN code below is
+// the old browser-only version and is kept in this browser's localStorage.
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -156,44 +151,8 @@ async function checkSecret(
   return (await hashSecret(secret.salt, value)) === secret.hash;
 }
 
-// ---------- color combo (one per group URL) ----------
-// `groupId` is the group's node id, the last id in its /workspace/... URL.
-
-export function hasColorCombo(groupId: string): boolean {
-  return readJson<Secret>(keyFor(CONFIG.color.secretKey, groupId)) !== null;
-}
-
-export function saveColorCombo(
-  groupId: string,
-  combo: readonly string[],
-): Promise<boolean> {
-  return saveSecret("color", combo.join(","), groupId);
-}
-
-export function checkColorCombo(
-  groupId: string,
-  combo: readonly string[],
-): Promise<boolean> {
-  return checkSecret("color", combo.join(","), groupId);
-}
-
-/** True when a group has a saved color combo or any wrong-guess/lockout record. */
-export function hasColorLockData(groupId: string): boolean {
-  return (
-    hasColorCombo(groupId) ||
-    readJson<Attempts>(keyFor(CONFIG.color.attemptsKey, groupId)) !== null
-  );
-}
-
-/**
- * Developer reset: forgets a group's color combo and its wrong-guess count /
- * lockout, so the next time the group is opened it creates a new combo.
- * The design itself is untouched.
- */
-export function resetColorLock(groupId: string) {
-  removeKey(keyFor(CONFIG.color.secretKey, groupId));
-  removeKey(keyFor(CONFIG.color.attemptsKey, groupId));
-}
+// NOTE: each group's color combo is NOT stored here. It lives in Supabase so
+// it is the same lock on every device (see lib/colorLock.ts).
 
 // ---------- developer PIN ----------
 

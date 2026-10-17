@@ -8,8 +8,13 @@ import SchoolCredit from "./components/SchoolCredit";
 function App() {
   const navigate = useNavigate();
 
-  const { workspaces, addWorkspace, getChildren, addNode } =
+  const { workspaces, addWorkspace, getChildren, addNode, syncStatus } =
     useProjects();
+
+  // Wait until this device has loaded the groups that already exist online.
+  // If it continued too early it would not see the group and would make a
+  // brand-new copy of it, which would get a brand-new (different) color lock.
+  const connecting = syncStatus === "loading" || syncStatus === "error";
 
   const [batch, setBatch] = useState("");
   const [section, setSection] = useState("");
@@ -30,7 +35,7 @@ function App() {
     const sectionName = section.trim();
     const groupNumberValue = groupNumber.trim();
 
-    if (!batchName || !sectionName || !groupNumberValue) {
+    if (!batchName || !sectionName || !groupNumberValue || connecting) {
       return;
     }
 
@@ -169,9 +174,10 @@ function App() {
 
           <button
             type="submit"
-            className="mt-4 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90"
+            disabled={connecting}
+            className="mt-4 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:cursor-wait disabled:opacity-40 disabled:hover:bg-white"
           >
-            Continue
+            {connecting ? "Connecting…" : "Continue"}
           </button>
         </form>
 

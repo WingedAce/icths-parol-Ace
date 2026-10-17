@@ -1,20 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import {
+  checkColorLock,
+  createColorLock,
+  getColorLockStatus,
+  type ColorLockStatus,
+} from "../lib/colorLock";
 import {
   COLOR_COMBO_LENGTH,
   COLOR_MAX_FAILS,
-  checkColorCombo,
-  clearFailures,
   formatUnlockTime,
-  getLockState,
   grantSessionPass,
-  hasColorCombo,
-  registerFailure,
-  saveColorCombo,
 } from "../utils/accessLock";
 import { PIN_COLORS } from "../utils/pins";
 
-type Phase = "pick" | "retry" | "locked" | "error";
+type Phase = "loading" | "pick" | "retry" | "locked" | "error";
 type Swatch = (typeof PIN_COLORS)[number];
 
 // The colors are laid out in a fresh random order every attempt, so the
@@ -33,7 +33,7 @@ function hexOf(name: string): string {
 }
 
 type Props = {
-  /** The group's node id: every group URL has its own color combo. */
+  /** The group's node id: every group has ONE color combo, on every device. */
   groupId: string;
   /** Shown under the title, e.g. "Group 3 · Section A · Batch 2026". */
   label: string;
@@ -47,22 +47,52 @@ export default function ColorLockGate({
   onSuccess,
   onCancel,
 }: Props) {
-  // First time opening this group: no combo saved for it yet, so one is created.
-  const [isSetup] = useState(() => !hasColorCombo(groupId));
-
-  const [phase, setPhase] = useState<Phase>(() =>
-    getLockState("color", groupId).lockedUntil ? "locked" : "pick",
-  );
-  const [lockedUntil, setLockedUntil] = useState<number | null>(
-    () => getLockState("color", groupId).lockedUntil,
-  );
-  const [failsLeft, setFailsLeft] = useState(
-    () => getLockState("color", groupId).failsLeft,
-  );
+  // The group's lock lives on the server, so we first ask it whether this
+  // group already has a combo (and whether it is locked out).
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [isSetup, setIsSetup] = useState(true);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [failsLeft, setFailsLeft] = useState(COLOR_MAX_FAILS);
+  // "load" = could not ask the server, "network" = failed while submitting
+  const [errorKind, setErrorKind] = useState<"load" | "network">("load");
+  const [notice, setNotice] = useState("");
 
   const [order, setOrder] = useState<Swatch[]>(shuffled);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+
+  function applyStatus(status: ColorLockStatus) {
+    setIsSetup(!status.exists);
+    setLockedUntil(status.lockedUntil);
+    setFailsLeft(status.failsLeft);
+    setPhase(status.lockedUntil ? "locked" : "pick");
+  }
+
+  function failLoad(error: unknown) {
+    console.error("Could not read the color lock:", error);
+    setErrorKind("load");
+    setPhase("error");
+  }
+
+  // Ask the server whether this group already has a color lock.
+  useEffect(() => {
+    let cancelled = false;
+    getColorLockStatus(groupId)
+      .then((status) => {
+        if (!cancelled) applyStatus(status);
+      })
+      .catch((error) => {
+        if (!cancelled) failLoad(error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
+
+  function reloadStatus() {
+    setPhase("loading");
+    getColorLockStatus(groupId).then(applyStatus).catch(failLoad);
+  }
 
   function resetAttempt() {
     setPicked([]);
@@ -74,27 +104,44 @@ export default function ColorLockGate({
   async function finish(combo: string[]) {
     try {
       if (isSetup) {
-        const saved = await saveColorCombo(groupId, combo);
-        if (!saved) {
-          setPhase("error");
+        const created = await createColorLock(groupId, combo);
+        if (created) {
+          grantSessionPass(groupId);
+          onSuccess();
           return;
         }
+        // Another device saved this group's color lock a moment ago.
+        setIsSetup(false);
+        setNotice(
+          "This group already has a color lock (another device just made it). Enter that one.",
+        );
+        resetAttempt();
+        return;
+      }
+
+      const result = await checkColorLock(groupId, combo);
+
+      if (result.ok) {
         grantSessionPass(groupId);
         onSuccess();
         return;
       }
 
-      if (await checkColorCombo(groupId, combo)) {
-        clearFailures("color", groupId);
-        grantSessionPass(groupId);
-        onSuccess();
+      if (!result.exists) {
+        // The developer reset this group's lock while the screen was open.
+        setIsSetup(true);
+        setNotice("This group's color lock was reset. Create a new one.");
+        resetAttempt();
         return;
       }
 
-      const state = registerFailure("color", groupId);
-      setFailsLeft(state.failsLeft);
-      setLockedUntil(state.lockedUntil);
-      setPhase(state.lockedUntil ? "locked" : "retry");
+      setFailsLeft(result.failsLeft);
+      setLockedUntil(result.lockedUntil);
+      setPhase(result.lockedUntil ? "locked" : "retry");
+    } catch (error) {
+      console.error("Color lock request failed:", error);
+      setErrorKind("network");
+      setPhase("error");
     } finally {
       setBusy(false);
     }
@@ -129,6 +176,22 @@ export default function ColorLockGate({
 
         <p className="mb-5 text-xs text-white/50">{label}</p>
 
+        {phase === "loading" && (
+          <>
+            <p className="mt-8 text-sm text-white/50">
+              Checking this group's color lock…
+            </p>
+
+            <button
+              type="button"
+              onClick={onCancel}
+              className="mt-8 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+            >
+              Back
+            </button>
+          </>
+        )}
+
         {phase === "pick" && (
           <>
             <h2 className="font-serif text-3xl font-light tracking-[-0.03em]">
@@ -137,9 +200,18 @@ export default function ColorLockGate({
 
             <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
               {isSetup
-                ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. This group will need this exact order every time it's opened. Take a screenshot of your colors before you press Enter.`
+                ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. This group will need this exact order every time it's opened, on any device. Take a screenshot of your colors before you press Enter.`
                 : `Tap your ${COLOR_COMBO_LENGTH} colors in the right order.`}
             </p>
+
+            {notice && (
+              <p
+                role="status"
+                className="mx-auto mt-4 max-w-xs rounded-xl border border-[#ffb36b]/50 bg-[#ffb36b]/10 px-3 py-2 text-xs leading-relaxed text-[#ffc98f]"
+              >
+                {notice}
+              </p>
+            )}
 
             <div
               className="mt-8 flex justify-center gap-2.5"
@@ -316,18 +388,18 @@ export default function ColorLockGate({
         {phase === "error" && (
           <>
             <h2 className="font-serif text-3xl font-light tracking-[-0.03em]">
-              Couldn't save it
+              Couldn't reach the server
             </h2>
 
             <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
-              Your browser wouldn't let this site save your color lock. Check
-              that site data isn't blocked (and that you're not in a private
-              window), then try again.
+              Your color lock is kept online so it works on every device, so
+              this needs an internet connection. Check your connection, then
+              try again.
             </p>
 
             <button
               type="button"
-              onClick={resetAttempt}
+              onClick={errorKind === "load" ? reloadStatus : resetAttempt}
               className="mt-8 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90"
             >
               Try again

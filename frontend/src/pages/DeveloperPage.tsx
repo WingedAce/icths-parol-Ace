@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 import ConfirmDialog from "../components/ConfirmDialog";
 import ParolPreview from "../components/ParolPreview";
 import { useProjects } from "../context/ProjectContext";
 import type { ProjectNode } from "../types";
-import { hasColorLockData, resetColorLock } from "../utils/accessLock";
+import {
+  listColorLockedGroups,
+  resetColorLocks as resetColorLocksOnServer,
+} from "../lib/colorLock";
 
 // One registered design = one group that has a drawing (or detected zones).
 type Design = {
@@ -97,6 +100,33 @@ function DeveloperPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<PendingDelete>(null);
 
+  // Ids of groups that have a color lock. It is kept online, so we ask the
+  // server (instead of this browser) which groups have one.
+  const [lockedGroupIds, setLockedGroupIds] = useState<Set<string>>(new Set());
+  const [resetError, setResetError] = useState("");
+
+  async function refreshColorLocks() {
+    try {
+      setLockedGroupIds(await listColorLockedGroups());
+    } catch (error) {
+      console.error("Could not load color locks:", error);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    listColorLockedGroups()
+      .then((ids) => {
+        if (!cancelled) setLockedGroupIds(ids);
+      })
+      .catch((error) => console.error("Could not load color locks:", error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasColorLockData = (groupId: string) => lockedGroupIds.has(groupId);
+
   // Walk batch -> section -> group and collect every group with a design.
   const designs: Design[] = [];
   function collect(parentId: string, trail: string[]) {
@@ -167,9 +197,16 @@ function DeveloperPage() {
 
   // Clears each group's color combo + lockout. The designs are kept; the group
   // simply creates a new combo the next time it's opened.
-  function resetColorLocks(list: Design[]) {
-    for (const design of list) resetColorLock(design.node.id);
-    stopSelecting();
+  async function resetColorLocks(list: Design[]) {
+    setResetError("");
+    try {
+      await resetColorLocksOnServer(list.map((d) => d.node.id));
+      stopSelecting();
+    } catch (error) {
+      console.error("Could not reset color locks:", error);
+      setResetError("Couldn't reset the color lock. Check your connection and try again.");
+    }
+    await refreshColorLocks();
   }
 
   // Deleting a group removes its drawing, zones, pins and the song and
@@ -396,6 +433,11 @@ function DeveloperPage() {
             a new combo the next time it opens.
           </p>
         )}
+        {resetError && (
+          <p role="alert" className="mt-3 text-center text-[11px] text-[#ff8a8e]">
+            {resetError}
+          </p>
+        )}
         {mode === "lock" && (
           <p className="mt-3 text-center text-[11px] text-white/35">
             Tap the designs you want to lock, then press Lock. To unlock, tap the locked designs and press Unlock.
@@ -440,7 +482,7 @@ function DeveloperPage() {
           onCancel={() => setPending(null)}
           onConfirm={() => {
             setPending(null);
-            resetColorLocks(chosenToReset);
+            void resetColorLocks(chosenToReset);
           }}
         >
           <ul className="list-inside list-disc">
