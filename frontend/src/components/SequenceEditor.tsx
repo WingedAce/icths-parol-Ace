@@ -154,6 +154,38 @@ function Chevron({ direction }: { direction: "left" | "right" }) {
   );
 }
 
+// Undo / redo. One snapshot is everything the Preview tab can change on the
+// Song node, so a single Undo also rolls back a tempo change together with the
+// keyframes it moved.
+type HistorySnapshot = {
+  frames: Frame[];
+  timingMode?: TimingMode;
+  bpmChanges?: BpmChange[];
+};
+// How many steps back Undo can go.
+const HISTORY_LIMIT = 100;
+
+// Plain drawn curved arrow, same style as Chevron.
+function UndoRedoIcon({ direction }: { direction: "undo" | "redo" }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={direction === "redo" ? { transform: "scaleX(-1)" } : undefined}
+    >
+      <path d="M6 3 L2.5 6.5 L6 10" />
+      <path d="M2.5 6.5 H9.5 A3.75 3.75 0 0 1 9.5 14 H6.5" />
+    </svg>
+  );
+}
+
 type BpmPopoverProps = {
   // Where it sits: under the timeline bar or under the control row.
   anchor: "bar" | "row";
@@ -247,8 +279,8 @@ function BpmPopover({
 function SequenceEditor({
   groupNode,
   animationNode,
-  onFramesChange,
-  onTimingChange,
+  onFramesChange: saveFrames,
+  onTimingChange: saveTiming,
 }: SequenceEditorProps) {
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
@@ -306,6 +338,121 @@ function SequenceEditor({
   const [pinClip, setPinClip] = useState<PinClipboard | null>(() =>
     getPinClipboard(),
   );
+
+  // ---- Undo / redo ----
+  // Every change made on this tab goes through onFramesChange /
+  // onTimingChange below, which first remember what things looked like. The
+  // history lives only here (nothing new is saved), so it starts fresh each
+  // time the Preview tab is opened.
+  const undoStack = useRef<HistorySnapshot[]>([]);
+  const redoStack = useRef<HistorySnapshot[]>([]);
+  // One click can change frames AND timing (a tempo change moves keyframes);
+  // that must count as one step, so only the first change per tick records.
+  const recordedThisTick = useRef(false);
+  const [historySize, setHistorySize] = useState({ undo: 0, redo: 0 });
+
+  const syncHistorySize = () =>
+    setHistorySize({
+      undo: undoStack.current.length,
+      redo: redoStack.current.length,
+    });
+
+  const takeSnapshot = (): HistorySnapshot => ({
+    frames: animationNode.frames ?? [],
+    timingMode: animationNode.timingMode,
+    bpmChanges: animationNode.bpmChanges,
+  });
+
+  const recordHistory = () => {
+    if (recordedThisTick.current) return;
+    recordedThisTick.current = true;
+    queueMicrotask(() => {
+      recordedThisTick.current = false;
+    });
+    undoStack.current.push(takeSnapshot());
+    if (undoStack.current.length > HISTORY_LIMIT) undoStack.current.shift();
+    // A new change ends the "redo" path.
+    redoStack.current = [];
+    syncHistorySize();
+  };
+
+  const onFramesChange = (next: Frame[]) => {
+    recordHistory();
+    saveFrames(next);
+  };
+
+  const onTimingChange = (timing: {
+    timingMode?: TimingMode;
+    bpmChanges?: BpmChange[];
+  }) => {
+    // Clicking the timing mode that is already selected changes nothing.
+    if (
+      "timingMode" in timing &&
+      !("bpmChanges" in timing) &&
+      timing.timingMode === animationNode.timingMode
+    ) {
+      return;
+    }
+    recordHistory();
+    saveTiming(timing);
+  };
+
+  const restoreSnapshot = (snapshot: HistorySnapshot) => {
+    saveFrames(snapshot.frames);
+    saveTiming({
+      timingMode: snapshot.timingMode,
+      bpmChanges: snapshot.bpmChanges,
+    });
+    setPopover(null);
+  };
+
+  const undo = () => {
+    const snapshot = undoStack.current.pop();
+    if (!snapshot) return;
+    redoStack.current.push(takeSnapshot());
+    restoreSnapshot(snapshot);
+    syncHistorySize();
+  };
+
+  const redo = () => {
+    const snapshot = redoStack.current.pop();
+    if (!snapshot) return;
+    undoStack.current.push(takeSnapshot());
+    restoreSnapshot(snapshot);
+    syncHistorySize();
+  };
+
+  // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y = redo. Left alone
+  // while typing in a box, so the box's own undo keeps working there.
+  const historyActions = useRef({ undo, redo });
+  useEffect(() => {
+    historyActions.current = { undo, redo };
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) historyActions.current.redo();
+        else historyActions.current.undo();
+      } else if (key === "y") {
+        event.preventDefault();
+        historyActions.current.redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // ---- Save as video ----
   const [videoExport, setVideoExport] = useState<{
@@ -919,6 +1066,30 @@ function SequenceEditor({
               {segmentLabel}
             </p>
           )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={historySize.undo === 0}
+              aria-label="Undo"
+              title="Undo your last change (Ctrl+Z)"
+              className={`${miniPillClass} inline-flex items-center gap-1.5`}
+            >
+              <UndoRedoIcon direction="undo" />
+              Undo
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={historySize.redo === 0}
+              aria-label="Redo"
+              title="Redo (Ctrl+Shift+Z or Ctrl+Y)"
+              className={`${miniPillClass} inline-flex items-center gap-1.5`}
+            >
+              <UndoRedoIcon direction="redo" />
+              Redo
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-[0.2em] text-white/30">
               Zoom
