@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import ParolPreview from "./ParolPreview";
 import {
@@ -56,6 +56,10 @@ const navClass = `${pillClass} inline-flex items-center gap-2`;
 // Small action buttons above the pin chips (Select all / Turn all off).
 const miniPillClass =
   "cursor-pointer rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
+
+// How far the timeline bar can be stretched. 1 = the whole song fits on screen;
+// 8 = the bar is eight screens wide and scrolls sideways.
+const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24];
 
 // How a keyframe moves on to the next keyframe.
 const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
@@ -264,6 +268,17 @@ function SequenceEditor({
   // A keyframe being dragged (Manual timing): where it is right now.
   const [drag, setDrag] = useState<{ id: string; time: number } | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
+  // Zoom: the bar is made wider inside a frame that scrolls sideways.
+  const [zoomIndex, setZoomIndex] = useState(0);
+  const zoom = ZOOM_LEVELS[zoomIndex];
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // How far along the zoomed timeline the view is (0 = start, 1 = end).
+  const [viewRatio, setViewRatio] = useState(0);
+  // Where to keep the view after a zoom change (see zoomTo).
+  const pendingZoom = useRef<{ ratio: number; screenX: number } | null>(null);
+  // "Go to beat" box.
+  const [beatQuery, setBeatQuery] = useState("");
+  const [beatError, setBeatError] = useState("");
   const dragRef = useRef<{
     id: string;
     startX: number;
@@ -385,6 +400,32 @@ function SequenceEditor({
       if (audio) audio.pause();
     };
   }, [isPlaying, audioUrl, duration, clipStart]);
+
+  // After zooming, keep the same part of the song in the same place on screen.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const anchor = pendingZoom.current;
+    if (!el || !anchor) return;
+    pendingZoom.current = null;
+    el.scrollLeft = anchor.ratio * el.scrollWidth - anchor.screenX;
+  }, [zoomIndex]);
+
+  // When zoomed in, keep the playhead on screen: it scrolls the timeline when
+  // the playhead runs off the edge (playing, stepping through beats,
+  // "Go to beat", jumping between keyframes ...). Moving the scroll slider by
+  // hand does not trigger this, so it never fights the user.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || duration <= 0 || el.scrollWidth <= el.clientWidth + 1) return;
+    const x = (time / duration) * el.scrollWidth;
+    const margin = 24;
+    if (x >= el.scrollLeft + margin && x <= el.scrollLeft + el.clientWidth - margin) {
+      return;
+    }
+    // While playing, turn the page: put the playhead near the left edge so
+    // there is room ahead of it. Otherwise centre it.
+    el.scrollLeft = isPlaying ? x - el.clientWidth * 0.15 : x - el.clientWidth / 2;
+  }, [time, duration, isPlaying]);
 
   if (!analysis) {
     return (
@@ -518,6 +559,39 @@ function SequenceEditor({
     }
     target = Math.min(beats.length - 1, Math.max(0, target));
     seek(beats[target]);
+  };
+
+  // Zoom in or out around the playhead (or around the middle of the view if the
+  // playhead is off screen).
+  const zoomTo = (index: number) => {
+    const next = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, index));
+    if (next === zoomIndex) return;
+    const el = scrollRef.current;
+    if (el && el.scrollWidth > 0) {
+      const playheadX = (time / span) * el.scrollWidth - el.scrollLeft;
+      if (playheadX >= 0 && playheadX <= el.clientWidth) {
+        pendingZoom.current = { ratio: time / span, screenX: playheadX };
+      } else {
+        pendingZoom.current = {
+          ratio: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth,
+          screenX: el.clientWidth / 2,
+        };
+      }
+    }
+    setZoomIndex(next);
+  };
+
+  // "Go to beat": type a beat number (as shown in "Beat 67 of 240") and the
+  // playhead jumps there. The timeline follows it when zoomed in.
+  const jumpToBeat = () => {
+    const text = beatQuery.trim();
+    const number = Number(text);
+    if (text === "" || !Number.isInteger(number) || number < 1 || number > beats.length) {
+      setBeatError(`Enter a beat from 1 to ${beats.length}.`);
+      return;
+    }
+    setBeatError("");
+    seek(beats[number - 1]);
   };
 
   const jumpKeyframe = (direction: 1 | -1) => {
@@ -845,11 +919,54 @@ function SequenceEditor({
               {segmentLabel}
             </p>
           )}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-white/30">
+              Zoom
+            </span>
+            <button
+              type="button"
+              onClick={() => zoomTo(zoomIndex - 1)}
+              disabled={zoomIndex === 0}
+              aria-label="Zoom out"
+              title="Zoom out"
+              className={`${miniPillClass} px-2.5`}
+            >
+              −
+            </button>
+            <span className="w-8 text-center text-xs text-white/60">{zoom}×</span>
+            <button
+              type="button"
+              onClick={() => zoomTo(zoomIndex + 1)}
+              disabled={zoomIndex === ZOOM_LEVELS.length - 1}
+              aria-label="Zoom in"
+              title="Zoom in to see how far apart the keyframes are"
+              className={`${miniPillClass} px-2.5`}
+            >
+              +
+            </button>
+            {zoomIndex > 0 && (
+              <button type="button" onClick={() => zoomTo(0)} className={linkClass}>
+                Fit
+              </button>
+            )}
+          </div>
         </div>
         <div className="relative">
+        {/* The frame scrolls sideways when zoomed in. Its own scrollbar is
+            hidden; the slider under it does the same job. */}
+        <div
+          ref={scrollRef}
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            const room = el.scrollWidth - el.clientWidth;
+            setViewRatio(room > 0 ? el.scrollLeft / room : 0);
+          }}
+          className="overflow-x-auto overflow-y-hidden rounded-xl border border-white/10 bg-white/[0.03] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
         <div
           ref={barRef}
-          className="relative h-12 w-full cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]"
+          className="relative h-12 cursor-pointer"
+          style={{ width: `${zoom * 100}%` }}
           onClick={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
             const ratio = Math.min(
@@ -1006,8 +1123,35 @@ function SequenceEditor({
             style={{ left: `${(time / span) * 100}%` }}
           />
         </div>
+        </div>
         {renderPopover("bar")}
         </div>
+
+        {/* Zoomed in: a second slider to move along the song */}
+        {zoom > 1 && (
+          <div className="mt-2">
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.001}
+              value={viewRatio}
+              onChange={(event) => {
+                const el = scrollRef.current;
+                if (!el) return;
+                el.scrollLeft =
+                  Number(event.target.value) * (el.scrollWidth - el.clientWidth);
+              }}
+              aria-label="Scroll the timeline left and right"
+              title="Drag to scroll the zoomed timeline"
+              className="w-full accent-white/40"
+            />
+            <p className="mt-1 text-[10px] text-white/30">
+              Zoomed {zoom}× · drag this slider (or scroll sideways) to move
+              along the song
+            </p>
+          </div>
+        )}
 
         {isManual ? (
           /* Manual timing: the slider moves in hundredths of a second */
@@ -1066,6 +1210,30 @@ function SequenceEditor({
           Keyframe
           <Chevron direction="right" />
         </button>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            jumpToBeat();
+          }}
+          className="flex items-center gap-2"
+        >
+          <input
+            type="text"
+            inputMode="numeric"
+            value={beatQuery}
+            onChange={(event) => {
+              setBeatQuery(event.target.value.replace(/\D/g, ""));
+              setBeatError("");
+            }}
+            placeholder="Go to beat"
+            aria-label="Go to beat number"
+            className="w-28 rounded-full border border-white/10 bg-transparent px-3 py-2 text-center text-xs text-white/80 outline-none placeholder:text-white/30 focus:border-white/30"
+          />
+          <button type="submit" className={miniPillClass}>
+            Go
+          </button>
+        </form>
+        {beatError && <p className="w-full text-xs text-red-400">{beatError}</p>}
         {isManual && (
           <>
             <button
