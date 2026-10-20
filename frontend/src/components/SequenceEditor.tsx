@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import ParolPreview from "./ParolPreview";
 import {
@@ -17,6 +17,12 @@ import {
   sortChanges,
 } from "../utils/bpmChanges";
 import { loadAudio, saveAudio } from "../lib/audioStore";
+import { exportVideo, isVideoExportSupported } from "../utils/videoExport";
+import {
+  getPinClipboard,
+  setPinClipboard,
+  type PinClipboard,
+} from "../utils/pinClipboard";
 import {
   FULL_LEVEL,
   MIN_LEVEL,
@@ -50,10 +56,6 @@ const navClass = `${pillClass} inline-flex items-center gap-2`;
 // Small action buttons above the pin chips (Select all / Turn all off).
 const miniPillClass =
   "cursor-pointer rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
-
-// How far the timeline bar can be stretched. 1 = the whole song fits on screen;
-// 8 = the bar is eight screens wide and scrolls sideways.
-const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24];
 
 // How a keyframe moves on to the next keyframe.
 const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
@@ -262,17 +264,6 @@ function SequenceEditor({
   // A keyframe being dragged (Manual timing): where it is right now.
   const [drag, setDrag] = useState<{ id: string; time: number } | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
-  // Zoom: the bar is made wider inside a frame that scrolls sideways.
-  const [zoomIndex, setZoomIndex] = useState(0);
-  const zoom = ZOOM_LEVELS[zoomIndex];
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  // How far along the zoomed timeline the view is (0 = start, 1 = end).
-  const [viewRatio, setViewRatio] = useState(0);
-  // Where to keep the view after a zoom change (see zoomTo).
-  const pendingZoom = useRef<{ ratio: number; screenX: number } | null>(null);
-  // "Go to beat" box.
-  const [beatQuery, setBeatQuery] = useState("");
-  const [beatError, setBeatError] = useState("");
   const dragRef = useRef<{
     id: string;
     startX: number;
@@ -293,6 +284,26 @@ function SequenceEditor({
   // touches the <audio> element's own currentTime needs to add/subtract
   // this offset to stay in sync with clip-relative time everywhere else.
   const clipStart = analysis?.clipStart ?? 0;
+
+  // ---- Pin clipboard (copy pins from one keyframe, paste on another) ----
+  // Kept outside the keyframes (see utils/pinClipboard.ts), so it survives
+  // moving between keyframes and is never saved with the project.
+  const [pinClip, setPinClip] = useState<PinClipboard | null>(() =>
+    getPinClipboard(),
+  );
+
+  // ---- Save as video ----
+  const [videoExport, setVideoExport] = useState<{
+    state: "idle" | "working" | "done" | "error";
+    progress: number;
+    message?: string;
+  }>({ state: "idle", progress: 0 });
+  const exportAbort = useRef<AbortController | null>(null);
+
+  // Stop a running export if the user leaves the tab.
+  useEffect(() => {
+    return () => exportAbort.current?.abort();
+  }, []);
 
   // Free the loaded audio file when it's replaced or this tab closes.
   useEffect(() => {
@@ -374,32 +385,6 @@ function SequenceEditor({
       if (audio) audio.pause();
     };
   }, [isPlaying, audioUrl, duration, clipStart]);
-
-  // After zooming, keep the same part of the song in the same place on screen.
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    const anchor = pendingZoom.current;
-    if (!el || !anchor) return;
-    pendingZoom.current = null;
-    el.scrollLeft = anchor.ratio * el.scrollWidth - anchor.screenX;
-  }, [zoomIndex]);
-
-  // When zoomed in, keep the playhead on screen: it scrolls the timeline when
-  // the playhead runs off the edge (playing, stepping through beats,
-  // "Go to beat", jumping between keyframes ...). Moving the scroll slider by
-  // hand does not trigger this, so it never fights the user.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || duration <= 0 || el.scrollWidth <= el.clientWidth + 1) return;
-    const x = (time / duration) * el.scrollWidth;
-    const margin = 24;
-    if (x >= el.scrollLeft + margin && x <= el.scrollLeft + el.clientWidth - margin) {
-      return;
-    }
-    // While playing, turn the page: put the playhead near the left edge so
-    // there is room ahead of it. Otherwise centre it.
-    el.scrollLeft = isPlaying ? x - el.clientWidth * 0.15 : x - el.clientWidth / 2;
-  }, [time, duration, isPlaying]);
 
   if (!analysis) {
     return (
@@ -535,39 +520,6 @@ function SequenceEditor({
     seek(beats[target]);
   };
 
-  // Zoom in or out around the playhead (or around the middle of the view if the
-  // playhead is off screen).
-  const zoomTo = (index: number) => {
-    const next = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, index));
-    if (next === zoomIndex) return;
-    const el = scrollRef.current;
-    if (el && el.scrollWidth > 0) {
-      const playheadX = (time / span) * el.scrollWidth - el.scrollLeft;
-      if (playheadX >= 0 && playheadX <= el.clientWidth) {
-        pendingZoom.current = { ratio: time / span, screenX: playheadX };
-      } else {
-        pendingZoom.current = {
-          ratio: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth,
-          screenX: el.clientWidth / 2,
-        };
-      }
-    }
-    setZoomIndex(next);
-  };
-
-  // "Go to beat": type a beat number (as shown in "Beat 67 of 240") and the
-  // playhead jumps there. The timeline follows it when zoomed in.
-  const jumpToBeat = () => {
-    const text = beatQuery.trim();
-    const number = Number(text);
-    if (text === "" || !Number.isInteger(number) || number < 1 || number > beats.length) {
-      setBeatError(`Enter a beat from 1 to ${beats.length}.`);
-      return;
-    }
-    setBeatError("");
-    seek(beats[number - 1]);
-  };
-
   const jumpKeyframe = (direction: 1 | -1) => {
     const target =
       direction === 1
@@ -656,6 +608,109 @@ function SequenceEditor({
         : [...keyframeHere.litPins, pin],
     );
   };
+
+  // ---- Copy / paste pins between keyframes ----
+  // The keyframe right before the one at the playhead.
+  const previousKeyframe = keyframeHere
+    ? [...frames].reverse().find((f) => f.time < keyframeHere.time - SAME_MOMENT)
+    : undefined;
+
+  const copyPins = (source: Frame | undefined) => {
+    if (!source) return;
+    const next = { litPins: source.litPins, levels: source.levels };
+    setPinClipboard(next);
+    setPinClip(getPinClipboard());
+  };
+
+  // Writes copied pins onto the keyframe at the playhead. Pins that no longer
+  // exist on this parol are skipped.
+  const applyPins = (clip: PinClipboard | null) => {
+    if (!keyframeHere || !clip) return;
+    const valid = clip.litPins.filter((p) => pins.includes(p));
+    const sorted = [...valid].sort((a, b) => a - b);
+    const kept = pruneLevels(clip.levels, sorted);
+    onFramesChange(
+      frames.map((f) => {
+        if (f.id !== keyframeHere.id) return f;
+        const { levels: _old, ...rest } = f;
+        return { ...rest, litPins: sorted, ...(kept ? { levels: kept } : {}) };
+      }),
+    );
+  };
+
+  // One click: take the previous keyframe's pins and put them here.
+  const copyFromPrevious = () => {
+    if (!previousKeyframe) return;
+    copyPins(previousKeyframe);
+    applyPins({ litPins: previousKeyframe.litPins, levels: previousKeyframe.levels });
+  };
+
+  // ---- Save as video ----
+  const startVideoExport = async () => {
+    if (videoExport.state === "working") return;
+    setIsPlaying(false);
+    setPopover(null);
+    const controller = new AbortController();
+    exportAbort.current = controller;
+    setVideoExport({ state: "working", progress: 0 });
+
+    try {
+      let audioData: ArrayBuffer | undefined;
+      if (audioUrl) {
+        try {
+          audioData = await (await fetch(audioUrl)).arrayBuffer();
+        } catch {
+          audioData = undefined;
+        }
+      }
+
+      const result = await exportVideo({
+        node: groupNode,
+        frames: allFrames,
+        duration,
+        clipStart,
+        audioData,
+        signal: controller.signal,
+        onProgress: (ratio) =>
+          setVideoExport({ state: "working", progress: ratio }),
+      });
+
+      const baseName = (animationNode.audioFileName ?? "parol-preview").replace(
+        /\.[^.]+$/,
+        "",
+      );
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${baseName}.${result.extension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+
+      setVideoExport({
+        state: "done",
+        progress: 1,
+        message: result.hasAudio
+          ? "Saved. Check your downloads."
+          : "Saved without sound (the song file wasn't available). Check your downloads.",
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setVideoExport({ state: "idle", progress: 0 });
+      } else {
+        setVideoExport({
+          state: "error",
+          progress: 0,
+          message: error instanceof Error ? error.message : "Export failed.",
+        });
+      }
+    } finally {
+      exportAbort.current = null;
+    }
+  };
+
+  const cancelVideoExport = () => exportAbort.current?.abort();
 
   const addSectionKeyframes = () => {
     const snapped = makeKeyFrames(analysis).map((frame) => ({
@@ -790,54 +845,11 @@ function SequenceEditor({
               {segmentLabel}
             </p>
           )}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-white/30">
-              Zoom
-            </span>
-            <button
-              type="button"
-              onClick={() => zoomTo(zoomIndex - 1)}
-              disabled={zoomIndex === 0}
-              aria-label="Zoom out"
-              title="Zoom out"
-              className={`${miniPillClass} px-2.5`}
-            >
-              −
-            </button>
-            <span className="w-8 text-center text-xs text-white/60">{zoom}×</span>
-            <button
-              type="button"
-              onClick={() => zoomTo(zoomIndex + 1)}
-              disabled={zoomIndex === ZOOM_LEVELS.length - 1}
-              aria-label="Zoom in"
-              title="Zoom in to see how far apart the keyframes are"
-              className={`${miniPillClass} px-2.5`}
-            >
-              +
-            </button>
-            {zoomIndex > 0 && (
-              <button type="button" onClick={() => zoomTo(0)} className={linkClass}>
-                Fit
-              </button>
-            )}
-          </div>
         </div>
         <div className="relative">
-        {/* The frame scrolls sideways when zoomed in. Its own scrollbar is
-            hidden; the slider under it does the same job. */}
-        <div
-          ref={scrollRef}
-          onScroll={(event) => {
-            const el = event.currentTarget;
-            const room = el.scrollWidth - el.clientWidth;
-            setViewRatio(room > 0 ? el.scrollLeft / room : 0);
-          }}
-          className="overflow-x-auto overflow-y-hidden rounded-xl border border-white/10 bg-white/[0.03] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
         <div
           ref={barRef}
-          className="relative h-12 cursor-pointer"
-          style={{ width: `${zoom * 100}%` }}
+          className="relative h-12 w-full cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]"
           onClick={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
             const ratio = Math.min(
@@ -994,35 +1006,8 @@ function SequenceEditor({
             style={{ left: `${(time / span) * 100}%` }}
           />
         </div>
-        </div>
         {renderPopover("bar")}
         </div>
-
-        {/* Zoomed in: a second slider to move along the song */}
-        {zoom > 1 && (
-          <div className="mt-2">
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.001}
-              value={viewRatio}
-              onChange={(event) => {
-                const el = scrollRef.current;
-                if (!el) return;
-                el.scrollLeft =
-                  Number(event.target.value) * (el.scrollWidth - el.clientWidth);
-              }}
-              aria-label="Scroll the timeline left and right"
-              title="Drag to scroll the zoomed timeline"
-              className="w-full accent-white/40"
-            />
-            <p className="mt-1 text-[10px] text-white/30">
-              Zoomed {zoom}× · drag this slider (or scroll sideways) to move
-              along the song
-            </p>
-          </div>
-        )}
 
         {isManual ? (
           /* Manual timing: the slider moves in hundredths of a second */
@@ -1081,30 +1066,6 @@ function SequenceEditor({
           Keyframe
           <Chevron direction="right" />
         </button>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            jumpToBeat();
-          }}
-          className="flex items-center gap-2"
-        >
-          <input
-            type="text"
-            inputMode="numeric"
-            value={beatQuery}
-            onChange={(event) => {
-              setBeatQuery(event.target.value.replace(/\D/g, ""));
-              setBeatError("");
-            }}
-            placeholder="Go to beat"
-            aria-label="Go to beat number"
-            className="w-28 rounded-full border border-white/10 bg-transparent px-3 py-2 text-center text-xs text-white/80 outline-none placeholder:text-white/30 focus:border-white/30"
-          />
-          <button type="submit" className={miniPillClass}>
-            Go
-          </button>
-        </form>
-        {beatError && <p className="w-full text-xs text-red-400">{beatError}</p>}
         {isManual && (
           <>
             <button
@@ -1249,6 +1210,35 @@ function SequenceEditor({
               className={miniPillClass}
             >
               Turn all off
+            </button>
+            <button
+              onClick={() => copyFromPrevious()}
+              disabled={!keyframeHere || isPlaying || !previousKeyframe}
+              title="Use the pins of the keyframe before this one"
+              className={miniPillClass}
+            >
+              Copy from previous
+            </button>
+            <button
+              onClick={() => copyPins(keyframeHere)}
+              disabled={!keyframeHere || isPlaying}
+              title="Remember this keyframe's pins so you can paste them on another keyframe"
+              className={miniPillClass}
+            >
+              Copy pins
+            </button>
+            <button
+              onClick={() => applyPins(pinClip)}
+              disabled={!keyframeHere || isPlaying || !pinClip}
+              title={
+                pinClip
+                  ? `Paste ${pinClip.litPins.length} copied pin${pinClip.litPins.length === 1 ? "" : "s"} onto this keyframe`
+                  : "Copy pins from a keyframe first"
+              }
+              className={miniPillClass}
+            >
+              Paste pins
+              {pinClip ? ` (${pinClip.litPins.length})` : ""}
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1396,6 +1386,58 @@ function SequenceEditor({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Save the preview as a video, with the song */}
+      <div>
+        <p className={labelClass}>Save as video</p>
+        {!isVideoExportSupported() ? (
+          <p className="text-xs text-white/30">
+            This browser can't record video. Use a recent Chrome, Edge or
+            Firefox.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={startVideoExport}
+                disabled={videoExport.state === "working" || frames.length === 0}
+                className="cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white"
+              >
+                {videoExport.state === "working"
+                  ? `Recording ${Math.round(videoExport.progress * 100)}%`
+                  : "Save as video"}
+              </button>
+              {videoExport.state === "working" && (
+                <button onClick={cancelVideoExport} className={linkClass}>
+                  Cancel
+                </button>
+              )}
+            </div>
+            {videoExport.state === "working" && (
+              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full bg-white transition-[width]"
+                  style={{ width: `${videoExport.progress * 100}%` }}
+                />
+              </div>
+            )}
+            {videoExport.message && videoExport.state !== "working" && (
+              <p
+                className={`mt-3 text-xs ${
+                  videoExport.state === "error" ? "text-red-400" : "text-white/50"
+                }`}
+              >
+                {videoExport.message}
+              </p>
+            )}
+            <p className="mt-2 text-[11px] text-white/25">
+              Records the preview with the song, in real time, so it takes as
+              long as the song. Keep this tab open and in front until it
+              finishes. {frames.length === 0 && "Add a keyframe first."}
+            </p>
+          </>
+        )}
       </div>
 
       {/* Optional sound */}
