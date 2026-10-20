@@ -204,7 +204,7 @@ export async function exportVideo(
     }
     glowCtx.globalAlpha = 1;
     if (supportsFilter) {
-      ctx.filter = blur(${glowPx}px);
+      ctx.filter = `blur(${glowPx}px)`;
       ctx.drawImage(glowLayer, 0, 0);
       ctx.filter = "none";
     } else {
