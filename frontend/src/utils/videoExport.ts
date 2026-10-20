@@ -130,7 +130,8 @@ export async function exportVideo(
   glowLayer.width = width;
   glowLayer.height = height;
   const glowCtx = glowLayer.getContext("2d")!;
-  const supportsFilter = "filter" in ctx;
+  const supportsFilter =
+  typeof (ctx as unknown as { filter?: unknown }).filter === "string";
   const glowPx = Math.max(imageWidth, imageHeight) * 0.008 * scale;
 
   const colorOf = (zoneId: number) => {
