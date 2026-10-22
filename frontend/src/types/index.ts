@@ -157,6 +157,9 @@ export type Frame = {
   litPins: number[];
   // Brightness of the analog pins that are on. Missing means full brightness.
   levels?: PinLevels;
+  // The color of each tricolor LED in this frame, keyed by TricolorGroup id.
+  // A group that is missing here uses the group's own color (white if none).
+  tricolors?: Record<string, string>;
   // How this keyframe moves on to the next keyframe.
   transition?: Transition;
   // The in-betweens the user made by hand, one per beat between this
