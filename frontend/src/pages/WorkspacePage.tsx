@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useNavigate, useParams } from "react-router";
 
@@ -14,6 +14,8 @@ import PinSetup from "../components/PinSetup";
 import AudioUploader from "../components/AudioUploader";
 
 import SequenceEditor from "../components/SequenceEditor";
+
+import SaveButton from "../components/SaveButton";
 
 import KeyframeGallery from "../components/KeyframeGallery";
 
@@ -48,6 +50,53 @@ const GROUP_TABS: { id: GroupTab; label: string; round1Only?: boolean }[] = [
 ];
 
 const needsSongSlot = (tab: GroupTab) => tab !== "zones" && tab !== "pins";
+
+// Which round and tab a group was on, kept in this browser so a reload or a
+// return visit lands exactly where the user left off (instead of Round 1 /
+// Zone Map, which looked like Round 2 progress had been lost).
+const uiKey = (workspaceId: string | undefined, path: string) =>
+  `parol-ui:${workspaceId ?? ""}:${path}`;
+
+function readUi(key: string): { round: Round; tab: GroupTab } {
+  const fallback: { round: Round; tab: GroupTab } = { round: 1, tab: "zones" };
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) ?? "null") as {
+      round?: unknown;
+      tab?: unknown;
+    } | null;
+    const round: Round =
+      saved?.round === 2 || saved?.round === 3 ? saved.round : 1;
+    const tab = GROUP_TABS.some((t) => t.id === saved?.tab)
+      ? (saved?.tab as GroupTab)
+      : fallback.tab;
+    return { round, tab };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeUi(key: string, patch: { round?: Round; tab?: GroupTab }) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ ...readUi(key), ...patch }));
+  } catch {
+    // storage blocked: the page just won't remember
+  }
+}
+
+// Makes the song slot of the round that is open if it is missing (for
+// example after coming back to Round 2 on another device).
+function SongSlotGuard({
+  active,
+  onEnsure,
+}: {
+  active: boolean;
+  onEnsure: () => void;
+}) {
+  useEffect(() => {
+    if (active) onEnsure();
+  });
+  return null;
+}
 
 const typeLabels: Record<NodeType, string> = {
   section: "Class Section",
@@ -96,15 +145,28 @@ function WorkspacePage() {
 
   const [isDragging, setIsDragging] = useState(false);
 
-  const [groupTab, setGroupTab] = useState<GroupTab>("zones");
+  // The chosen round and tab belong to the group they were picked in, and
+  // are remembered in this browser (see readUi above).
+  const pathKey = nestedPath ?? "";
+  const storeKey = uiKey(workspaceId, pathKey);
 
-  // The chosen round belongs to the group it was picked in: opening another
-  // group starts on Round 1 again.
+  const [tabState, setTabState] = useState<{ path: string; tab: GroupTab }>(
+    () => ({ path: pathKey, tab: readUi(storeKey).tab }),
+  );
   const [roundState, setRoundState] = useState<{ path: string; round: Round }>(
-    { path: nestedPath ?? "", round: 1 },
+    () => ({ path: pathKey, round: readUi(storeKey).round }),
   );
   const round: Round =
-    roundState.path === (nestedPath ?? "") ? roundState.round : 1;
+    roundState.path === pathKey ? roundState.round : readUi(storeKey).round;
+  const storedTab: GroupTab =
+    tabState.path === pathKey ? tabState.tab : readUi(storeKey).tab;
+  // Rounds 2 and 3 have no Zone Map / Pins tab.
+  const groupTab: GroupTab =
+    round > 1 && !needsSongSlot(storedTab) ? "song" : storedTab;
+  const setGroupTab = (tab: GroupTab) => {
+    setTabState({ path: pathKey, tab });
+    writeUi(storeKey, { tab });
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Hidden input for "Replace image" (the drop area above only exists while
@@ -189,7 +251,8 @@ function WorkspacePage() {
 
     if (needsSongSlot(nextTab)) ensureSongSlot(next);
 
-    setRoundState({ path: nestedPath ?? "", round: next });
+    setRoundState({ path: pathKey, round: next });
+    writeUi(storeKey, { round: next });
     setGroupTab(nextTab);
   }
 
@@ -408,6 +471,16 @@ async function handleFile(
           ← Back
         </button>
 
+        <SongSlotGuard
+          active={
+            currentNode?.type === "group" &&
+            needsSongSlot(groupTab) &&
+            !animationChild &&
+            !currentNode.locked
+          }
+          onEnsure={() => ensureSongSlot(round)}
+        />
+
         <div className="text-[10px] uppercase tracking-[0.35em] text-white/30">
           Parol Editor / {currentWorkspace.name}
 
@@ -424,7 +497,8 @@ async function handleFile(
             {title}
           </h1>
 
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <SaveButton />
             {!currentNode && (
               <>
                 <button
