@@ -17,6 +17,8 @@ import {
   sortChanges,
 } from "../utils/bpmChanges";
 import { loadAudio, saveAudio } from "../lib/audioStore";
+import { stable } from "../lib/cloudSync";
+import { localGet, localSet } from "../lib/localDraft";
 import { exportVideo, isVideoExportSupported } from "../utils/videoExport";
 import {
   getPinClipboard,
@@ -26,10 +28,15 @@ import {
 import {
   FULL_LEVEL,
   MIN_LEVEL,
+  PIN_COLORS,
   analogPinSet,
+  buildPinUnits,
   formatPin,
+  isTricolorOn,
   levelOf,
   pruneLevels,
+  setTricolorOn,
+  tricolorColor,
 } from "../utils/pins";
 import type {
   AudioSection,
@@ -454,6 +461,56 @@ function SequenceEditor({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // The history is also kept in this browser, so Undo still works after a
+  // reload or after leaving the tab. It is only used when the song's saved
+  // state is exactly the state the history ended on; otherwise (something
+  // changed elsewhere) it is dropped rather than risk undoing into the wrong
+  // thing.
+  const historyKey = `history-v1:${animationNode.id}`;
+  const [historyReady, setHistoryReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void localGet<{
+      current: string;
+      undo: HistorySnapshot[];
+      redo: HistorySnapshot[];
+    }>(historyKey).then((saved) => {
+      if (cancelled) return;
+      if (
+        saved &&
+        undoStack.current.length === 0 &&
+        redoStack.current.length === 0 &&
+        saved.current === stable(takeSnapshot())
+      ) {
+        undoStack.current = saved.undo ?? [];
+        redoStack.current = saved.redo ?? [];
+        syncHistorySize();
+      }
+      setHistoryReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyKey]);
+
+  useEffect(() => {
+    if (!historyReady) return;
+    void localSet(historyKey, {
+      current: stable(takeSnapshot()),
+      undo: undoStack.current,
+      redo: redoStack.current,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    historyReady,
+    historySize,
+    historyKey,
+    animationNode.frames,
+    animationNode.timingMode,
+    animationNode.bpmChanges,
+  ]);
+
   // ---- Save as video ----
   const [videoExport, setVideoExport] = useState<{
     state: "idle" | "working" | "done" | "error";
@@ -605,7 +662,17 @@ function SequenceEditor({
   const analogPins = analogPinSet(groupNode);
 
   // In-betweens are worked out from the keyframes every time, never stored.
-  const inbetweens = buildInbetweens(analysis, frames, analogPins);
+  const tricolorGroups = groupNode.tricolorGroups ?? [];
+  // What the editor shows as one button each: plain pins, and every tricolor
+  // LED as a single unit (its 3 pins are always on or off together).
+  const pinUnits = buildPinUnits(pins, tricolorGroups);
+  const mergedGroups = pinUnits.flatMap((u) => (u.group ? [u.group] : []));
+  const inbetweens = buildInbetweens(
+    analysis,
+    frames,
+    analogPins,
+    mergedGroups,
+  );
   const allFrames = [...frames, ...inbetweens].sort((a, b) => a.time - b.time);
 
   const span = duration || 1;
@@ -638,12 +705,14 @@ function SequenceEditor({
   };
   const litPinsAt = (t: number): number[] => frameAt(t)?.litPins ?? [];
   const levelsAt = (t: number) => frameAt(t)?.levels;
+  const colorsAt = (t: number) => frameAt(t)?.tricolors;
 
   const keyframeHere = frames.find(
     (f) => Math.abs(f.time - time) < SAME_MOMENT,
   );
   const litNow = litPinsAt(time);
   const levelsNow = levelsAt(time);
+  const colorsNow = colorsAt(time);
 
   const inbetweenHere = keyframeHere
     ? undefined
@@ -779,6 +848,7 @@ function SequenceEditor({
       // Start from what is already lit, so you only change what's different.
       litPins: [...litPinsAt(snapped)],
       ...(levelsAt(snapped) ? { levels: { ...levelsAt(snapped) } } : {}),
+      ...(colorsAt(snapped) ? { tricolors: { ...colorsAt(snapped) } } : {}),
     };
     onFramesChange(sortByTime([...frames, newFrame]));
     seek(snapped);
@@ -827,6 +897,57 @@ function SequenceEditor({
       keyframeHere.litPins.includes(pin)
         ? keyframeHere.litPins.filter((p) => p !== pin)
         : [...keyframeHere.litPins, pin],
+    );
+  };
+
+  // A tricolor LED is one thing: all 3 pins go on or off together.
+  const toggleUnit = (unit: (typeof pinUnits)[number]) => {
+    if (!keyframeHere) return;
+    if (!unit.group) {
+      togglePin(unit.pins[0]);
+      return;
+    }
+    setHerePins(
+      setTricolorOn(
+        keyframeHere.litPins,
+        unit.group,
+        !isTricolorOn(unit.group, keyframeHere.litPins),
+      ),
+    );
+  };
+
+  // The color of a tricolor LED in this keyframe only.
+  const setHereTricolor = (groupId: string, color: string) => {
+    if (!keyframeHere) return;
+    onFramesChange(
+      frames.map((f) =>
+        f.id === keyframeHere.id
+          ? { ...f, tricolors: { ...(f.tricolors ?? {}), [groupId]: color } }
+          : f,
+      ),
+    );
+  };
+
+  // Brightness of every analog pin of a unit at once (a tricolor LED dims as
+  // one).
+  const setHereUnitLevel = (pinsOfUnit: number[], level: number) => {
+    if (!keyframeHere) return;
+    onFramesChange(
+      frames.map((f) =>
+        f.id === keyframeHere.id
+          ? {
+              ...f,
+              levels: {
+                ...(f.levels ?? {}),
+                ...Object.fromEntries(
+                  pinsOfUnit
+                    .filter((p) => f.litPins.includes(p))
+                    .map((p) => [p, level]),
+                ),
+              },
+            }
+          : f,
+      ),
     );
   };
 
@@ -1050,7 +1171,7 @@ function SequenceEditor({
         node={groupNode}
         litPins={litNow}
         levels={levelsNow}
-        editColors
+        tricolorColors={colorsNow}
         allowPinLabels
       />
 
@@ -1581,14 +1702,20 @@ function SequenceEditor({
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {pins.map((pin) => {
-              const isOn = (keyframeHere ?? { litPins: litNow }).litPins.includes(
-                pin,
-              );
+            {pinUnits.map((unit) => {
+              const shownPins = (keyframeHere ?? { litPins: litNow }).litPins;
+              const isOn = unit.group
+                ? isTricolorOn(unit.group, shownPins)
+                : shownPins.includes(unit.pins[0]);
               return (
                 <button
-                  key={pin}
-                  onClick={() => togglePin(pin)}
+                  key={unit.key}
+                  onClick={() => toggleUnit(unit)}
+                  title={
+                    unit.group
+                      ? "A tricolor LED: its 3 pins go on and off together"
+                      : undefined
+                  }
                   disabled={!keyframeHere || isPlaying}
                   className={`rounded-full border px-3 py-1 font-serif text-xs transition ${
                     isOn
@@ -1600,11 +1727,72 @@ function SequenceEditor({
                       : "cursor-default opacity-60"
                   }`}
                 >
-                  Pin {formatPin(pin)}
+                  {unit.group
+                    ? `Tricolor ${unit.pins.map(formatPin).join("+")}`
+                    : `Pin ${formatPin(unit.pins[0])}`}
                 </button>
               );
             })}
           </div>
+
+          {/* One color per tricolor LED, for this keyframe only */}
+          {mergedGroups.length > 0 && (
+            <div className="mt-4 flex flex-col gap-2">
+              {mergedGroups.map((g) => {
+                const current = tricolorColor(
+                  g,
+                  (keyframeHere ?? { tricolors: colorsNow }).tricolors,
+                );
+                return (
+                  <div
+                    key={g.id}
+                    className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+                  >
+                    <span className="mr-1 text-[11px] text-white/45">
+                      Tricolor {[...g.pins].sort((a, b) => a - b).map(formatPin).join("+")} color
+                    </span>
+                    {PIN_COLORS.map((c) => (
+                      <button
+                        key={c.name}
+                        type="button"
+                        title={c.name}
+                        aria-label={`${c.name} for tricolor ${g.pins.map(formatPin).join("+")}`}
+                        aria-pressed={current.toLowerCase() === c.hex.toLowerCase()}
+                        disabled={!keyframeHere || isPlaying}
+                        onClick={() => setHereTricolor(g.id, c.hex)}
+                        className={`h-6 w-6 rounded-full border-2 transition ${
+                          current.toLowerCase() === c.hex.toLowerCase()
+                            ? "border-white ring-2 ring-white/30"
+                            : "border-transparent"
+                        } ${
+                          keyframeHere && !isPlaying
+                            ? "cursor-pointer hover:scale-110"
+                            : "cursor-default opacity-50"
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={current}
+                      disabled={!keyframeHere || isPlaying}
+                      onChange={(event) =>
+                        setHereTricolor(g.id, event.target.value)
+                      }
+                      aria-label="Custom color"
+                      className="h-6 w-8 cursor-pointer rounded border border-white/10 bg-transparent disabled:cursor-default disabled:opacity-50"
+                    />
+                  </div>
+                );
+              })}
+              {!keyframeHere && (
+                <p className="text-xs text-white/30">
+                  Each keyframe has its own tricolor colors. Add a keyframe
+                  to change them.
+                </p>
+              )}
+            </div>
+          )}
           </>
         )}
 
@@ -1615,28 +1803,37 @@ function SequenceEditor({
           </p>
         )}
 
-        {/* Brightness for each analog pin that is on in this keyframe */}
+        {/* Brightness for each analog pin (or tricolor LED) that is on in this keyframe */}
         {keyframeHere &&
-          pins.some(
-            (pin) =>
-              analogPins.has(pin) && keyframeHere.litPins.includes(pin),
-          ) && (
-            <div className="mt-5">
-              <p className={labelClass}>Brightness</p>
-              <div className="flex flex-col gap-3">
-                {pins
-                  .filter(
-                    (pin) =>
-                      analogPins.has(pin) && keyframeHere.litPins.includes(pin),
-                  )
-                  .map((pin) => {
-                    const level = levelOf(keyframeHere.levels, pin);
+          (() => {
+            const dimUnits = pinUnits.filter((unit) =>
+              unit.pins.some(
+                (p) => analogPins.has(p) && keyframeHere.litPins.includes(p),
+              ),
+            );
+            if (dimUnits.length === 0) return null;
+            return (
+              <div className="mt-5">
+                <p className={labelClass}>Brightness</p>
+                <div className="flex flex-col gap-3">
+                  {dimUnits.map((unit) => {
+                    const dimPins = unit.pins.filter(
+                      (p) =>
+                        analogPins.has(p) && keyframeHere.litPins.includes(p),
+                    );
+                    const level = Math.max(
+                      ...dimPins.map((p) => levelOf(keyframeHere.levels, p)),
+                    );
                     return (
                       <label
-                        key={pin}
+                        key={unit.key}
                         className="flex items-center gap-3 text-xs text-white/60"
                       >
-                        <span className="w-14 font-serif">Pin {formatPin(pin)}</span>
+                        <span className="w-24 font-serif">
+                          {unit.group
+                            ? `Tricolor ${unit.pins.map(formatPin).join("+")}`
+                            : `Pin ${formatPin(unit.pins[0])}`}
+                        </span>
                         <input
                           type="range"
                           min={MIN_LEVEL}
@@ -1645,7 +1842,15 @@ function SequenceEditor({
                           value={level}
                           disabled={isPlaying}
                           onChange={(event) =>
-                            setHereLevel(pin, Number(event.target.value))
+                            unit.group
+                              ? setHereUnitLevel(
+                                  dimPins,
+                                  Number(event.target.value),
+                                )
+                              : setHereLevel(
+                                  unit.pins[0],
+                                  Number(event.target.value),
+                                )
                           }
                           className="flex-1 accent-white"
                         />
@@ -1655,9 +1860,10 @@ function SequenceEditor({
                       </label>
                     );
                   })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
         {keyframeHere && (
           <div className="mt-6">
