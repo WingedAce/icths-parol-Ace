@@ -7,6 +7,7 @@ import {
   formatPin,
   groupOfPin,
   levelOf,
+  tricolorColor,
 } from "../utils/pins";
 import type { PinLevels, ProjectNode } from "../types";
 
@@ -22,6 +23,9 @@ type ParolPreviewProps = {
   // How bright the analog pins are (a Frame's levels). Missing means full
   // brightness, and digital pins are always at full brightness.
   levels?: PinLevels;
+  // The color of each tricolor LED in this frame, keyed by group id. Without
+  // it every tricolor LED uses its own group color.
+  tricolorColors?: Record<string, string>;
   // Shows the color pickers for tricolor LEDs under the preview. Off for
   // small thumbnails so they stay clean.
   editColors?: boolean;
@@ -34,6 +38,7 @@ function ParolPreview({
   node,
   litPins,
   levels,
+  tricolorColors,
   editColors,
   allowPinLabels,
 }: ParolPreviewProps) {
@@ -84,7 +89,9 @@ function ParolPreview({
   function colorOf(zoneId: number) {
     const mapping = zoneToMapping.get(zoneId);
     const group = mapping ? groupOfPin(groups, mapping.pin) : undefined;
-    return group ? (group.color ?? "#ffffff") : (mapping?.color ?? DEFAULT_LIT_COLOR);
+    return group
+      ? tricolorColor(group, tricolorColors)
+      : (mapping?.color ?? DEFAULT_LIT_COLOR);
   }
 
   // 0..1. Only analog pins can be dimmed.
