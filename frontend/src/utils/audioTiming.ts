@@ -44,6 +44,9 @@ export function buildInbetweens(
   analysis: AudioAnalysis,
   keyframes: Frame[],
   analogPins: Set<number> = new Set(),
+  // The three pins of a tricolor LED change together (one step in a ripple),
+  // and its per-frame color is carried into the in-betweens.
+  tricolorGroups: { id: string; pins: number[] }[] = [],
 ): Frame[] {
   const keys = keyframes
     .filter((f) => f.kind === "key")
@@ -65,6 +68,7 @@ export function buildInbetweens(
       time: number,
       litPins: number[],
       levels: PinLevels | undefined,
+      colors?: Record<string, string>,
     ) =>
       result.push({
         id: `${from.id}-${index + 1}`,
@@ -73,6 +77,7 @@ export function buildInbetweens(
         time,
         litPins,
         ...withLevels(litPins, levels),
+        ...(colors ? { tricolors: { ...colors } } : {}),
       });
 
     if (mode === "manual") {
@@ -85,7 +90,7 @@ export function buildInbetweens(
           carriedPins = [...match.litPins];
           carriedLevels = match.levels ? { ...match.levels } : undefined;
         }
-        push(index, time, [...carriedPins], carriedLevels);
+        push(index, time, [...carriedPins], carriedLevels, from.tricolors);
       });
       continue;
     }
@@ -117,14 +122,15 @@ export function buildInbetweens(
             if (source.litPins.includes(pin)) lit.push(pin);
           }
         }
-        push(index, time, lit, levels);
+        // Colors switch halfway, like the digital pins.
+        push(index, time, lit, levels, t >= 0.5 ? to.tricolors : from.tricolors);
       });
       continue;
     }
 
     // Pins that are on in one keyframe but not the other, lowest first. An
     // analog pin that is on in both at different brightness counts too.
-    const changes = Array.from(new Set([...from.litPins, ...to.litPins]))
+    const changedPins = Array.from(new Set([...from.litPins, ...to.litPins]))
       .sort((a, b) => a - b)
       .filter((pin) => {
         const inFrom = from.litPins.includes(pin);
@@ -136,6 +142,18 @@ export function buildInbetweens(
           levelOf(from.levels, pin) !== levelOf(to.levels, pin)
         );
       });
+    // The pins of one tricolor LED move together as a single step.
+    const changes: number[][] = [];
+    const taken = new Set<number>();
+    for (const pin of changedPins) {
+      if (taken.has(pin)) continue;
+      const group = tricolorGroups.find((g) => g.pins.includes(pin));
+      const unit = group
+        ? changedPins.filter((p) => group.pins.includes(p))
+        : [pin];
+      unit.forEach((p) => taken.add(p));
+      changes.push(unit);
+    }
 
     beats.forEach((time, index) => {
       const step = index + 1;
@@ -148,7 +166,7 @@ export function buildInbetweens(
         const lit = new Set(from.litPins);
         const levels: PinLevels = { ...(from.levels ?? {}) };
         // A changed pin takes the next keyframe's state, brightness included.
-        for (const pin of changes.slice(0, done)) {
+        for (const pin of changes.slice(0, done).flat()) {
           if (to.litPins.includes(pin)) {
             lit.add(pin);
             if (to.levels?.[pin] !== undefined) levels[pin] = to.levels[pin];
@@ -158,11 +176,28 @@ export function buildInbetweens(
             delete levels[pin];
           }
         }
-        push(index, time, Array.from(lit).sort((a, b) => a - b), levels);
+        // A tricolor LED that has already changed takes the next color.
+        const colors: Record<string, string> = { ...(from.tricolors ?? {}) };
+        for (const group of tricolorGroups) {
+          const moved = changes
+            .slice(0, done)
+            .flat()
+            .some((p) => group.pins.includes(p));
+          if (moved && to.tricolors?.[group.id]) {
+            colors[group.id] = to.tricolors[group.id];
+          }
+        }
+        push(
+          index,
+          time,
+          Array.from(lit).sort((a, b) => a - b),
+          levels,
+          Object.keys(colors).length > 0 ? colors : undefined,
+        );
       } else {
         // alternate: odd beats show the next keyframe, even beats the first.
         const source = step % 2 === 1 ? to : from;
-        push(index, time, [...source.litPins], source.levels);
+        push(index, time, [...source.litPins], source.levels, source.tricolors);
       }
     });
   }
