@@ -1,169 +1,215 @@
-export type WorkspaceType = "batch" | "company";
+import type { PinLevels, ProjectNode } from "../types";
 
-export type Workspace = {
-  id: string;
-  name: string;
-  type: WorkspaceType;
+// The pins that can dim an LED on an Arduino Mega (the ones marked ~ on the
+// board): 2-13 and 44-46. The A0-A15 header has no PWM, so it can't dim.
+// Change this list if the parol uses a different board.
+export const PWM_PINS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 44, 45, 46];
+
+export const isPwmPin = (pin: number) => PWM_PINS.includes(pin);
+
+// Board pin numbering. The parol uses an Arduino Mega: digital pins 0-53, then
+// the analog header A0-A15, which the board numbers 54-69. A pin is stored as
+// a single number, so A3 is saved as 57.
+export const DIGITAL_PIN_COUNT = 54;
+export const ANALOG_PIN_OFFSET = 54;
+export const ANALOG_PIN_COUNT = 16;
+
+// Is this saved pin number one of the A0-A15 pins?
+export const isAnalogPin = (pin: number) =>
+  pin >= ANALOG_PIN_OFFSET && pin < ANALOG_PIN_OFFSET + ANALOG_PIN_COUNT;
+
+// How a saved pin number is shown to people: 7 or A3.
+export const formatPin = (pin: number) =>
+  isAnalogPin(pin) ? `A${pin - ANALOG_PIN_OFFSET}` : String(pin);
+
+// Turns what the student typed into a saved pin number, or null when it is
+// not a real pin. With `analog` on, "3" means A3 and is saved as 57.
+export function parsePin(input: string, analog: boolean): number | null {
+  const text = input.trim();
+  if (!/^\d+$/.test(text)) return null;
+  const n = Number(text);
+  if (analog) return n < ANALOG_PIN_COUNT ? n + ANALOG_PIN_OFFSET : null;
+  return n < DIGITAL_PIN_COUNT ? n : null;
+}
+
+// Brightness range for analog pins, in percent.
+export const FULL_LEVEL = 100;
+export const MIN_LEVEL = 5;
+
+// Every pin on this parol that the Zone Map tab marked as analog.
+export function analogPinSet(node: ProjectNode): Set<number> {
+  return new Set(
+    (node.pinMappings ?? [])
+      .filter((m) => m.pinType === "analog")
+      .map((m) => m.pin),
+  );
+}
+
+// A pin with no saved level is at full brightness.
+export function levelOf(levels: PinLevels | undefined, pin: number): number {
+  return levels?.[pin] ?? FULL_LEVEL;
+}
+
+// Keeps only the levels of pins that are actually on, and returns undefined
+// when none are left, so frames without analog pins carry no `levels` at all.
+export function pruneLevels(
+  levels: PinLevels | undefined,
+  litPins: number[],
+): PinLevels | undefined {
+  if (!levels) return undefined;
+  const kept: PinLevels = {};
+  for (const pin of litPins) {
+    if (levels[pin] !== undefined) kept[pin] = levels[pin];
+  }
+  return Object.keys(kept).length > 0 ? kept : undefined;
+}
+
+// Same pins on, and the same brightness on the analog ones?
+export function sameLights(
+  aPins: number[],
+  aLevels: PinLevels | undefined,
+  bPins: number[],
+  bLevels: PinLevels | undefined,
+  analog: Set<number>,
+): boolean {
+  if (aPins.length !== bPins.length) return false;
+  return aPins.every(
+    (pin) =>
+      bPins.includes(pin) &&
+      (!analog.has(pin) || levelOf(aLevels, pin) === levelOf(bLevels, pin)),
+  );
+}
+
+// "Pins on: 1, 4 (60%), 7" — analog pins show how bright they are.
+export function describePins(
+  litPins: number[],
+  levels: PinLevels | undefined,
+  analog: Set<number>,
+): string {
+  const sorted = [...litPins].sort((a, b) => a - b);
+  if (sorted.length === 0) return "All pins off";
+  const parts = sorted.map((pin) =>
+    analog.has(pin) ? `${pin} (${levelOf(levels, pin)}%)` : String(pin),
+  );
+  return `Pins on: ${parts.join(", ")}`;
+}
+
+// ---- LED counts per pin ----
+
+// More than this many LEDs on one pin shows a warning...
+export const LED_WARN_LIMIT = 16;
+// ...and more than this is not allowed at all.
+export const LED_MAX_PER_PIN = 20;
+
+// The whole parol is meant to stay at or under this many LEDs. Going over
+// only shows a warning; the student can still keep going.
+export const LED_PAROL_LIMIT = 300;
+// The meter turns amber from here on (90% of the limit).
+export const LED_PAROL_WARN = 270;
+
+// LEDs in one zone. A zone with no saved count has 1.
+export const ledsInZone = (m: { ledCount?: number }) => m.ledCount ?? 1;
+
+// Total LEDs a pin has to drive, across all of its zones.
+export function pinLedLoad(
+  pinMappings: { pin: number; ledCount?: number }[],
+  pin: number,
+): number {
+  return pinMappings
+    .filter((m) => m.pin === pin)
+    .reduce((sum, m) => sum + ledsInZone(m), 0);
+}
+
+// Total LEDs in the whole parol: just the LEDs of every zone added up. One
+// tricolor LED is exactly one LED, and merging pins into a tricolor LED never
+// changes the count (e.g. zones with 1, 1 and 2 LEDs make 4).
+export function totalLeds(
+  pinMappings: { pin: number; ledCount?: number }[],
+): number {
+  return pinMappings.reduce((sum, m) => sum + ledsInZone(m), 0);
+}
+// The tricolor group a pin belongs to, if any.
+export function groupOfPin<T extends { pins: number[] }>(
+  groups: T[],
+  pin: number,
+): T | undefined {
+  return groups.find((g) => g.pins.includes(pin));
+}
+
+
+// The only LED colors available for the build — the palette is fixed to
+// these eight, so there's no free color picker.
+export const PIN_COLORS = [
+  { name: "Red", hex: "#ff4d4d" },
+  { name: "Blue", hex: "#0a9bff" },
+  { name: "Yellow", hex: "#ffd60a" },
+  { name: "Green", hex: "#34c759" },
+  { name: "Orange", hex: "#ff8a1f" },
+  { name: "White", hex: "#ffffff" },
+  { name: "Pink", hex: "#ff6fb5" },
+  { name: "Purple", hex: "#b86bff" },
+] as const;
+
+
+// ---- Tricolor LEDs as one unit ----
+// A tricolor LED is three pins (red, green, blue legs) that are always turned
+// on and off together, so the editor treats them as one thing. In a frame all
+// three pins sit in litPins; the color is stored per frame (Frame.tricolors).
+
+export const DEFAULT_TRICOLOR_COLOR = "#ffffff";
+
+// The color of a tricolor LED in a frame.
+export function tricolorColor(
+  group: { id: string; color?: string },
+  colors: Record<string, string> | undefined,
+): string {
+  return colors?.[group.id] ?? group.color ?? DEFAULT_TRICOLOR_COLOR;
+}
+
+// A tricolor LED counts as on when any of its pins is on.
+export function isTricolorOn(
+  group: { pins: number[] },
+  litPins: number[],
+): boolean {
+  return group.pins.some((p) => litPins.includes(p));
+}
+
+// Turns every pin of a tricolor LED on or off together.
+export function setTricolorOn(
+  litPins: number[],
+  group: { pins: number[] },
+  on: boolean,
+): number[] {
+  const rest = litPins.filter((p) => !group.pins.includes(p));
+  return on ? [...rest, ...group.pins].sort((a, b) => a - b) : rest;
+}
+
+// What the editor shows as one button: a single pin, or a whole tricolor LED.
+export type PinUnit = {
+  key: string;
+  pins: number[];
+  group?: { id: string; pins: number[]; color?: string };
 };
 
-export type NodeType =
-  | "section"
-  | "parol"
-  | "group"
-  | "animation";
-
-export type ProjectNode = {
-  id: string;
-  name: string;
-  type: NodeType;
-  parentId: string;
-  // For a group's "animation" nodes: which round (1-3) this song and its
-  // keyframes belong to. Missing means round 1, so old projects still load.
-  round?: number;
-  imageDataUrl?: string;
-  imageWidth?: number;
-  imageHeight?: number;
-  zones?: Zone[];
-  pinMappings?: PinMapping[];
-  // Sets of 3 pins merged into one tricolor LED (see TricolorGroup).
-  tricolorGroups?: TricolorGroup[];
-  // Audio analysis result, lives on the "animation" node — see
-  // AudioAnalysis below. audioFileName is kept only for display (the
-  // actual MP3 bytes are never stored, only the analysis result).
-  audioFileName?: string;
-  audioAnalysis?: AudioAnalysis;
-  // Snapshot of what the backend originally detected, set once per
-  // upload and never touched by ½×/⅔×/1.5×/2× corrections — lets the
-  // student undo back to it even after several corrections.
-  audioAnalysisOriginal?: AudioAnalysis;
-  frames?: Frame[];
-  // How keyframes are placed on this song's Preview timeline. Missing means
-  // "beat" (the original behavior), so old projects still load.
-  timingMode?: TimingMode;
-  // Tempo changes the student set on the Preview timeline. The stored beats
-  // (audioAnalysis) are never edited; the beat grid actually used is worked
-  // out from them plus these (see utils/bpmChanges.ts).
-  bpmChanges?: BpmChange[];
-  // Set from the Developer Window. A locked group (design) cannot be opened,
-  // edited or deleted by anyone until it is unlocked again.
-  locked?: boolean;
-};
-
-export type AudioSection = {
-  id: string;
-  start: number;
-  end: number;
-  energy: number;
-  bpm: number; // tempo measured inside this section
-};
-
-export type AudioAnalysis = {
-  duration: number;
-  // Only present when the source song was longer than the analysis cap
-  // (see MAX_CLIP_SECONDS in backend/main.py) — tells the UI what window
-  // of the original song this analysis actually covers.
-  sourceDuration?: number;
-  clipStart?: number;
-  bpm: number;
-  beatTimes: number[];
-  tempoCurve: { time: number; bpm: number }[]; // local BPM at each beat
-  energyCurve: { time: number; energy: number }[];
-  sections: AudioSection[];
-  // Derived, never saved: only present on the analysis returned by
-  // effectiveAnalysis() when the song has BPM change points. One entry per
-  // stretch of constant tempo, with the time it starts.
-  tempoSegments?: TempoSegment[];
-};
-
-// "beat": new keyframes snap to the beat grid. "manual": keyframes can sit at
-// any exact time and the beats are only a guide.
-export type TimingMode = "beat" | "manual";
-
-// From this beat on, the beat grid is regenerated at `bpm`.
-export type BpmChange = {
-  beatTime: number;
-  bpm: number;
-};
-
-export type TempoSegment = {
-  start: number;
-  bpm: number;
-};
-
-export type Zone = {
-  id: number;
-  polygon: [number, number][];
-  cx: number;
-  cy: number;
-};
-
-// Digital pins are simply on or off. Analog (PWM) pins can also be dimmed.
-// A pin with no pinType counts as digital, so old saved projects still load.
-export type PinType = "digital" | "analog";
-
-// Brightness of analog pins in percent, keyed by pin number. A pin that is
-// missing from the object is at full brightness (100). Digital pins ignore it.
-export type PinLevels = Record<number, number>;
-
-export type PinMapping = {
-  zoneId: number;
-  pin: number;
-  // The real color of the LEDs being soldered onto this pin — fixed at
-  // soldering per the hardware spec, never software-controlled. Recorded
-  // here purely so the on-screen zone map can preview the actual planned
-  // parol instead of a generic placeholder color. Optional so existing
-  // saved projects without a color yet still load fine.
-  color?: string;
-  // Belongs to the PIN: every zone on the same pin shares one type.
-  pinType?: PinType;
-  // How many LEDs sit inside this zone. A zone is not always one LED, so the
-  // user types it in. Missing means 1, so old saved projects still load.
-  ledCount?: number;
-};
-
-// Three pins merged into one tricolor LED. One tricolor LED is exactly one LED;
-// merging never changes the LED count.
-// The group has one color that the user can change in the previews; the
-// zones of all three pins light up in that color.
-export type TricolorGroup = {
-  id: string;
-  pins: [number, number, number];
-  color?: string;
-};
-
-export type Session = {
-  id: string;
-  workspaceId: string;
-  updatedAt: string;
-};
-
-// "manual" means the user built the in-between frames by hand; the other
-// four are presets that generate them.
-export type Transition = "hold" | "ripple" | "alternate" | "fade" | "manual";
-
-// One hand-made in-between: which pins are on at one beat, and how bright
-// the analog ones are.
-export type ManualStep = {
-  time: number;
-  litPins: number[];
-  levels?: PinLevels;
-};
-
-export type Frame = {
-  id: string;
-  kind: "key" | "inbetween";
-  sectionId?: string;
-  time: number;
-  litPins: number[];
-  // Brightness of the analog pins that are on. Missing means full brightness.
-  levels?: PinLevels;
-  // The color of each tricolor LED in this frame, keyed by TricolorGroup id.
-  // A group that is missing here uses the group's own color (white if none).
-  tricolors?: Record<string, string>;
-  // How this keyframe moves on to the next keyframe.
-  transition?: Transition;
-  // The in-betweens the user made by hand, one per beat between this
-  // keyframe and the next. Only used while transition is "manual", but kept
-  // when the user switches to a preset so their work isn't lost.
-  manualSteps?: ManualStep[];
-};
+// Splits the parol's pins into units. Only groups whose 3 pins are all still
+// mapped are merged; anything else stays as plain pins.
+export function buildPinUnits<
+  T extends { id: string; pins: number[]; color?: string },
+>(pins: number[], groups: T[]): PinUnit[] {
+  const usable = groups.filter((g) => g.pins.every((p) => pins.includes(p)));
+  const done = new Set<number>();
+  const units: PinUnit[] = [];
+  for (const pin of pins) {
+    if (done.has(pin)) continue;
+    const group = groupOfPin(usable, pin);
+    if (group) {
+      const sorted = [...group.pins].sort((a, b) => a - b);
+      sorted.forEach((p) => done.add(p));
+      units.push({ key: `tri-${group.id}`, pins: sorted, group });
+    } else {
+      done.add(pin);
+      units.push({ key: `pin-${pin}`, pins: [pin] });
+    }
+  }
+  return units;
+}
