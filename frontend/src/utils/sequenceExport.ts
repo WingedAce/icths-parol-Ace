@@ -6,7 +6,14 @@ import type {
 } from "../types";
 import { buildInbetweens } from "./audioTiming";
 import { segmentBpmAt } from "./bpmChanges";
-import { groupOfPin, isPwmPin, levelOf, FULL_LEVEL } from "./pins";
+import {
+  groupOfPin,
+  isPwmPin,
+  levelOf,
+  tricolorColor,
+  FULL_LEVEL,
+  PIN_COLORS,
+} from "./pins";
 
 // Turns the song's keyframes into the list of "at this millisecond, put this
 // pin at this value" rows that the Arduino sketch plays back. Plain sorting
@@ -31,11 +38,22 @@ export type SequenceBuild = {
   // Pins that can really dim (PWM pins the Zone Map marked as analog).
   dimmablePins: number[];
   // Tricolor groups that are fully mapped: pins are [red, green, blue].
-  tricolor: { pins: [number, number, number]; color: string }[];
+  tricolor: { id: string; pins: [number, number, number]; color: string }[];
   warnings: string[];
 };
 
-const DEFAULT_TRICOLOR = "#ffffff";
+// How a lit tricolor LED is driven on the board.
+//   false: all 3 pins (red, green, blue legs) are switched on together, as
+//          bright as the brightest of them. The color picked per frame is
+//          shown in the preview and noted in the sketch, but not mixed.
+//   true:  the 3 legs are dimmed to mix the color picked for each frame
+//          (needs PWM pins: 2-13 and 44-46 on the Mega).
+const TRICOLOR_MIX_COLOR = false;
+
+// "#ff4d4d" -> "Red" for the eight palette colors, otherwise the hex code.
+const colorName = (hex: string) =>
+  PIN_COLORS.find((c) => c.hex.toLowerCase() === hex.toLowerCase())?.name ??
+  hex;
 
 // "#ff8a1f" -> [255, 138, 31]
 function hexToRgb(hex: string): [number, number, number] {
@@ -70,11 +88,15 @@ export function buildSequence(
       .flatMap((g) => g.pins),
   );
   const dimmable = new Set(
-    pins.filter((p) => isPwmPin(p) && (analog.has(p) || inTricolor.has(p))),
+    pins.filter(
+      (p) =>
+        isPwmPin(p) &&
+        (analog.has(p) || (TRICOLOR_MIX_COLOR && inTricolor.has(p))),
+    ),
   );
 
   for (const p of pins) {
-    if (inTricolor.has(p) && !isPwmPin(p)) {
+    if (TRICOLOR_MIX_COLOR && inTricolor.has(p) && !isPwmPin(p)) {
       warnings.push(
         `Pin ${p} is part of a tricolor LED but has no PWM on the Mega, so that color leg can only be fully on or off and the mixed color will be approximate. Use pins 2-13 or 44-46 for tricolor LEDs.`,
       );
@@ -90,8 +112,9 @@ export function buildSequence(
   const groups = tricolorGroups
     .filter((g) => g.pins.every((p) => pins.includes(p)))
     .map((g) => ({
+      id: g.id,
       pins: [...g.pins].sort((a, b) => a - b) as [number, number, number],
-      color: g.color ?? DEFAULT_TRICOLOR,
+      color: tricolorColor(g, undefined),
     }));
 
   if (!analysis || frames.length === 0) {
@@ -105,7 +128,7 @@ export function buildSequence(
 
   // Same frame list the Sequence preview uses.
   const keys = [...frames].sort((a, b) => a.time - b.time);
-  const inbetweens = buildInbetweens(analysis, keys, analog);
+  const inbetweens = buildInbetweens(analysis, keys, analog, groups);
   const all = [...keys, ...inbetweens].sort((a, b) => a.time - b.time);
 
   const beats = analysis.beatTimes;
@@ -151,8 +174,18 @@ export function buildSequence(
 
   for (const frame of all) {
     const timeMs = Math.max(0, Math.round(frame.time * 1000));
-    const note = noteFor(frame.time);
     const lit = new Set(frame.litPins);
+    // Which color each lit tricolor LED has in this frame.
+    const tricolorNote = groups
+      .filter((g) => g.pins.some((p) => lit.has(p)))
+      .map(
+        (g) =>
+          `tricolor ${g.pins.join("+")}: ${colorName(tricolorColor(g, frame.tricolors))}`,
+      )
+      .join(" · ");
+    const note = [noteFor(frame.time), tricolorNote]
+      .filter((part) => part.length > 0)
+      .join(" · ");
 
     for (const pin of pins) {
       if (groupOfPin(groups, pin)) continue;
@@ -164,8 +197,8 @@ export function buildSequence(
       emit(timeMs, pin, toValue(level), note);
     }
 
-    // A tricolor LED is on when any of its 3 pins is on, as bright as its
-    // brightest pin, in the color picked in the preview.
+    // A tricolor LED is one thing: when it is on, all 3 of its pins are on.
+    // (With TRICOLOR_MIX_COLOR the legs are dimmed to mix the frame's color.)
     for (const g of groups) {
       const onPins = g.pins.filter((p) => lit.has(p));
       const level =
@@ -176,9 +209,14 @@ export function buildSequence(
                 analog.has(p) ? levelOf(frame.levels, p) : FULL_LEVEL,
               ),
             );
-      const rgb = hexToRgb(g.color);
+      const rgb = hexToRgb(tricolorColor(g, frame.tricolors));
       g.pins.forEach((pin, i) => {
-        emit(timeMs, pin, Math.round((rgb[i] * level) / FULL_LEVEL), note);
+        const value = TRICOLOR_MIX_COLOR
+          ? Math.round((rgb[i] * level) / FULL_LEVEL)
+          : level === 0
+            ? 0
+            : toValue(level);
+        emit(timeMs, pin, value, note);
       });
     }
   }
