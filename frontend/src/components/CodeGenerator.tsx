@@ -33,9 +33,6 @@ type CodeGeneratorProps = {
   round?: number;
 };
 
-// Pin 53 stays reserved (kept free of zones) even though the sketch no longer
-// uses it.
-const RESERVED_PIN_53 = 53;
 
 // The show starts by itself this long after power-up or after pressing the
 // board's RESET button, so the sketch needs no extra hardware.
@@ -43,11 +40,11 @@ const AUTO_START_DELAY_MS = 5000;
 
 // Arduino Mega 2560: digital pins 0-53, then the analog pins A0-A15 which
 // are ordinary digital pins numbered 54-69 (70 total). Pins 0 and 1 are the
-// USB/serial pins (they interfere with uploading), and pin 53 is kept
-// reserved, so none of those can drive a zone.
+// USB/serial pins. Pin 0 can't drive a zone; pins 1 and 53 can (pin 1 shares
+// the USB line, so its wire must be unplugged while uploading).
 const MEGA_MAX_PIN = 69;
 const ANALOG_PIN_BASE = 54; // A0 === 54, A15 === 69
-const RESERVED_PINS = new Set([0, 1, RESERVED_PIN_53]);
+const RESERVED_PINS = new Set([0]);
 
 // Accepts a plain pin number (54-69 for analog) or an "A0"-"A15" label,
 // and returns the Arduino pin number, or null if it can't be understood.
@@ -83,9 +80,7 @@ function analyzePins(pinMappings: PinMapping[]): {
       problems.push(`Pin ${pin} doesn't exist on a Mega (0-${MEGA_MAX_PIN}).`);
     } else if (RESERVED_PINS.has(pin)) {
       problems.push(
-        pin === RESERVED_PIN_53
-          ? `Pin ${pin} is reserved — pick another pin for that zone.`
-          : `Pin ${pin} is a USB/serial pin — pick another pin for that zone.`,
+        `Pin ${pin} is a USB/serial pin — pick another pin for that zone.`,
       );
     } else {
       found.add(pin);
@@ -194,7 +189,7 @@ const uint16_t SHOW_LENGTH = 0;`;
 // Song: ${oneLine(songName || "untitled")}
 ${tempoHeader}
 ${clipStart > 0 ? `// Play the song from: ${formatClock(clipStart)} (the part you picked on the Song tab)\n` : ""}// Pins used: ${pinList}
-${dimHeader}${tricolorHeader}//
+${pins.includes(1) ? "// NOTE: pin 1 is the Mega's USB transmit line. Unplug the wire from pin 1 while uploading this sketch, then plug it back in.\n" : ""}${dimHeader}${tricolorHeader}//
 // HOW TO USE
 //   1. Upload this sketch to the Arduino Mega 2560.
 ${startSteps}
