@@ -123,6 +123,7 @@ function KeyframePanel({
         node={groupNode}
         litPins={frame.litPins}
         levels={frame.levels}
+        tricolorColors={frame.tricolors}
       />
       <div className="mt-3 flex items-baseline justify-between gap-3">
         <p className="font-serif text-2xl text-white">Keyframe {number}</p>
@@ -243,6 +244,7 @@ function TransitionLoop({
         node={groupNode}
         litPins={steps[activeIndex].litPins}
         levels={steps[activeIndex].levels}
+        tricolorColors={steps[activeIndex].tricolors}
       />
       <div className="mt-4 flex items-center gap-4">
         <button
@@ -334,12 +336,13 @@ function PairView({
         time,
         litPins: [...from.litPins],
         ...(from.levels ? { levels: { ...from.levels } } : {}),
+        ...(from.tricolors ? { tricolors: { ...from.tricolors } } : {}),
       }));
     } else {
-      inbetweens = analysis ? buildInbetweens(analysis, [from, to], analog) : [];
+      inbetweens = analysis ? buildInbetweens(analysis, [from, to], analog, groupNode.tricolorGroups ?? []) : [];
     }
     return [from, ...inbetweens, to];
-  }, [analysis, from, to, mode, beatTimes, analog]);
+  }, [analysis, from, to, mode, beatTimes, analog, groupNode.tricolorGroups]);
 
   const betweenCount = steps.length - 2;
 
@@ -473,6 +476,7 @@ function PairView({
             analysis,
             [{ ...from, transition: preset }, to],
             analog,
+            groupNode.tricolorGroups ?? [],
           ).map((f) => ({
             time: f.time,
             litPins: [...f.litPins],
@@ -580,7 +584,7 @@ function PairView({
                 node={groupNode}
                 litPins={displayLit}
                 levels={displayLevels}
-                editColors
+                tricolorColors={from.tricolors}
               />
               <div className="mt-3 flex items-baseline justify-between gap-3">
                 <p className="font-serif text-2xl text-white">
@@ -648,6 +652,7 @@ function PairView({
                       node={groupNode}
                       litPins={index === activeIndex ? displayLit : step.litPins}
                       levels={index === activeIndex ? displayLevels : step.levels}
+                      tricolorColors={from.tricolors}
                     />
                   </div>
                   <p className="mt-2 text-xs text-white/50">{index}</p>
@@ -1056,6 +1061,7 @@ function KeyframeGallery({
                 node={groupNode}
                 litPins={frame.litPins}
                 levels={frame.levels}
+                tricolorColors={frame.tricolors}
               />
               <span className="pointer-events-none absolute left-3 top-2 font-serif text-lg text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">
                 {index + 1}
