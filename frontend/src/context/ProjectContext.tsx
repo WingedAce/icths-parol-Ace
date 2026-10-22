@@ -31,6 +31,7 @@ import {
   type NodeRow,
 } from "../lib/cloudSync";
 import { ensureSession } from "../lib/supabase";
+import { localGet, localSet } from "../lib/localDraft";
 import type {
   AudioAnalysis,
   BpmChange,
@@ -54,6 +55,13 @@ const PUSH_DEBOUNCE_MS = 200;
 
 type ProjectContextType = {
   syncStatus: SyncStatus;
+  // When the cloud last confirmed a save on this screen (null until the first
+  // save of this visit).
+  lastSavedAt: number | null;
+  // Saves everything right now instead of waiting for the short delay.
+  // Resolves true when the cloud has it all, false when it could not be
+  // saved (the work is still kept in this browser and retried).
+  saveNow: () => Promise<boolean>;
   workspaces: Workspace[];
   getChildren: (parentId: string) => ProjectNode[];
   getNode: (id: string) => ProjectNode | undefined;
@@ -236,6 +244,94 @@ function mergeRemoteWorkspaces(
   return changed ? out : prev;
 }
 
+// ---- Local safety copy ----
+// Everything the user did but the cloud has not confirmed yet is also kept in
+// this browser (see lib/localDraft.ts). On the next start, anything the cloud
+// never received is put back, so a dropped connection or a closed tab never
+// loses work.
+const DRAFT_KEY = "draft-v1";
+
+type Draft = {
+  savedAt: number;
+  // Nodes edited here and not yet saved to the cloud (drawing left out: it
+  // lives in Storage).
+  nodes: ProjectNode[];
+  // What the cloud held for each of them when the edit started (null = it
+  // was created here and never reached the cloud).
+  base: Record<string, string | null>;
+  workspaces: Workspace[];
+  workspaceBase: Record<string, string | null>;
+};
+
+// Puts unsaved work from the safety copy back on top of what the cloud sent.
+async function applyDraft(
+  cloud: Awaited<ReturnType<typeof fetchCloud>>,
+  nodes: Record<string, ProjectNode[]>,
+  workspaces: Workspace[],
+): Promise<{ nodes: Record<string, ProjectNode[]>; workspaces: Workspace[] }> {
+  const draft = await localGet<Draft>(DRAFT_KEY);
+  if (!draft) return { nodes, workspaces };
+
+  const nextNodes: Record<string, ProjectNode[]> = {};
+  for (const [parentId, list] of Object.entries(nodes)) {
+    nextNodes[parentId] = [...list];
+  }
+
+  for (const local of draft.nodes ?? []) {
+    const cloudKey = cloud.keys.get(local.id);
+    if (cloudKey === nodeKey(local)) continue; // the cloud already has it
+
+    const baseKey = draft.base?.[local.id] ?? null;
+    let restore: boolean;
+    if (cloudKey === undefined) {
+      // Not in the cloud: new here (keep it), or deleted on another device.
+      restore = baseKey === null;
+    } else if (cloudKey === baseKey) {
+      restore = true; // nobody else touched it, so our edit goes on top
+    } else {
+      // Changed here AND somewhere else: the newer one wins.
+      const stamp = cloud.stamps.get(local.id);
+      restore = stamp ? Date.parse(stamp) < draft.savedAt : false;
+    }
+    if (!restore) continue;
+
+    let existing: ProjectNode | undefined;
+    for (const list of Object.values(nextNodes)) {
+      const found = list.find((node) => node.id === local.id);
+      if (found) existing = found;
+    }
+    const restored: ProjectNode = {
+      ...local,
+      imageDataUrl: existing?.imageDataUrl,
+    };
+    if (existing) {
+      for (const [parentId, list] of Object.entries(nextNodes)) {
+        nextNodes[parentId] = list.map((node) =>
+          node.id === local.id ? restored : node,
+        );
+      }
+    } else {
+      (nextNodes[restored.parentId] ??= []).push(restored);
+    }
+  }
+
+  const nextWorkspaces = [...workspaces];
+  for (const local of draft.workspaces ?? []) {
+    const theirs = nextWorkspaces.find((w) => w.id === local.id);
+    const baseKey = draft.workspaceBase?.[local.id] ?? null;
+    if (!theirs) {
+      if (baseKey === null) nextWorkspaces.push(local);
+    } else if (
+      workspaceKey(theirs) !== workspaceKey(local) &&
+      workspaceKey(theirs) === baseKey
+    ) {
+      nextWorkspaces[nextWorkspaces.indexOf(theirs)] = local;
+    }
+  }
+
+  return { nodes: nextNodes, workspaces: nextWorkspaces };
+}
+
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] =
     useState<Workspace[]>(initialWorkspaces);
@@ -245,6 +341,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const [cloudLoaded, setCloudLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   // Latest values, readable from timers and network callbacks.
   const nodesRef = useRef(nodesByParent);
@@ -287,6 +384,57 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   function enqueue(task: () => Promise<void>) {
     chain.current = chain.current.then(task).catch(() => {});
+  }
+
+  // Keeps a copy of every change the cloud has not confirmed yet in this
+  // browser. Once the cloud has everything, the copy is empty.
+  function writeDraft() {
+    const synced = syncedNodeKeys.current;
+    const dirtyNodes: ProjectNode[] = [];
+    const base: Record<string, string | null> = {};
+    for (const list of Object.values(nodesRef.current)) {
+      for (const node of list) {
+        if (synced.get(node.id) === nodeKey(node)) continue;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { imageDataUrl: _image, ...rest } = node;
+        dirtyNodes.push(rest as ProjectNode);
+        base[node.id] = synced.get(node.id) ?? null;
+      }
+    }
+
+    const syncedWorkspaces = syncedWorkspaceKeys.current;
+    const dirtyWorkspaces: Workspace[] = [];
+    const workspaceBase: Record<string, string | null> = {};
+    for (const workspace of workspacesRef.current) {
+      if (syncedWorkspaces.get(workspace.id) === workspaceKey(workspace)) {
+        continue;
+      }
+      dirtyWorkspaces.push(workspace);
+      workspaceBase[workspace.id] = syncedWorkspaces.get(workspace.id) ?? null;
+    }
+
+    const draft: Draft = {
+      savedAt: Date.now(),
+      nodes: dirtyNodes,
+      base,
+      workspaces: dirtyWorkspaces,
+      workspaceBase,
+    };
+    void localSet(DRAFT_KEY, draft);
+  }
+
+  // The "Save now" button: don't wait, save everything this second.
+  async function saveNow(): Promise<boolean> {
+    if (pushTimer.current) {
+      clearTimeout(pushTimer.current);
+      pushTimer.current = null;
+      flags.current.scheduled = false;
+    }
+    writeDraft();
+    const task = chain.current.then(pushTask).catch(() => {});
+    chain.current = task;
+    await task;
+    return !flags.current.pushError;
   }
 
   // Resolves once React has put the latest state on screen (and in nodesRef).
@@ -441,6 +589,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       flags.current.pushError = false;
       retryDelay.current = 5000;
+      setLastSavedAt(Date.now());
+      // The cloud has it now, so the local safety copy shrinks to whatever
+      // was edited while this save was running (usually nothing).
+      writeDraft();
 
       // The server refused these (an admin locked them): show the server's
       // version instead of leaving a change that can never be saved.
@@ -524,6 +676,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             console.error("Could not load drawings from Supabase:", error);
           }
 
+          // Anything the cloud never received (closed tab, lost connection)
+          // comes back from this browser's safety copy.
+          let restoredWorkspaces = cloud.workspaces;
+          try {
+            const applied = await applyDraft(
+              cloud,
+              restoredNodes,
+              cloud.workspaces,
+            );
+            restoredNodes = applied.nodes;
+            restoredWorkspaces = applied.workspaces;
+          } catch (error) {
+            console.error("Could not restore the local safety copy:", error);
+          }
+
           if (cancelled) return;
 
           syncedWorkspaceKeys.current = new Map(
@@ -535,7 +702,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           stampsSupported.current = cloud.stampsSupported;
 
           setWorkspaces(
-            cloud.workspaces.length > 0 ? cloud.workspaces : initialWorkspaces,
+            restoredWorkspaces.length > 0 ? restoredWorkspaces : initialWorkspaces,
           );
           setNodesByParent(restoredNodes);
           setCloudLoaded(true);
@@ -559,6 +726,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Keep the local safety copy up to date with every edit, almost at once
+  // (much faster than the cloud save, so a closed tab loses nothing).
+  useEffect(() => {
+    if (!cloudLoaded) return;
+    const timer = setTimeout(writeDraft, 100);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodesByParent, workspaces, cloudLoaded]);
+
+  // Closing the tab while a save is still running (or failing): ask first.
+  useEffect(() => {
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      const f = flags.current;
+      if (f.scheduled || f.pushing > 0 || f.pushError) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
   // Save changes shortly after the last edit.
@@ -593,6 +782,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         if (flags.current.pushError) enqueue(pushTask);
         schedulePull();
       } else {
+        writeDraft();
         flushPush();
       }
     }
@@ -604,6 +794,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       schedulePull();
     }
     function onPageHide() {
+      writeDraft();
       flushPush();
     }
 
@@ -1012,6 +1203,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     <ProjectContext.Provider
       value={{
         syncStatus,
+        lastSavedAt,
+        saveNow,
         workspaces,
         getChildren,
         getNode,
