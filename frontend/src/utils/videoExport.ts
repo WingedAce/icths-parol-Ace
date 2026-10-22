@@ -1,5 +1,5 @@
 import type { Frame, ProjectNode } from "../types";
-import { FULL_LEVEL, groupOfPin, levelOf } from "./pins";
+import { FULL_LEVEL, groupOfPin, levelOf, tricolorColor } from "./pins";
 
 // Records the parol preview (and the song) into a video file, all in the
 // browser. The preview on screen is an <img> + SVG, which can't be recorded
@@ -134,10 +134,14 @@ export async function exportVideo(
   typeof (ctx as unknown as { filter?: unknown }).filter === "string";
   const glowPx = Math.max(imageWidth, imageHeight) * 0.008 * scale;
 
+  // The tricolor colors of the frame being drawn right now.
+  let frameColors: Frame["tricolors"];
   const colorOf = (zoneId: number) => {
     const mapping = zoneToMapping.get(zoneId);
     const group = mapping ? groupOfPin(groups, mapping.pin) : undefined;
-    return group ? (group.color ?? "#ffffff") : (mapping?.color ?? DEFAULT_LIT_COLOR);
+    return group
+      ? tricolorColor(group, frameColors)
+      : (mapping?.color ?? DEFAULT_LIT_COLOR);
   };
 
   const brightnessOf = (
@@ -183,6 +187,7 @@ export async function exportVideo(
     const frame = frameAt(t);
     const lit = new Set(frame?.litPins ?? []);
     const levels = frame?.levels;
+    frameColors = frame?.tricolors;
 
     ctx.globalAlpha = 1;
     ctx.filter = "none";
