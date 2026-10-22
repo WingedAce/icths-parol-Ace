@@ -27,9 +27,10 @@ import {
 const SEGMENT_API_URL =
   import.meta.env.VITE_SEGMENT_API_URL ?? "http://localhost:8000/segment";
 
-// Pins the board keeps for itself: 0 and 1 are the serial line (USB), 53 is
-// the Mega's SPI select pin.
-const RESERVED_PINS = [0, 1, 53];
+// Pins the board keeps for itself: pin 0 is the serial line (USB receive).
+// Pins 1 and 53 can be picked too: pin 1 is the USB transmit line (unplug its
+// wire while uploading a sketch) and 53 is the Mega's SPI select pin.
+const RESERVED_PINS = [0];
 
 // The pin selector slides through these pages, 16 or so pins at a time.
 // Digital pages and the analog (A0-A15) page are shown depending on the
@@ -39,9 +40,9 @@ function pinRange(first: number, length: number) {
 }
 
 const DIGITAL_PAGES = [
-  { title: "Digital 2–17", pins: pinRange(2, 16) },
+  { title: "Digital 1–17", pins: pinRange(1, 17) },
   { title: "Digital 18–33", pins: pinRange(18, 16) },
-  { title: "Digital 34–52", pins: pinRange(34, 19) },
+  { title: "Digital 34–53", pins: pinRange(34, 20) },
 ];
 
 const ANALOG_PAGES = [
@@ -319,12 +320,12 @@ function ZoneMapper({
       setWarning(
         useAnalog
           ? `Enter an analog pin from A0 to A${ANALOG_PIN_COUNT - 1}.`
-          : "Enter a valid pin (2–52 or A0–A15).",
+          : "Enter a valid pin (1–53 or A0–A15).",
       );
       return;
     }
     if (RESERVED_PINS.includes(pin)) {
-      setWarning("Pins 0, 1, and 53 are reserved.");
+      setWarning("Pin 0 is reserved.");
       return;
     }
 
