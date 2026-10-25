@@ -21,6 +21,9 @@ import KeyframeGallery from "../components/KeyframeGallery";
 
 import CodeGenerator from "../components/CodeGenerator";
 
+import TrialWorkspace from "../components/TrialWorkspace";
+import type { DesignPiece, RoundPiece } from "../components/TrialWorkspace";
+
 import { remapFramesToBeats } from "../utils/audioTiming";
 
 import type { AudioAnalysis } from "../types";
@@ -57,25 +60,33 @@ const needsSongSlot = (tab: GroupTab) => tab !== "zones" && tab !== "pins";
 const uiKey = (workspaceId: string | undefined, path: string) =>
   `parol-ui:${workspaceId ?? ""}:${path}`;
 
-function readUi(key: string): { round: Round; tab: GroupTab } {
-  const fallback: { round: Round; tab: GroupTab } = { round: 1, tab: "zones" };
+function readUi(key: string): { round: Round; tab: GroupTab; trial: boolean } {
+  const fallback: { round: Round; tab: GroupTab; trial: boolean } = {
+    round: 1,
+    tab: "zones",
+    trial: false,
+  };
   try {
     const saved = JSON.parse(localStorage.getItem(key) ?? "null") as {
       round?: unknown;
       tab?: unknown;
+      trial?: unknown;
     } | null;
     const round: Round =
       saved?.round === 2 || saved?.round === 3 ? saved.round : 1;
     const tab = GROUP_TABS.some((t) => t.id === saved?.tab)
       ? (saved?.tab as GroupTab)
       : fallback.tab;
-    return { round, tab };
+    return { round, tab, trial: saved?.trial === true };
   } catch {
     return fallback;
   }
 }
 
-function writeUi(key: string, patch: { round?: Round; tab?: GroupTab }) {
+function writeUi(
+  key: string,
+  patch: { round?: Round; tab?: GroupTab; trial?: boolean },
+) {
   try {
     localStorage.setItem(key, JSON.stringify({ ...readUi(key), ...patch }));
   } catch {
@@ -158,6 +169,16 @@ function WorkspacePage() {
   );
   const round: Round =
     roundState.path === pathKey ? roundState.round : readUi(storeKey).round;
+  // The Trial tab: a sandbox next to the three rounds (see TrialWorkspace).
+  const [trialState, setTrialState] = useState<{ path: string; open: boolean }>(
+    () => ({ path: pathKey, open: readUi(storeKey).trial }),
+  );
+  const trialOpen: boolean =
+    trialState.path === pathKey ? trialState.open : readUi(storeKey).trial;
+  const setTrialOpen = (open: boolean) => {
+    setTrialState({ path: pathKey, open });
+    writeUi(storeKey, { trial: open });
+  };
   const storedTab: GroupTab =
     tabState.path === pathKey ? tabState.tab : readUi(storeKey).tab;
   // Rounds 2 and 3 have no Zone Map / Pins tab.
@@ -254,6 +275,49 @@ function WorkspacePage() {
     setRoundState({ path: pathKey, round: next });
     writeUi(storeKey, { round: next });
     setGroupTab(nextTab);
+    setTrialOpen(false);
+  }
+
+  // The real song slot of every round, for the Trial tab.
+  const songNodes: Partial<Record<Round, ProjectNode>> = {};
+  if (currentNode?.type === "group") {
+    for (const r of ROUNDS) {
+      songNodes[r] = getChildren(currentNode.id).find(
+        (item) => item.type === "animation" && (item.round ?? 1) === r,
+      );
+    }
+  }
+
+  // Writes the trial's pieces into the real project. Only reached after the
+  // "are you sure" popup in the Trial tab.
+  function applyTrial(args: {
+    round: Round;
+    design: DesignPiece | null;
+    roundPiece: RoundPiece | null;
+  }) {
+    if (!currentNode) return;
+
+    if (args.design) {
+      const { zones, imageWidth, imageHeight, pinMappings, tricolorGroups } =
+        args.design;
+      if (zones) {
+        // setNodeZones empties the pins, so the pins go in right after it.
+        setNodeZones(currentNode.id, zones, imageWidth ?? 1, imageHeight ?? 1);
+        setNodePinMappings(currentNode.id, pinMappings);
+        setNodeTricolorGroups(currentNode.id, tricolorGroups);
+      } else {
+        clearNodeZones(currentNode.id);
+      }
+    }
+
+    const song = songNodes[args.round];
+    if (args.roundPiece && song) {
+      setNodeFrames(song.id, args.roundPiece.frames);
+      setNodeTiming(song.id, {
+        timingMode: args.roundPiece.timingMode,
+        bpmChanges: args.roundPiece.bpmChanges,
+      });
+    }
   }
 
   // Decide what the user is allowed to create here.
@@ -560,10 +624,10 @@ async function handleFile(
                     <button
                       key={r}
                       role="tab"
-                      aria-selected={round === r}
+                      aria-selected={!trialOpen && round === r}
                       onClick={() => selectRound(r)}
                       className={`cursor-pointer rounded-xl px-6 py-2.5 font-serif text-sm tracking-wide transition sm:px-9 ${
-                        round === r
+                        !trialOpen && round === r
                           ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.15)]"
                           : "text-white/50 hover:bg-white/[0.06] hover:text-white"
                       }`}
@@ -571,9 +635,27 @@ async function handleFile(
                       Round {r}
                     </button>
                   ))}
+
+                  <span
+                    aria-hidden="true"
+                    className="mx-1 my-2 w-px bg-white/10"
+                  />
+
+                  <button
+                    role="tab"
+                    aria-selected={trialOpen}
+                    onClick={() => setTrialOpen(true)}
+                    className={`cursor-pointer rounded-xl px-6 py-2.5 font-serif text-sm tracking-wide transition sm:px-9 ${
+                      trialOpen
+                        ? "bg-amber-100 text-black shadow-[0_0_20px_rgba(253,230,138,0.25)]"
+                        : "text-amber-100/60 hover:bg-white/[0.06] hover:text-amber-100"
+                    }`}
+                  >
+                    Trial
+                  </button>
                 </div>
 
-                {round > 1 && (
+                {!trialOpen && round > 1 && (
                   <p className="text-xs text-white/30">
                     Zone Map and Pins are set up once in Round 1 and shared by
                     every round. This round has its own song, keyframes and
@@ -583,6 +665,7 @@ async function handleFile(
               </div>
 
               {/* Step tabs */}
+              {!trialOpen && (
               <div
                 role="tablist"
                 aria-label="Steps"
@@ -606,9 +689,18 @@ async function handleFile(
                   ),
                 )}
               </div>
+              )}
             </div>
 
-            {round === 1 && groupTab === "zones" && (
+            {trialOpen && (
+              <TrialWorkspace
+                groupNode={currentNode}
+                songNodes={songNodes}
+                onApply={applyTrial}
+              />
+            )}
+
+            {!trialOpen && round === 1 && groupTab === "zones" && (
               <>
                 {!currentNode.imageDataUrl ? (
                   <div
@@ -730,7 +822,7 @@ async function handleFile(
               </>
             )}
 
-            {round === 1 && groupTab === "pins" && (
+            {!trialOpen && round === 1 && groupTab === "pins" && (
               <PinSetup
                 node={currentNode}
                 onPinMappingsChange={(pinMappings: PinMapping[]) =>
@@ -740,7 +832,7 @@ async function handleFile(
               />
             )}
 
-            {groupTab === "song" && animationChild && (
+            {!trialOpen && groupTab === "song" && animationChild && (
               <AudioUploader
                 key={animationChild.id}
                 node={animationChild}
@@ -793,7 +885,7 @@ async function handleFile(
               />
             )}
 
-            {groupTab === "preview" && animationChild && (
+            {!trialOpen && groupTab === "preview" && animationChild && (
               <div className="mx-auto max-w-3xl">
                 <SequenceEditor
                   key={animationChild.id}
@@ -812,7 +904,7 @@ async function handleFile(
               </div>
             )}
 
-            {groupTab === "gallery" && animationChild && (
+            {!trialOpen && groupTab === "gallery" && animationChild && (
               <div className="mx-auto max-w-5xl">
                 <KeyframeGallery
                   key={animationChild.id}
@@ -828,7 +920,7 @@ async function handleFile(
               </div>
             )}
 
-            {groupTab === "code" && animationChild && (
+            {!trialOpen && groupTab === "code" && animationChild && (
               <CodeGenerator
                 key={animationChild.id}
                 round={round}
