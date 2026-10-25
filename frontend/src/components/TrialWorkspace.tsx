@@ -123,7 +123,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
   // Bumped when the trial is reset or applied, so the editors start fresh.
   const [version, setVersion] = useState(0);
   const [dialog, setDialog] = useState<
-    { kind: "apply"; round: Round } | { kind: "discard" } | null
+    { kind: "apply"; round: Round } | { kind: "discard" } | { kind: "reset" } | null
   >(null);
   const [notice, setNotice] = useState("");
 
@@ -263,6 +263,19 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     setDialog(null);
   }
 
+  // A full fresh start: drops every trial change AND puts the trial view back
+  // to how it looks the first time it is opened (Zone Map, Round 1).
+  function resetTrial() {
+    for (const r of ROUNDS) {
+      const song = songNodes[r];
+      if (song) void localDelete(historyKeyOf(song.id));
+    }
+    setDraft(EMPTY_DRAFT);
+    setVersion((v) => v + 1);
+    setNotice("Trial was reset. You are starting a new trial.");
+    setDialog(null);
+  }
+
   const summary = hasAnyChange
     ? [
         designChanged ? "Zone map / pins (shared by all rounds)" : null,
@@ -329,6 +342,16 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
           className="cursor-pointer rounded-full border border-red-400/20 px-4 py-1.5 text-[11px] uppercase tracking-wider text-red-300/70 transition hover:border-red-400/40 hover:text-red-300 disabled:cursor-default disabled:opacity-30 disabled:hover:border-red-400/20 disabled:hover:text-red-300/70"
         >
           Take out trial changes
+        </button>
+
+        <button
+          onClick={() => {
+            setNotice("");
+            setDialog({ kind: "reset" });
+          }}
+          className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/40 hover:text-white"
+        >
+          Reset trial
         </button>
       </div>
 
@@ -505,6 +528,23 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
           <p>
             Everything you changed in the trial ({summary}) will be thrown
             away and the trial goes back to a fresh copy of the real project.
+          </p>
+          <p>Round 1, Round 2 and Round 3 are not touched.</p>
+        </ConfirmDialog>
+      )}
+
+      {dialog?.kind === "reset" && (
+        <ConfirmDialog
+          title="Reset trial and start a new one?"
+          checkboxLabel="I want to reset everything in the trial"
+          confirmLabel="Yes, reset trial"
+          onCancel={() => setDialog(null)}
+          onConfirm={resetTrial}
+        >
+          <p>
+            Everything you did in the trial ({summary}) will be thrown away,
+            and the trial goes back to a fresh copy of the real project,
+            opened on the Zone Map and Round 1.
           </p>
           <p>Round 1, Round 2 and Round 3 are not touched.</p>
         </ConfirmDialog>
