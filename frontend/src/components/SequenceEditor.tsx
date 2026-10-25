@@ -103,6 +103,10 @@ type SequenceEditorProps = {
     timingMode?: TimingMode;
     bpmChanges?: BpmChange[];
   }) => void;
+  // Used by the Trial tab: its animationNode is a copy with its own id, so
+  // this says whose saved song file to play instead. When it is set, a file
+  // loaded here is only played, never saved over the real round's song.
+  audioSourceId?: string;
 };
 
 // m:ss.t  (tenths of a second, because beats are only ~0.5s apart)
@@ -288,6 +292,7 @@ function SequenceEditor({
   animationNode,
   onFramesChange: saveFrames,
   onTimingChange: saveTiming,
+  audioSourceId,
 }: SequenceEditorProps) {
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
@@ -536,7 +541,7 @@ function SequenceEditor({
   // without the student picking the file again.
   useEffect(() => {
     let cancelled = false;
-    loadAudio(animationNode.id)
+    loadAudio(audioSourceId ?? animationNode.id)
       .then((blob) => {
         if (cancelled || !blob) return;
         setAudioUrl(URL.createObjectURL(blob));
@@ -545,7 +550,7 @@ function SequenceEditor({
     return () => {
       cancelled = true
     };
-  }, [animationNode.id]);
+  }, [animationNode.id, audioSourceId]);
 
   // The BPM box closes on Esc or a click anywhere else.
   useEffect(() => {
@@ -2000,7 +2005,9 @@ function SequenceEditor({
               if (!file) return;
               setIsPlaying(false);
               setAudioUrl(URL.createObjectURL(file));
-              saveAudio(animationNode.id, file).catch(() => {});
+              if (!audioSourceId) {
+                saveAudio(animationNode.id, file).catch(() => {});
+              }
             }}
           />
         </label>
