@@ -145,7 +145,7 @@ function generateSketch(
 
   const tricolorHeader =
     build.tricolor.length > 0
-      ? "// Tricolor LEDs (all 3 pins switch on together):\n" +
+      ? "// Tricolor LEDs (pins are the RED, GREEN and BLUE legs, in this order):\n" +
         build.tricolor
           .map((g) => `//   ${g.pins.join(", ")}`)
           .join("\n") +
