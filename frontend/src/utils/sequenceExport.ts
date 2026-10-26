@@ -43,12 +43,29 @@ export type SequenceBuild = {
 };
 
 // How a lit tricolor LED is driven on the board.
-//   false: all 3 pins (red, green, blue legs) are switched on together, as
-//          bright as the brightest of them. The color picked per frame is
-//          shown in the preview and noted in the sketch, but not mixed.
-//   true:  the 3 legs are dimmed to mix the color picked for each frame
-//          (needs PWM pins: 2-13 and 44-46 on the Mega).
-const TRICOLOR_MIX_COLOR = false;
+//   true:  the 3 legs are dimmed/switched to mix the color picked for each
+//          frame, so the board shows the same colors as the preview. The
+//          lowest pin is the RED leg, the middle pin the GREEN leg and the
+//          highest pin the BLUE leg. Works best on PWM pins (2-13 and 44-46
+//          on the Mega); on other pins each leg is only fully on or off.
+//   false: all 3 legs are switched on together, so the LED is always white.
+const TRICOLOR_MIX_COLOR = true;
+
+// What each of the 8 palette colors is mixed from on the real LED. The
+// preview uses screen colors (like #ff4d4d for Red) that look washed out
+// on an LED if copied as-is, so these are the leg levels (red, green, blue,
+// 0-255) that look right on the LED. Tweak a row if a color looks off on
+// your LED.
+const LED_MIX: Record<string, [number, number, number]> = {
+  "#ff4d4d": [255, 0, 0], // Red
+  "#0a9bff": [0, 0, 255], // Blue
+  "#ffd60a": [255, 170, 0], // Yellow
+  "#34c759": [0, 255, 0], // Green
+  "#ff8a1f": [255, 60, 0], // Orange
+  "#ffffff": [255, 255, 255], // White
+  "#ff6fb5": [255, 30, 110], // Pink
+  "#b86bff": [150, 0, 255], // Purple
+};
 
 // "#ff4d4d" -> "Red" for the eight palette colors, otherwise the hex code.
 const colorName = (hex: string) =>
@@ -197,8 +214,9 @@ export function buildSequence(
       emit(timeMs, pin, toValue(level), note);
     }
 
-    // A tricolor LED is one thing: when it is on, all 3 of its pins are on.
-    // (With TRICOLOR_MIX_COLOR the legs are dimmed to mix the frame's color.)
+    // A tricolor LED is one thing: when it is on, its 3 legs (red, green,
+    // blue) are set to mix the color picked for this frame. When it is off,
+    // all 3 are off. (With TRICOLOR_MIX_COLOR off, all 3 are just fully on.)
     for (const g of groups) {
       const onPins = g.pins.filter((p) => lit.has(p));
       const level =
@@ -209,7 +227,8 @@ export function buildSequence(
                 analog.has(p) ? levelOf(frame.levels, p) : FULL_LEVEL,
               ),
             );
-      const rgb = hexToRgb(tricolorColor(g, frame.tricolors));
+      const colorHex = tricolorColor(g, frame.tricolors);
+      const rgb = LED_MIX[colorHex.toLowerCase()] ?? hexToRgb(colorHex);
       g.pins.forEach((pin, i) => {
         const value = TRICOLOR_MIX_COLOR
           ? Math.round((rgb[i] * level) / FULL_LEVEL)
