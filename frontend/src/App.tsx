@@ -95,7 +95,11 @@ function App() {
     setPendingLock({
       groupId: groupNodeId,
       path: `/workspace/${workspaceId}/${sectionNodeId}/${groupNodeId}`,
-      label: `${groupLabel} · ${sectionName} · Batch ${batchName}`,
+      label: `${
+        groupNode?.parolName?.trim()
+          ? `${groupNode.parolName.trim()} (${groupLabel})`
+          : groupLabel
+      } · ${sectionName} · Batch ${batchName}`,
     });
   }
 
