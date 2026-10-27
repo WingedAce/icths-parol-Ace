@@ -297,6 +297,11 @@ function SequenceEditor({
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // Loop button: when on, the light show and the song start over from the
+  // beginning each time they reach the end, until Pause is pressed. The ref
+  // lets the playback loop see a change made while it is already running.
+  const [loopOn, setLoopOn] = useState(false);
+  const loopRef = useRef(false);
   // The app never stores the MP3 itself, so to hear the song the user can
   // load the file here. It stays on their computer, only in this tab.
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -595,6 +600,14 @@ function SequenceEditor({
           (performance.now() - clockRef.current.startMs) / 1000;
 
       if (now >= duration) {
+        if (loopRef.current && duration > 0) {
+          // Back to the start: the song and the lights restart together.
+          clockRef.current = { startMs: performance.now(), startTime: 0 };
+          if (audio) audio.currentTime = clipStart;
+          setTime(0);
+          frameId = requestAnimationFrame(tick);
+          return;
+        }
         setTime(duration);
         setIsPlaying(false);
         return;
@@ -821,6 +834,12 @@ function SequenceEditor({
         ? frames.find((f) => f.time > time + SAME_MOMENT)
         : [...frames].reverse().find((f) => f.time < time - SAME_MOMENT);
     if (target) seek(target.time);
+  };
+
+  const toggleLoop = () => {
+    const next = !loopRef.current;
+    loopRef.current = next;
+    setLoopOn(next);
   };
 
   const togglePlay = () => {
@@ -1482,6 +1501,18 @@ function SequenceEditor({
           className="cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90"
         >
           {isPlaying ? "Pause" : "Play"}
+        </button>
+        <button
+          onClick={toggleLoop}
+          aria-pressed={loopOn}
+          title="Keep playing the light show and the song over and over until you press Pause"
+          className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.15em] transition ${
+            loopOn
+              ? "border-amber-200/70 bg-amber-200/15 text-amber-100"
+              : "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+          }`}
+        >
+          {loopOn ? "Loop: on" : "Loop"}
         </button>
         <button onClick={() => stepBeat(-1)} className={navClass}>
           <Chevron direction="left" />
