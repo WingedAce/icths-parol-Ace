@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useContext,
@@ -98,6 +97,8 @@ type ProjectContextType = {
   ) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
+  // Sets (or, with an empty name, clears) the display name of a parol.
+  setNodeParolName: (id: string, parolName: string) => void;
   setNodeTiming: (
     id: string,
     timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
@@ -1167,6 +1168,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  function setNodeParolName(id: string, parolName: string) {
+    const clean = parolName.trim();
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) => {
+          if (node.id !== id) return node;
+          // An empty name goes back to the original ("Group 3").
+          if (clean) return { ...node, parolName: clean };
+          const { parolName: _removed, ...rest } = node;
+          return rest;
+        });
+      }
+
+      return next;
+    });
+  }
+
   function setNodesLocked(ids: string[], locked: boolean) {
     const idSet = new Set(ids);
 
@@ -1225,6 +1245,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         clearNodeAudio,
         setNodeFrames,
         setNodeTiming,
+        setNodeParolName,
         setNodesLocked,
       }}
     >
