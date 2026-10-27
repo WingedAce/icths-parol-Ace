@@ -124,9 +124,18 @@ function generateSketch(
   build: SequenceBuild,
   analysis: AudioAnalysis | undefined,
   round: number,
+  loop: boolean,
 ): string {
   const pinList = pins.join(", ");
   const durationMs = analysis ? Math.round(analysis.duration * 1000) : 0;
+  // One loop lasts as long as the song (or until the last light change, if
+  // that is later), so a song that is also on repeat stays in step with the
+  // lights.
+  const lastEventMs = build.events.reduce(
+    (latest, e) => Math.max(latest, e.timeMs),
+    0,
+  );
+  const loopMs = Math.max(durationMs, lastEventMs);
   const bpm = analysis ? round1(analysis.bpm) : 0;
 
   const segmentLines = (analysis?.tempoSegments ?? []).map(
@@ -180,7 +189,14 @@ const uint16_t SHOW_LENGTH = 0;`;
   const playFrom =
     clipStart > 0 ? ` from ${formatClock(clipStart)}` : "";
 
-  const startSteps = `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
+  const startSteps = loop
+    ? `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
+//      powers up or after you press its RESET button. Press play on the
+//      song${playFrom} when it starts, and set the song to repeat.
+//   3. LOOP MODE: the show plays again and again, every ${formatClock(loopMs / 1000)},
+//      until the Arduino is disconnected from its power source.
+//      (The ${AUTO_START_DELAY_MS / 1000} second wait happens only once, at power-up.)`
+    : `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
 //      powers up or after you press its RESET button. Press play on the
 //      song${playFrom} when it starts.
 //      (Press RESET again to run the show again.)`;
@@ -198,7 +214,7 @@ ${startSteps}
 const uint8_t LED_PINS[] = { ${pinList} };
 // The show starts this long after power-up or reset.
 const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};
-
+${loop ? `// LOOP MODE: the show starts over after this many ms (the length of the song),\n// and keeps repeating until the Arduino loses power.\nconst uint32_t LOOP_LENGTH_MS = ${loopMs};\n` : ""}
 // ---------- The light show ----------
 // Each row is: time in ms after the start, pin, brightness (0 = off, 255 = on).
 // Pins without PWM can only be fully on or off. That is handled for you.
@@ -241,7 +257,32 @@ void setup() {
   startShow();
 }
 
-void loop() {
+${
+    loop
+      ? `void loop() {
+  uint32_t now = millis() - startTime;
+
+  while (nextRow < SHOW_LENGTH) {
+    Event e;
+    memcpy_P(&e, &SHOW[nextRow], sizeof(Event));
+    if (e.timeMs > now) return;
+    // analogWrite dims PWM pins and simply switches other pins on or off.
+    analogWrite(e.pin, e.value);
+    nextRow++;
+  }
+
+  // Every row has played. Wait out the rest of the song, then start over.
+  if (now < LOOP_LENGTH_MS) return;
+
+  allOff();
+  nextRow = 0;
+  // Adding the length (instead of reading millis() again) stops the loop
+  // from slowly drifting away from the song.
+  startTime += LOOP_LENGTH_MS;
+  Serial.println(F("Show restarted"));
+}
+`
+      : `void loop() {
   if (!running) return; // finished. Press RESET to run again.
 
   uint32_t now = millis() - startTime;
@@ -259,7 +300,8 @@ void loop() {
   running = false;
   Serial.println(F("Show finished"));
 }
-`;
+`
+  }`;
 }
 
 function CodeGenerator({
@@ -276,6 +318,8 @@ function CodeGenerator({
   const [code, setCode] = useState<string | null>(null);
   const [build, setBuild] = useState<SequenceBuild | null>(null);
   const [showCredits, setShowCredits] = useState(false);
+  // Play the show again and again until the board loses power.
+  const [loopShow, setLoopShow] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -301,15 +345,51 @@ function CodeGenerator({
       tricolorGroups,
     );
     setBuild(result);
-    setCode(generateSketch(pins, songName, result, audioAnalysis, round));
+    setCode(
+      generateSketch(pins, songName, result, audioAnalysis, round, loopShow),
+    );
   }
+
+  // Switching the option also rewrites the code that is already on screen.
+  function handleLoopChange(next: boolean) {
+    setLoopShow(next);
+    if (build && code) {
+      setCode(
+        generateSketch(pins, songName, build, audioAnalysis, round, next),
+      );
+    }
+  }
+
+  const sketchName = `arduino_sketch_round${round}${loopShow ? "_loop" : ""}.ino`;
+
+  const loopToggle = (
+    <div className="flex max-w-md flex-col items-center gap-1 text-center">
+      <label className="flex cursor-pointer items-center gap-3 text-xs text-white/70">
+        <input
+          type="checkbox"
+          checked={loopShow}
+          onChange={(event) => handleLoopChange(event.target.checked)}
+          className="h-4 w-4 cursor-pointer accent-amber-200"
+        />
+        Play on a loop until the Arduino is disconnected from power
+      </label>
+      {loopShow && (
+        <p className="text-[11px] text-white/35">
+          The show starts over every time it reaches the end of the song
+          {audioAnalysis ? ` (${formatClock(audioAnalysis.duration)})` : ""}.
+          Set your song to repeat as well and start both together so they stay
+          in step.
+        </p>
+      )}
+    </div>
+  );
 
   function handleDownload() {
     if (!code) return;
     const url = URL.createObjectURL(new Blob([code], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `arduino_sketch_round${round}.ino`;
+    link.download = sketchName;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -359,6 +439,8 @@ function CodeGenerator({
             after you press the RESET button on the Arduino.
           </p>
 
+          {loopToggle}
+
           <button
             onClick={handleGenerate}
             disabled={!hasPins}
@@ -371,7 +453,7 @@ function CodeGenerator({
         <div className="flex w-full flex-col gap-4">
           <div className="flex items-center justify-between">
             <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
-              {`arduino_sketch_round${round}.ino`}
+              {sketchName}
             </p>
 
             <div className="flex gap-2">
@@ -393,6 +475,8 @@ function CodeGenerator({
               </button>
             </div>
           </div>
+
+          <div className="flex justify-center">{loopToggle}</div>
 
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
             <pre className="codebox-scroll max-h-[28rem] overflow-y-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed text-white/80">
