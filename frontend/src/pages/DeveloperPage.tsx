@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
+import AdminReauthDialog from "../components/AdminReauthDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ParolPreview from "../components/ParolPreview";
+import RenameParolDialog from "../components/RenameParolDialog";
 import { useProjects } from "../context/ProjectContext";
 import type { ProjectNode } from "../types";
+import { grantSessionPass } from "../utils/accessLock";
+import { displayName } from "../utils/parolName";
 import {
   listColorLockedGroups,
   resetColorLocks as resetColorLocksOnServer,
@@ -15,6 +19,8 @@ type Design = {
   node: ProjectNode;
   // "Batch '26 · Section A"
   where: string;
+  // The group's page: /workspace/<workspace>/<section>/<group>
+  url: string;
 };
 
 type PendingDelete =
@@ -88,10 +94,19 @@ function LockIcon() {
   );
 }
 
+// The name shown for a parol: the custom one if an admin gave it, otherwise
+// the group's own name ("Group 3").
+const parolLabel = displayName;
+
 function DeveloperPage() {
   const navigate = useNavigate();
-  const { workspaces, getChildren, deleteNode, setNodesLocked } =
-    useProjects();
+  const {
+    workspaces,
+    getChildren,
+    deleteNode,
+    setNodesLocked,
+    setNodeParolName,
+  } = useProjects();
 
   // Access: this page is wrapped in <AdminGate> (see router.tsx), so it only
   // opens for signed-in admins listed in the Supabase "admins" table.
@@ -99,6 +114,10 @@ function DeveloperPage() {
   const [mode, setMode] = useState<Mode>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<PendingDelete>(null);
+  // The design the admin clicked to open (waiting for email + password), and
+  // the design being renamed.
+  const [opening, setOpening] = useState<Design | null>(null);
+  const [renaming, setRenaming] = useState<Design | null>(null);
 
   // Ids of groups that have a color lock. It is kept online, so we ask the
   // server (instead of this browser) which groups have one.
@@ -129,19 +148,23 @@ function DeveloperPage() {
 
   // Walk batch -> section -> group and collect every group with a design.
   const designs: Design[] = [];
-  function collect(parentId: string, trail: string[]) {
+  function collect(parentId: string, trail: string[], ids: string[]) {
     for (const child of getChildren(parentId)) {
       if (child.type === "group") {
         if (hasDesign(child)) {
-          designs.push({ node: child, where: trail.join(" · ") });
+          designs.push({
+            node: child,
+            where: trail.join(" · "),
+            url: `/workspace/${ids.join("/")}/${child.id}`,
+          });
         }
       } else if (child.type !== "animation") {
-        collect(child.id, [...trail, child.name]);
+        collect(child.id, [...trail, child.name], [...ids, child.id]);
       }
     }
   }
   for (const workspace of workspaces) {
-    collect(workspace.id, [workspace.name]);
+    collect(workspace.id, [workspace.name], [workspace.id]);
   }
 
   // Locked designs are protected: Delete all and Select to delete skip them
@@ -216,7 +239,7 @@ function DeveloperPage() {
     stopSelecting();
   }
 
-  const nameOf = (d: Design) => `${d.node.name} (${d.where})`;
+  const nameOf = (d: Design) => `${parolLabel(d.node)} (${d.where})`;
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
@@ -240,6 +263,13 @@ function DeveloperPage() {
           <span className="font-bold text-white">{designs.length}</span>
         </p>
 
+        {designs.length > 0 && !selecting && (
+          <p className="-mt-4 mb-6 text-xs text-white/35">
+            Click a design to open it. You will be asked for your Developer
+            Window email and password first.
+          </p>
+        )}
+
         {designs.length === 0 ? (
           <p className="py-24 text-center text-sm text-white/30">
             No designs registered yet.
@@ -257,22 +287,36 @@ function DeveloperPage() {
               return (
                 <li key={design.node.id}>
                   <div
-                    role={pickable ? "button" : undefined}
-                    tabIndex={pickable ? 0 : undefined}
+                    role={pickable || !selecting ? "button" : undefined}
+                    tabIndex={pickable || !selecting ? 0 : undefined}
                     aria-pressed={pickable ? isSelected : undefined}
-                    onClick={pickable ? () => toggle(design) : undefined}
-                    onKeyDown={
+                    aria-label={
+                      !selecting
+                        ? `Open ${parolLabel(design.node)} (password required)`
+                        : undefined
+                    }
+                    onClick={
                       pickable
+                        ? () => toggle(design)
+                        : !selecting
+                          ? () => setOpening(design)
+                          : undefined
+                    }
+                    onKeyDown={
+                      pickable || !selecting
                         ? (event) => {
                             if (event.key === "Enter" || event.key === " ") {
                               event.preventDefault();
-                              toggle(design);
+                              if (pickable) toggle(design);
+                              else setOpening(design);
                             }
                           }
                         : undefined
                     }
                     className={`relative rounded-2xl border p-2 transition ${
-                      pickable ? "cursor-pointer" : ""
+                      pickable || !selecting ? "cursor-pointer" : ""
+                    } ${
+                      !selecting && !locked ? "hover:border-white/30" : ""
                     } ${
                       selecting && !pickable && !locked ? "opacity-50" : ""
                     } ${
@@ -315,11 +359,25 @@ function DeveloperPage() {
 
                     <div className="px-1 pb-1 pt-3 text-center">
                       <p className="font-serif text-base text-white/90">
-                        {design.node.name}
+                        {parolLabel(design.node)}
                       </p>
                       <p className="mt-0.5 text-[11px] text-white/35">
-                        {design.where}
+                        {design.node.parolName?.trim()
+                          ? `${design.node.name} · ${design.where}`
+                          : design.where}
                       </p>
+                      {!selecting && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setRenaming(design);
+                          }}
+                          onKeyDown={(event) => event.stopPropagation()}
+                          className="mt-2 cursor-pointer rounded-full border border-white/15 px-3 py-1 text-[10px] uppercase tracking-wider text-white/50 transition hover:border-white/40 hover:text-white"
+                        >
+                          Rename
+                        </button>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -444,6 +502,30 @@ function DeveloperPage() {
           </p>
         )}
       </div>
+
+      {opening && (
+        <AdminReauthDialog
+          designLabel={nameOf(opening)}
+          onCancel={() => setOpening(null)}
+          onVerified={() => {
+            // Admins skip the group's color lock, but only after this check.
+            grantSessionPass(opening.node.id);
+            navigate(opening.url);
+          }}
+        />
+      )}
+
+      {renaming && (
+        <RenameParolDialog
+          currentName={parolLabel(renaming.node)}
+          originalName={renaming.node.name}
+          onCancel={() => setRenaming(null)}
+          onSave={(name) => {
+            setNodeParolName(renaming.node.id, name);
+            setRenaming(null);
+          }}
+        />
+      )}
 
       {pending?.kind === "all" && (
         <ConfirmDialog
