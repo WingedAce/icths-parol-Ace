@@ -47,6 +47,10 @@ export type ProjectNode = {
   // Set from the Developer Window. A locked group (design) cannot be opened,
   // edited or deleted by anyone until it is unlocked again.
   locked?: boolean;
+  // A display name for the parol, set from the Developer Window. It is only a
+  // label: `name` ("Group 3") stays as it is, because students open their
+  // design by typing that group number on the home page.
+  parolName?: string;
 };
 
 export type AudioSection = {
