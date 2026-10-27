@@ -25,6 +25,7 @@ import TrialWorkspace from "../components/TrialWorkspace";
 import type { DesignPiece, RoundPiece } from "../components/TrialWorkspace";
 
 import { remapFramesToBeats } from "../utils/audioTiming";
+import { displayName, originalNameIfRenamed } from "../utils/parolName";
 
 import type { AudioAnalysis } from "../types";
 
@@ -341,8 +342,11 @@ function WorkspacePage() {
     ? getChildren(parentId)
     : [];
 
-  const title =
-    currentNode?.name ?? currentWorkspace.name;
+  const title = currentNode
+    ? displayName(currentNode)
+    : currentWorkspace.name;
+  // "Group 3", shown small under a renamed parol's title.
+  const titleOriginal = currentNode ? originalNameIfRenamed(currentNode) : null;
 
   function openNode(id: string) {
     const nextPath = [...pathIds, id].join("/");
@@ -551,15 +555,22 @@ async function handleFile(
           {nodeChain.map((node) => (
             <span key={node.id}>
               {" / "}
-              {node.name}
+              {displayName(node)}
             </span>
           ))}
         </div>
 
         <div className="mt-5 flex items-end justify-between">
-          <h1 className="font-serif text-6xl font-light">
-            {title}
-          </h1>
+          <div>
+            <h1 className="font-serif text-6xl font-light">
+              {title}
+            </h1>
+            {titleOriginal && (
+              <p className="mt-2 text-[11px] uppercase tracking-[0.3em] text-white/30">
+                {titleOriginal}
+              </p>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <SaveButton />
@@ -1030,8 +1041,13 @@ async function handleFile(
                     </p>
 
                     <h2 className="mt-2 font-serif text-3xl font-light">
-                      {item.name}
+                      {displayName(item)}
                     </h2>
+                    {originalNameIfRenamed(item) && (
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.25em] text-white/30">
+                        {originalNameIfRenamed(item)}
+                      </p>
+                    )}
                   </div>
                 </button>
 
