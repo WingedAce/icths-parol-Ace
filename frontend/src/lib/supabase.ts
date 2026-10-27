@@ -20,3 +20,54 @@ export async function ensureSession(): Promise<boolean> {
     return false;
   }
 }
+
+// Extra security check for the Developer Window: confirms that the email and
+// password typed in belong to the admin who is signed in right now. It uses a
+// separate, temporary client, so the real session is never touched or signed
+// out.
+export type AdminCheck =
+  | "ok"
+  | "bad-credentials"
+  | "wrong-account"
+  | "not-admin"
+  | "error";
+
+export async function verifyAdminCredentials(
+  email: string,
+  password: string,
+): Promise<AdminCheck> {
+  try {
+    const { data: current } = await supabase.auth.getUser();
+    const currentEmail = current.user?.email?.toLowerCase();
+    if (!current.user || current.user.is_anonymous || !currentEmail) {
+      return "not-admin";
+    }
+    if (email.trim().toLowerCase() !== currentEmail) return "wrong-account";
+
+    const checker = createClient(
+      import.meta.env.VITE_SUPABASE_URL as string,
+      import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+          storageKey: "parol-admin-reauth",
+        },
+      },
+    );
+
+    const { error } = await checker.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) return "bad-credentials";
+
+    const { data: isAdmin } = await checker.rpc("is_admin");
+    // "local" only ends this temporary session, never the real one.
+    await checker.auth.signOut({ scope: "local" });
+    return isAdmin ? "ok" : "not-admin";
+  } catch {
+    return "error";
+  }
+}
