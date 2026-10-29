@@ -51,11 +51,22 @@ export type RoundPiece = {
 type DesignOverride = DesignPiece & { base: string };
 type RoundOverride = RoundPiece & { base: string };
 
+// A frozen copy of the real project. While live sync is off, the trial shows
+// THIS for every piece the user hasn't edited, so changes other people make
+// in Round 1/2/3 don't move the trial around. It is only refreshed on "Sync now".
+type Snapshot = {
+  design: DesignPiece;
+  rounds: Partial<Record<Round, RoundPiece>>;
+};
+
 type TrialDraft = {
   design: DesignOverride | null;
   rounds: Partial<Record<Round, RoundOverride>>;
   previewRound: Round;
   sub: SubTab;
+  // Off by default: the trial only follows the real rounds when told to.
+  liveSync: boolean;
+  snapshot: Snapshot | null;
 };
 
 const EMPTY_DRAFT: TrialDraft = {
@@ -63,6 +74,8 @@ const EMPTY_DRAFT: TrialDraft = {
   rounds: {},
   previewRound: 1,
   sub: "zones",
+  liveSync: false,
+  snapshot: null,
 };
 
 const designOf = (node: ProjectNode): DesignPiece => ({
@@ -97,6 +110,20 @@ function readDraft(saved: unknown): TrialDraft {
     previewRound:
       d.previewRound === 2 || d.previewRound === 3 ? d.previewRound : 1,
     sub: d.sub === "pins" || d.sub === "preview" ? d.sub : "zones",
+    liveSync: d.liveSync === true,
+    snapshot:
+      d.snapshot &&
+      typeof d.snapshot === "object" &&
+      d.snapshot.design &&
+      typeof d.snapshot.design === "object"
+        ? {
+            design: d.snapshot.design,
+            rounds:
+              d.snapshot.rounds && typeof d.snapshot.rounds === "object"
+                ? d.snapshot.rounds
+                : {},
+          }
+        : null,
   };
 }
 
@@ -127,18 +154,49 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
   >(null);
   const [notice, setNotice] = useState("");
 
+  function takeSnapshot(): Snapshot {
+    const rounds: Partial<Record<Round, RoundPiece>> = {};
+    for (const r of ROUNDS) {
+      const song = songNodes[r];
+      if (song) rounds[r] = roundPieceOf(song);
+    }
+    return { design: designOf(groupNode), rounds };
+  }
+
   // Bring the saved trial back (so a reload doesn't lose it).
   useEffect(() => {
     let cancelled = false;
     void localGet<unknown>(draftKey(groupNode.id)).then((saved) => {
       if (cancelled) return;
-      setDraft(readDraft(saved));
+      const loaded = readDraft(saved);
+      // First time (or an older saved trial): freeze the real project now.
+      setDraft(
+        loaded.snapshot ? loaded : { ...loaded, snapshot: takeSnapshot() },
+      );
       setReady(true);
     });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupNode.id]);
+
+  // A round whose song slot is created after the snapshot was taken joins the
+  // snapshot once, so it is frozen too instead of following the real one.
+  useEffect(() => {
+    if (!ready) return;
+    setDraft((prev) => {
+      if (!prev.snapshot) return prev;
+      let rounds = prev.snapshot.rounds;
+      for (const r of ROUNDS) {
+        const song = songNodes[r];
+        if (song && !rounds[r]) rounds = { ...rounds, [r]: roundPieceOf(song) };
+      }
+      return rounds === prev.snapshot.rounds
+        ? prev
+        : { ...prev, snapshot: { ...prev.snapshot, rounds } };
+    });
+  }, [ready, songNodes]);
 
   useEffect(() => {
     if (!ready) return;
@@ -149,12 +207,23 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     return <p className="text-sm text-white/30">Opening trial…</p>;
   }
 
-  const { previewRound, sub } = draft;
+  const { previewRound, sub, liveSync } = draft;
+
+  // The pieces the trial starts from: the real project right now (live sync
+  // on) or the frozen copy (live sync off, the default).
+  const realDesign = designOf(groupNode);
+  const sourceDesign: DesignPiece =
+    liveSync || !draft.snapshot ? realDesign : draft.snapshot.design;
+  const sourceRound = (r: Round): RoundPiece | undefined => {
+    const song = songNodes[r];
+    if (!song) return undefined;
+    return liveSync ? roundPieceOf(song) : draft.snapshot?.rounds[r] ?? roundPieceOf(song);
+  };
 
   // ---- What the trial looks like right now ----
   const design: DesignPiece = draft.design
     ? withoutBase(draft.design)
-    : designOf(groupNode);
+    : sourceDesign;
   const trialGroup: ProjectNode = { ...groupNode, ...design };
 
   const realSong = songNodes[previewRound];
@@ -163,7 +232,9 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     ? {
         ...realSong,
         id: `trial:${realSong.id}`,
-        ...(roundOverride ? withoutBase(roundOverride) : roundPieceOf(realSong)),
+        ...(roundOverride
+          ? withoutBase(roundOverride)
+          : sourceRound(previewRound) ?? roundPieceOf(realSong)),
       }
     : undefined;
 
@@ -193,12 +264,12 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     setDraft((prev) => {
       const current = prev.design
         ? withoutBase(prev.design)
-        : designOf(groupNode);
+        : sourceDesign;
       return {
         ...prev,
         design: {
           ...fn(current),
-          base: prev.design?.base ?? stable(designOf(groupNode)),
+          base: prev.design?.base ?? stable(sourceDesign),
         },
       };
     });
@@ -207,16 +278,53 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
   function editRound(r: Round, patch: Partial<RoundPiece>) {
     const song = songNodes[r];
     if (!song) return;
+    const start = sourceRound(r) ?? roundPieceOf(song);
     setDraft((prev) => {
       const current: RoundOverride = prev.rounds[r] ?? {
-        ...roundPieceOf(song),
-        base: stable(roundPieceOf(song)),
+        ...start,
+        base: stable(start),
       };
       return {
         ...prev,
         rounds: { ...prev.rounds, [r]: { ...current, ...patch } },
       };
     });
+  }
+
+  // How far the real project has moved away from what the trial is showing.
+  const realMoved =
+    !liveSync &&
+    draft.snapshot !== null &&
+    (stable(realDesign) !== stable(draft.snapshot.design) ||
+      ROUNDS.some((r) => {
+        const song = songNodes[r];
+        const snap = draft.snapshot?.rounds[r];
+        return song !== undefined && snap !== undefined && stable(roundPieceOf(song)) !== stable(snap);
+      }));
+
+  function setLiveSync(on: boolean) {
+    setDraft((prev) => ({
+      ...prev,
+      liveSync: on,
+      // Turning it off freezes whatever the real project looks like right now.
+      snapshot: on ? prev.snapshot : takeSnapshot(),
+    }));
+    setVersion((v) => v + 1);
+    setNotice(
+      on
+        ? "Live sync is on. Parts you haven't changed here follow the real rounds."
+        : "Live sync is off. The trial stays as it is until you press Sync now.",
+    );
+  }
+
+  // One-time refresh: pull in the real project's latest. Pieces you edited in
+  // the trial keep your edits (use "Take out trial changes" to drop those).
+  function syncNow() {
+    setDraft((prev) => ({ ...prev, snapshot: takeSnapshot() }));
+    setVersion((v) => v + 1);
+    setNotice(
+      "Synced. Parts you haven't changed here now match the real rounds. Parts you edited in the trial were kept.",
+    );
   }
 
   const setSub = (next: SubTab) => setDraft((prev) => ({ ...prev, sub: next }));
@@ -239,7 +347,25 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     setDraft((prev) => {
       const rounds = { ...prev.rounds };
       if (useRound) delete rounds[r];
-      return { ...prev, design: useDesign ? null : prev.design, rounds };
+      return {
+        ...prev,
+        design: useDesign ? null : prev.design,
+        rounds,
+        // What was just written is now the real thing (the real project hasn't
+        // re-rendered yet), so the frozen copy takes those values.
+        snapshot: prev.snapshot
+          ? {
+              design:
+                useDesign && draft.design
+                  ? withoutBase(draft.design)
+                  : prev.snapshot.design,
+              rounds:
+                useRound && roundDraft
+                  ? { ...prev.snapshot.rounds, [r]: withoutBase(roundDraft) }
+                  : prev.snapshot.rounds,
+            }
+          : prev.snapshot,
+      };
     });
     const song = songNodes[r];
     if (song) void localDelete(historyKeyOf(song.id));
@@ -257,6 +383,8 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       ...EMPTY_DRAFT,
       previewRound: prev.previewRound,
       sub: prev.sub,
+      liveSync: prev.liveSync,
+      snapshot: takeSnapshot(),
     }));
     setVersion((v) => v + 1);
     setNotice("Trial changes were taken out. Everything matches the real rounds again.");
@@ -270,7 +398,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       const song = songNodes[r];
       if (song) void localDelete(historyKeyOf(song.id));
     }
-    setDraft(EMPTY_DRAFT);
+    setDraft({ ...EMPTY_DRAFT, snapshot: takeSnapshot() });
     setVersion((v) => v + 1);
     setNotice("Trial was reset. You are starting a new trial.");
     setDialog(null);
@@ -305,6 +433,50 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
           }`}
         >
           {summary}
+        </p>
+      </div>
+
+      {/* Sync with the real rounds */}
+      <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-3">
+        <label className="flex cursor-pointer items-center gap-3 text-[11px] uppercase tracking-wider text-white/60">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={liveSync}
+            aria-label="Live sync with the real rounds"
+            onClick={() => setLiveSync(!liveSync)}
+            className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition ${
+              liveSync
+                ? "border-amber-200/60 bg-amber-200/30"
+                : "border-white/20 bg-white/[0.06]"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-all ${
+                liveSync ? "left-[18px]" : "left-0.5"
+              }`}
+            />
+          </button>
+          Live sync {liveSync ? "on" : "off"}
+        </label>
+
+        <button
+          disabled={liveSync || !realMoved}
+          onClick={() => {
+            setNotice("");
+            syncNow();
+          }}
+          className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/15 disabled:hover:text-white/70"
+        >
+          Sync now
+        </button>
+
+        <p className="text-xs text-white/35">
+          {liveSync
+            ? "The trial follows changes made in the real rounds."
+            : realMoved
+              ? "The real rounds changed since you started. Press Sync now to bring them in."
+              : "The trial won't follow the real rounds unless you sync."}
         </p>
       </div>
 
