@@ -6,6 +6,7 @@ import SequenceEditor from "./SequenceEditor";
 import ZoneMapper from "./ZoneMapper";
 import { stable } from "../lib/cloudSync";
 import { localDelete, localGet, localSet } from "../lib/localDraft";
+import { describeParts, mergeDesign, mergeRound } from "../utils/trialMerge";
 import type {
   BpmChange,
   Frame,
@@ -337,10 +338,22 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     const roundDraft = draft.rounds[r];
     const useRound = roundChanged(r) && roundDraft !== undefined;
 
+    // Only what the trial changed is added on top of what the real round has
+    // now; everything the trial never touched is left exactly as it is.
+    const realSong = songNodes[r];
+    const designMerged =
+      useDesign && draft.design
+        ? mergeDesign(draft.design.base, withoutBase(draft.design), designOf(groupNode))
+        : null;
+    const roundMerged =
+      useRound && roundDraft && realSong
+        ? mergeRound(roundDraft.base, withoutBase(roundDraft), roundPieceOf(realSong))
+        : null;
+
     onApply({
       round: r,
-      design: useDesign && draft.design ? withoutBase(draft.design) : null,
-      roundPiece: useRound && roundDraft ? withoutBase(roundDraft) : null,
+      design: designMerged ? designMerged.piece : null,
+      roundPiece: roundMerged ? roundMerged.piece : null,
     });
 
     // What was added is now real, so it leaves the trial.
@@ -370,7 +383,9 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     const song = songNodes[r];
     if (song) void localDelete(historyKeyOf(song.id));
     setVersion((v) => v + 1);
-    setNotice(`Trial changes were added to Round ${r}.`);
+    setNotice(
+      `Only the changes you made in the trial were added to Round ${r}. Everything else in Round ${r} was left as it was.`,
+    );
     setDialog(null);
   }
 
@@ -414,6 +429,20 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     : "No trial changes yet";
 
   const applyRound = dialog?.kind === "apply" ? dialog.round : null;
+
+  // What adding the trial to the chosen round would actually change.
+  const applyDesignMerge =
+    applyRound !== null && designChanged && draft.design
+      ? mergeDesign(draft.design.base, withoutBase(draft.design), designOf(groupNode))
+      : null;
+  const applyRoundSong = applyRound !== null ? songNodes[applyRound] : undefined;
+  const applyRoundDraft = applyRound !== null ? draft.rounds[applyRound] : undefined;
+  const applyRoundMerge =
+    applyRound !== null && roundChanged(applyRound) && applyRoundDraft && applyRoundSong
+      ? mergeRound(applyRoundDraft.base, withoutBase(applyRoundDraft), roundPieceOf(applyRoundSong))
+      : null;
+  const applyConflicts =
+    (applyDesignMerge?.conflicts ?? 0) + (applyRoundMerge?.conflicts ?? 0);
 
   return (
     <div>
@@ -651,40 +680,53 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       {applyRound !== null && (
         <ConfirmDialog
           title={`Add trial changes to Round ${applyRound}?`}
-          checkboxLabel={`I understand this permanently changes Round ${applyRound}${
+          checkboxLabel={`I understand this permanently adds these changes to Round ${applyRound}${
             designChanged ? " and the shared design" : ""
           }`}
           confirmLabel={`Yes, add to Round ${applyRound}`}
           onCancel={() => setDialog(null)}
           onConfirm={() => applyToRound(applyRound)}
         >
-          <p>Are you sure you want to continue? This will write:</p>
-          {designChanged && (
+          <p>
+            Are you sure you want to continue? Only the changes you made in
+            the trial are added. Everything you did not change in the trial
+            stays exactly as Round {applyRound} has it now.
+          </p>
+          {applyDesignMerge && (
             <p>
-              • The trial's zone map, pins and tricolor merges. The design is
-              shared by all three rounds, so Round 1, Round 2 and Round 3 are
-              all affected. Keyframes in the other rounds may point to pins
-              that no longer exist.
-            </p>
-          )}
-          {roundChanged(applyRound) && (
-            <p>
-              • The trial's Round {applyRound} keyframes, transitions and
-              timing. They replace what Round {applyRound} has now.
-            </p>
-          )}
-          {(designStale && designChanged) || roundStale(applyRound) ? (
-            <p className="text-amber-200/80">
-              Careful: the real{" "}
-              {designStale && designChanged ? "design" : ""}
-              {designStale && designChanged && roundStale(applyRound)
-                ? " and "
+              • Zone map, pins and tricolor merges
+              {applyDesignMerge.parts.length > 0
+                ? ` (${describeParts(applyDesignMerge.parts)})`
                 : ""}
-              {roundStale(applyRound) ? `Round ${applyRound}` : ""} was changed
-              after you started this trial, and those newer changes will be
-              overwritten.
+              . The design is shared by all three rounds, so Round 1, Round 2
+              and Round 3 are all affected. Keyframes in the other rounds may
+              point to pins that no longer exist.
             </p>
-          ) : null}
+          )}
+          {applyRoundMerge && (
+            <p>
+              • Round {applyRound} keyframes and timing
+              {applyRoundMerge.parts.length > 0
+                ? ` (${describeParts(applyRoundMerge.parts)})`
+                : ""}
+              . Keyframes you did not touch are kept.
+            </p>
+          )}
+          {((designStale && designChanged) || roundStale(applyRound)) && (
+            <p className="text-white/50">
+              The real {designStale && designChanged ? "design" : ""}
+              {designStale && designChanged && roundStale(applyRound) ? " and " : ""}
+              {roundStale(applyRound) ? `Round ${applyRound}` : ""} was changed
+              after you started this trial. Those other changes are kept.
+            </p>
+          )}
+          {applyConflicts > 0 && (
+            <p className="text-amber-200/80">
+              Careful: {applyConflicts} {applyConflicts === 1 ? "item was" : "items were"}{" "}
+              changed in both the trial and the real round. For those, the
+              trial's version is used.
+            </p>
+          )}
           <p>This can't be undone.</p>
         </ConfirmDialog>
       )}
