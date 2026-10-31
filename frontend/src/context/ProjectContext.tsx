@@ -68,6 +68,16 @@ type ProjectContextType = {
   addWorkspace: (name: string, type: WorkspaceType) => string;
   renameWorkspace: (id: string, name: string) => void;
   deleteWorkspace: (id: string) => void;
+  // Deletes several nodes (and everything under them) as ONE step, so a
+  // single Undo brings all of them back.
+  deleteNodes: (ids: string[]) => void;
+  // Puts back the most recent deletion (drawings included). Deletions are
+  // remembered in memory only, so they are forgotten when the page reloads.
+  undoDelete: () => Promise<UndoResult>;
+  // The most recent deletion that can still be undone, if any.
+  lastDeletion: { label: string; at: number } | null;
+  // How many deletions can still be undone.
+  deletionCount: number;
   addNode: (
     parentId: string,
     name: string,
@@ -113,6 +123,48 @@ type ProjectContextType = {
 };
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
+
+// What one delete removed, kept in memory so it can be undone.
+type DeletedBatch = {
+  at: number;
+  label: string;
+  // Every removed node (with everything under it) and where it sat in its
+  // parent's list.
+  nodes: { node: ProjectNode; index: number }[];
+  // Set when a whole workspace was deleted.
+  workspace?: { workspace: Workspace; index: number };
+};
+
+// The newest deletions that stay undoable.
+const MAX_UNDO = 10;
+
+export type UndoResult =
+  | { ok: true; label: string }
+  | { ok: false; reason: "nothing" | "busy" | "images" };
+
+// Copies the nodes with these ids, and everything below them, out of the
+// tree (read-only; nothing is changed).
+function snapshotBranches(
+  rootIds: Set<string>,
+  nodes: Record<string, ProjectNode[]>,
+) {
+  const out: { node: ProjectNode; index: number }[] = [];
+  const seen = new Set<string>();
+
+  const visit = (node: ProjectNode, index: number) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    out.push({ node, index });
+    (nodes[node.id] ?? []).forEach((child, i) => visit(child, i));
+  };
+
+  for (const list of Object.values(nodes)) {
+    list.forEach((node, index) => {
+      if (rootIds.has(node.id)) visit(node, index);
+    });
+  }
+  return out;
+}
 
 function deleteBranch(
   nodes: Record<string, ProjectNode[]>,
@@ -349,6 +401,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [cloudLoaded, setCloudLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+
+  // Recent deletions that can be undone (newest last). Memory only.
+  const [deletions, setDeletions] = useState<DeletedBatch[]>([]);
+  const deletionsRef = useRef<DeletedBatch[]>([]);
+  const undoing = useRef(false);
 
   // Latest values, readable from timers and network callbacks.
   const nodesRef = useRef(nodesByParent);
@@ -847,23 +904,46 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  function setDeletionStack(next: DeletedBatch[]) {
+    deletionsRef.current = next;
+    setDeletions(next);
+  }
+
+  function rememberDeletion(batch: DeletedBatch) {
+    setDeletionStack([...deletionsRef.current, batch].slice(-MAX_UNDO));
+  }
+
   function deleteWorkspace(id: string) {
+    const workspace = workspacesRef.current.find((w) => w.id === id);
+    const roots = new Set((nodesRef.current[id] ?? []).map((n) => n.id));
+    const removed = snapshotBranches(roots, nodesRef.current);
+
+    if (workspace) {
+      rememberDeletion({
+        at: Date.now(),
+        label: `the "${workspace.name}" workspace`,
+        nodes: removed,
+        workspace: {
+          workspace,
+          index: workspacesRef.current.indexOf(workspace),
+        },
+      });
+    }
+
     setWorkspaces((previous) =>
       previous.filter((workspace) => workspace.id !== id),
     );
 
     setNodesByParent((previous) => {
       const next = { ...previous };
-
-      const removedIds = deleteBranch(next, id);
-      deleteImage(id).catch(() => { });
-
-      for (const removedId of removedIds) {
-        deleteImage(removedId).catch(() => { });
-      }
-
+      deleteBranch(next, id);
       return next;
     });
+
+    deleteImage(id).catch(() => { });
+    for (const { node } of removed) {
+      deleteImage(node.id).catch(() => { });
+    }
   }
 
   function addNode(
@@ -916,25 +996,124 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  function deleteNode(id: string) {
+  // Deletes the nodes and everything under them in ONE step, and remembers
+  // them (drawings included) so undoDelete can bring them back.
+  function deleteNodes(ids: string[]) {
+    const roots = new Set(ids);
+    const removed = snapshotBranches(roots, nodesRef.current);
+    if (removed.length === 0) return;
+
+    const rootNodes = removed.filter((r) => roots.has(r.node.id));
+    const designs = removed.filter((r) => r.node.type === "group").length;
+    const label =
+      designs > 0
+        ? `${designs} ${designs === 1 ? "design" : "designs"}`
+        : rootNodes.length === 1
+          ? `"${rootNodes[0].node.name}"`
+          : `${rootNodes.length} items`;
+
+    rememberDeletion({ at: Date.now(), label, nodes: removed });
+
     setNodesByParent((previous) => {
       const next = { ...previous };
 
       for (const parentId of Object.keys(next)) {
-        next[parentId] = next[parentId].filter(
-          (node) => node.id !== id,
-        );
+        next[parentId] = next[parentId].filter((node) => !roots.has(node.id));
       }
-
-      const removedIds = deleteBranch(next, id);
-      deleteImage(id).catch(() => { });
-
-      for (const removedId of removedIds) {
-        deleteImage(removedId).catch(() => { });
-      }
+      for (const id of roots) deleteBranch(next, id);
 
       return next;
     });
+
+    for (const { node } of removed) {
+      deleteImage(node.id).catch(() => { });
+    }
+  }
+
+  function deleteNode(id: string) {
+    deleteNodes([id]);
+  }
+
+  // Puts back the most recent deletion: the drawings first (they were
+  // removed from Storage), then the nodes. If a drawing can't be uploaded
+  // nothing is restored and the deletion stays undoable, so it can be retried.
+  async function undoDelete(): Promise<UndoResult> {
+    if (undoing.current) return { ok: false, reason: "busy" };
+    const batch = deletionsRef.current[deletionsRef.current.length - 1];
+    if (!batch) return { ok: false, reason: "nothing" };
+
+    undoing.current = true;
+    try {
+      const withImages = batch.nodes.filter((r) => r.node.imageDataUrl);
+      try {
+        await Promise.all(
+          withImages.map((r) =>
+            saveImage(r.node.id, r.node.imageDataUrl as string),
+          ),
+        );
+      } catch (error) {
+        console.error("Could not restore drawings:", error);
+        return { ok: false, reason: "images" };
+      }
+
+      // Remember the new drawing stamps so our own update check doesn't
+      // download them again or mistake them for another device's change.
+      try {
+        const stamps = await listImageStamps();
+        for (const r of withImages) {
+          const stamp = stamps.get(r.node.id);
+          if (stamp) imageStamps.current.set(r.node.id, stamp);
+        }
+      } catch {
+        // harmless: worst case the next check re-downloads them once
+      }
+
+      setDeletionStack(deletionsRef.current.filter((b) => b !== batch));
+
+      if (batch.workspace) {
+        const { workspace, index } = batch.workspace;
+        setWorkspaces((previous) =>
+          previous.some((w) => w.id === workspace.id)
+            ? previous
+            : [
+              ...previous.slice(0, index),
+              workspace,
+              ...previous.slice(index),
+            ],
+        );
+      }
+
+      setNodesByParent((previous) => {
+        const next = { ...previous };
+        const ordered = [...batch.nodes].sort((a, b) => a.index - b.index);
+
+        for (const { node, index } of ordered) {
+          const list = next[node.parentId] ?? [];
+          // Never overwrite something that exists again (or a new song
+          // slot that was filled in the meantime).
+          if (list.some((item) => item.id === node.id)) continue;
+          if (
+            node.type === "animation" &&
+            list.some(
+              (item) =>
+                item.type === "animation" &&
+                (item.round ?? 1) === (node.round ?? 1),
+            )
+          ) {
+            continue;
+          }
+          const copy = [...list];
+          copy.splice(Math.min(index, copy.length), 0, node);
+          next[node.parentId] = copy;
+        }
+
+        return next;
+      });
+
+      return { ok: true, label: batch.label };
+    } finally {
+      undoing.current = false;
+    }
   }
 
 
@@ -1268,6 +1447,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         addWorkspace,
         renameWorkspace,
         deleteWorkspace,
+        deleteNodes,
+        undoDelete,
+        lastDeletion:
+          deletions.length > 0
+            ? {
+              label: deletions[deletions.length - 1].label,
+              at: deletions[deletions.length - 1].at,
+            }
+            : null,
+        deletionCount: deletions.length,
         addNode,
         renameNode,
         deleteNode,
