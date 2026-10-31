@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import ParolPreview from "./ParolPreview";
-import { beatsBetween, buildInbetweens } from "../utils/audioTiming";
+import TransitionTiming from "./TransitionTiming";
+import {
+  autoStepCount,
+  beatsBetween,
+  buildInbetweens,
+  changedUnits,
+  inbetweenTimes,
+  matchTolerance,
+} from "../utils/audioTiming";
+import {
+  PRESET_GROUPS,
+  PRESETS,
+  presetLabel,
+  isSweep,
+  type Preset,
+} from "../utils/transitionPresets";
 import { effectiveAnalysis } from "../utils/bpmChanges";
 import {
   FULL_LEVEL,
@@ -9,6 +24,7 @@ import {
   analogPinSet,
   describePins,
   levelOf,
+  pinPositions,
   pruneLevels,
   sameLights,
 } from "../utils/pins";
@@ -18,7 +34,6 @@ import type {
   ManualStep,
   PinLevels,
   ProjectNode,
-  Transition,
 } from "../types";
 
 const pillClass =
@@ -35,34 +50,9 @@ const emptyBoxClass =
 // starts over, in seconds.
 const LOOP_TAIL = 0.6;
 
-// The ready-made transitions. They are also the starting points for Manual.
-type Preset = Exclude<Transition, "manual">;
-
-const PRESETS: { value: Preset; label: string; hint: string }[] = [
-  {
-    value: "hold",
-    label: "Hold",
-    hint: "Keep the first keyframe's lights on until the next keyframe.",
-  },
-  {
-    value: "ripple",
-    label: "Ripple",
-    hint: "Change the lights one pin at a time, spread evenly over the beats in between.",
-  },
-  {
-    value: "alternate",
-    label: "Alternate",
-    hint: "Flip between the first keyframe's lights and the second's on every beat.",
-  },
-  {
-    value: "fade",
-    label: "Fade",
-    hint: "Dim analog pins smoothly from the first keyframe's brightness to the second's. Digital pins switch halfway.",
-  },
-];
-
-const presetLabel = (value: Preset) =>
-  PRESETS.find((p) => p.value === value)?.label ?? value;
+// How many in-betweens get a thumbnail in the strip at once. With a custom
+// count there can be thousands, so only a window around the picked one shows.
+const STRIP_WINDOW = 60;
 
 type KeyframeGalleryProps = {
   // The Group node: owns the drawing, zones and pin mappings.
@@ -71,6 +61,14 @@ type KeyframeGalleryProps = {
   animationNode: ProjectNode;
   onFramesChange: (frames: Frame[]) => void;
 };
+
+// m:ss.mmm  (for in-betweens that sit closer together than the beats)
+function formatTimeFine(seconds: number) {
+  const ms = Math.round(seconds * 1000);
+  const minutes = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${String(secs).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`;
+}
 
 // m:ss.t  (tenths of a second, because beats are only ~0.5s apart)
 function formatTime(seconds: number) {
@@ -318,10 +316,29 @@ function PairView({
     [from.litPins, to.litPins],
   );
 
-  const beatTimes = useMemo(
-    () => (analysis ? beatsBetween(analysis, from.time, to.time) : []),
+  // Where each pin sits on the drawing, for the spin / wipe presets.
+  const positions = useMemo(
+    () => pinPositions(groupNode.zones, groupNode.pinMappings),
+    [groupNode.zones, groupNode.pinMappings],
+  );
+
+  // The units (pins, or whole tricolor LEDs) that differ between the two
+  // keyframes, and when the in-betweens sit in time.
+  const units = useMemo(
+    () => changedUnits(from, to, analog, groupNode.tricolorGroups ?? []),
+    [from, to, analog, groupNode.tricolorGroups],
+  );
+  const autoCount = autoStepCount(mode, units.length);
+  const beatCount = useMemo(
+    () => (analysis ? beatsBetween(analysis, from.time, to.time).length : 0),
     [analysis, from.time, to.time],
   );
+  const stepTimes = useMemo(
+    () => (analysis ? inbetweenTimes(analysis, from, to, autoCount) : []),
+    [analysis, from, to, autoCount],
+  );
+  // How close a saved hand-made step has to be to count as this step.
+  const tolerance = matchTolerance(from.time, to.time, stepTimes);
 
   // First keyframe, then one in-between per beat, then the second keyframe.
   // Hold has no generated in-betweens, so they are filled in here as copies
@@ -329,7 +346,7 @@ function PairView({
   const steps = useMemo(() => {
     let inbetweens: Frame[];
     if (mode === "hold") {
-      inbetweens = beatTimes.map((time, index) => ({
+      inbetweens = stepTimes.map((time, index) => ({
         id: `${from.id}-${index + 1}`,
         kind: "inbetween",
         sectionId: from.sectionId,
@@ -339,10 +356,27 @@ function PairView({
         ...(from.tricolors ? { tricolors: { ...from.tricolors } } : {}),
       }));
     } else {
-      inbetweens = analysis ? buildInbetweens(analysis, [from, to], analog, groupNode.tricolorGroups ?? []) : [];
+      inbetweens = analysis
+        ? buildInbetweens(
+            analysis,
+            [from, to],
+            analog,
+            groupNode.tricolorGroups ?? [],
+            positions,
+          )
+        : [];
     }
     return [from, ...inbetweens, to];
-  }, [analysis, from, to, mode, beatTimes, analog, groupNode.tricolorGroups]);
+  }, [
+    analysis,
+    from,
+    to,
+    mode,
+    stepTimes,
+    analog,
+    groupNode.tricolorGroups,
+    positions,
+  ]);
 
   const betweenCount = steps.length - 2;
 
@@ -380,6 +414,19 @@ function PairView({
   const isBetween = activeIndex >= 1 && activeIndex <= betweenCount;
   const canEdit = isManual && isBetween;
 
+  // Custom and sweep timing can put in-betweens closer than a tenth of a
+  // second apart, so their times are shown to the millisecond.
+  const fineTimes = (from.stepTiming ?? "auto") === "custom" || autoCount > 0;
+
+  // With thousands of in-betweens only a window around the picked one gets
+  // thumbnails.
+  const stripCenter = Math.min(Math.max(activeIndex, 1), Math.max(betweenCount, 1));
+  const stripStart = Math.max(
+    1,
+    Math.min(stripCenter - STRIP_WINDOW / 2, betweenCount - STRIP_WINDOW + 1),
+  );
+  const stripEnd = Math.min(betweenCount, stripStart + STRIP_WINDOW - 1);
+
   // ---- Manual mode: build one in-between, then save it ----
   // The pins being toggled for the beat that is showing. Nothing is stored
   // until the user presses Save.
@@ -395,7 +442,9 @@ function PairView({
   const displayLevels = draftNow?.levels ?? showing.levels;
 
   const isSavedAt = (time: number) =>
-    (from.manualSteps ?? []).some((step) => Math.abs(step.time - time) < 0.02);
+    (from.manualSteps ?? []).some(
+      (step) => Math.abs(step.time - time) < tolerance,
+    );
   const savedCount = steps
     .slice(1, -1)
     .filter((step) => isSavedAt(step.time)).length;
@@ -467,16 +516,26 @@ function PairView({
     setDraft(null);
     const seeded: ManualStep[] =
       preset === "hold" || !analysis
-        ? beatTimes.map((time) => ({
+        ? stepTimes.map((time) => ({
             time,
             litPins: [...from.litPins],
             ...(from.levels ? { levels: { ...from.levels } } : {}),
           }))
         : buildInbetweens(
             analysis,
-            [{ ...from, transition: preset }, to],
+            // Same timing as the manual steps use now (beats or custom), not
+            // the preset's own default speed, so the times line up.
+            [
+              {
+                ...from,
+                transition: preset,
+                stepTiming: from.stepTiming === "custom" ? "custom" : "beat",
+              },
+              to,
+            ],
             analog,
             groupNode.tricolorGroups ?? [],
+            positions,
           ).map((f) => ({
             time: f.time,
             litPins: [...f.litPins],
@@ -512,7 +571,7 @@ function PairView({
   const saveStep = () => {
     if (!canSave) return;
     const others = (from.manualSteps ?? []).filter(
-      (step) => Math.abs(step.time - showing.time) >= 0.02,
+      (step) => Math.abs(step.time - showing.time) >= tolerance,
     );
     const sortedPins = [...displayLit].sort((a, b) => a - b);
     const keptLevels = pruneLevels(displayLevels, sortedPins);
@@ -536,7 +595,7 @@ function PairView({
     if (!isSavedHere) return;
     onChangeFrame({
       manualSteps: (from.manualSteps ?? []).filter(
-        (step) => Math.abs(step.time - showing.time) >= 0.02,
+        (step) => Math.abs(step.time - showing.time) >= tolerance,
       ),
     });
     setDraft(null);
@@ -547,7 +606,7 @@ function PairView({
   if (!isManual && mode !== "hold") {
     if (betweenCount === 0) {
       note =
-        "There are no beats between these two keyframes, so the lights just switch.";
+        "There are no in-betweens between these two keyframes, so the lights just switch. Use Custom timing to add some.";
     } else if (changedPins === 0) {
       note = `Both keyframes light the same pins${
         usedPins.some((pin) => analog.has(pin)) ? " at the same brightness" : ""
@@ -555,9 +614,12 @@ function PairView({
     } else if (mode === "fade" && !usedPins.some((pin) => analog.has(pin))) {
       note =
         "None of the pins used here are analog, so Fade just switches every pin halfway. Mark a pin as analog on the Zone Map tab to fade it.";
-    } else if (mode === "ripple" && changedPins > betweenCount) {
+    } else if (
+      (mode === "ripple" || isSweep(mode)) &&
+      changedPins > betweenCount
+    ) {
       note =
-        "More pins change than there are beats, so some pins change on the same beat.";
+        "More pins change than there are in-betweens, so some pins change on the same step.";
     }
   }
 
@@ -576,7 +638,7 @@ function PairView({
           {betweenCount === 0 ? (
             <div className={emptyBoxClass}>
               There are no beats between these two keyframes, so there is
-              nothing to fill in.
+              nothing to fill in. Custom timing can add in-betweens anyway.
             </div>
           ) : (
             <>
@@ -593,7 +655,9 @@ function PairView({
                     : `Keyframe ${activeIndex === 0 ? fromNumber : toNumber}`}
                 </p>
                 <p className="text-xs text-white/40">
-                  {formatTime(showing.time)}
+                  {fineTimes
+                    ? formatTimeFine(showing.time)
+                    : formatTime(showing.time)}
                   {isBetween && ` · ${activeIndex} of ${betweenCount}`}
                 </p>
               </div>
@@ -602,10 +666,10 @@ function PairView({
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={() => stepBeat(-1)} className={pillClass}>
-                  Previous beat
+                  Previous step
                 </button>
                 <button onClick={() => stepBeat(1)} className={pillClass}>
-                  Next beat
+                  Next step
                 </button>
               </div>
             </>
@@ -625,15 +689,19 @@ function PairView({
       {betweenCount > 0 && (
         <div className="min-w-0">
           <p className={labelClass}>
-            {betweenCount} in-between{betweenCount === 1 ? "" : "s"}, one per
-            beat
+            {betweenCount} in-between{betweenCount === 1 ? "" : "s"}
+            {fineTimes
+              ? `, about every ${Math.round((span / (betweenCount + 1)) * 1000)} ms`
+              : ", one per beat"}
+            {betweenCount > STRIP_WINDOW &&
+              ` · showing ${stripStart} to ${stripEnd}`}
           </p>
           <div
             ref={stripRef}
             className="relative flex gap-3 overflow-x-auto pb-3"
           >
-            {steps.slice(1, -1).map((step, i) => {
-              const index = i + 1;
+            {steps.slice(stripStart, stripEnd + 1).map((step, i) => {
+              const index = stripStart + i;
               return (
                 <button
                   key={step.id}
@@ -657,7 +725,7 @@ function PairView({
                   </div>
                   <p className="mt-2 text-xs text-white/50">{index}</p>
                   <p className="text-[11px] text-white/25">
-                    {formatTime(step.time)}
+                    {fineTimes ? formatTimeFine(step.time) : formatTime(step.time)}
                     {isManual &&
                       (isSavedAt(step.time) ? " · Saved" : " · Not saved")}
                   </p>
@@ -694,22 +762,45 @@ function PairView({
               </button>
             </div>
             <p className="text-xs text-white/40">
-              {betweenCount} beat{betweenCount === 1 ? "" : "s"} between ·{" "}
+              {betweenCount} in-between{betweenCount === 1 ? "" : "s"} ·{" "}
               {changedPins} pin{changedPins === 1 ? "" : "s"} differ
             </p>
           </div>
 
+          {mode !== "hold" && (
+            <div className="mt-6">
+              <TransitionTiming
+                from={from}
+                to={to}
+                autoCount={autoCount}
+                beatCount={beatCount}
+                currentCount={betweenCount}
+                onChange={(patch) => {
+                  setDraft(null);
+                  onChangeFrame(patch);
+                }}
+              />
+            </div>
+          )}
+
           {!isManual ? (
             <div className="mt-6">
-              <div className="flex flex-wrap gap-2">
-                {PRESETS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => pickPreset(option.value)}
-                    className={toggleClass(mode === option.value)}
-                  >
-                    {option.label}
-                  </button>
+              <div className="flex flex-col gap-4">
+                {PRESET_GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <p className={labelClass}>{group.label}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {group.options.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => pickPreset(option.value)}
+                          className={toggleClass(mode === option.value)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
 
@@ -739,13 +830,25 @@ function PairView({
             <div className="mt-6">
               <p className="text-sm text-white/60">
                 {betweenCount === 0
-                  ? `There are no beats between keyframe ${fromNumber} and keyframe ${toNumber}, so no in-betweens can be made here.`
-                  : `Between keyframe ${fromNumber} and keyframe ${toNumber} there ${
-                      betweenCount === 1 ? "is 1 beat" : `are ${betweenCount} beats`
-                    }, so you can make ${betweenCount} in-between${
+                  ? `There are no in-betweens between keyframe ${fromNumber} and keyframe ${toNumber}. Set Custom timing above to make some.`
+                  : `Between keyframe ${fromNumber} and keyframe ${toNumber} you can make ${betweenCount} in-between${
                       betweenCount === 1 ? "" : "s"
                     }. ${savedCount} saved.`}
               </p>
+              {(from.manualSteps?.length ?? 0) > savedCount && (
+                <p className="mt-2 text-xs text-amber-200/60">
+                  {(from.manualSteps?.length ?? 0) - savedCount} saved
+                  in-between
+                  {(from.manualSteps?.length ?? 0) - savedCount === 1
+                    ? " does"
+                    : "s do"}{" "}
+                  not line up with the current timing and{" "}
+                  {(from.manualSteps?.length ?? 0) - savedCount === 1
+                    ? "is"
+                    : "are"}{" "}
+                  ignored.
+                </p>
+              )}
 
               {betweenCount > 0 && (
                 <>
