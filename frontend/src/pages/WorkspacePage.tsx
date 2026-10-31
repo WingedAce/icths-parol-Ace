@@ -18,6 +18,14 @@ import SequenceEditor from "../components/SequenceEditor";
 import SaveButton from "../components/SaveButton";
 
 import KeyframeGallery from "../components/KeyframeGallery";
+import PinRemapNotice from "../components/PinRemapNotice";
+import { analogPinSet } from "../utils/pins";
+import {
+  applyPinRemaps,
+  pendingPinRemaps,
+  settleLostPins,
+  updateLostPins,
+} from "../utils/pinRemap";
 
 import CodeGenerator from "../components/CodeGenerator";
 
@@ -134,6 +142,7 @@ function WorkspacePage() {
     removeNodeImage,
     setNodeZones,
     setNodePinMappings,
+    setNodeLostZonePins,
     setNodeTricolorGroups,
     clearNodeZones,
     setNodeAudio,
@@ -303,9 +312,28 @@ function WorkspacePage() {
         args.design;
       if (zones) {
         // setNodeZones empties the pins, so the pins go in right after it.
+        const sameZones =
+          (currentNode.zones ?? []).length === zones.length &&
+          zones.every((z, i) => {
+            const old = (currentNode.zones ?? [])[i];
+            return old.id === z.id && old.cx === z.cx && old.cy === z.cy;
+          });
         setNodeZones(currentNode.id, zones, imageWidth ?? 1, imageHeight ?? 1);
         setNodePinMappings(currentNode.id, pinMappings);
         setNodeTricolorGroups(currentNode.id, tricolorGroups);
+        // Same zones with different pins: the keyframes of the real rounds
+        // still point at the old pins, so remember what moved and offer to
+        // turn the new pins on (see PinRemapNotice).
+        if (sameZones) {
+          setNodeLostZonePins(
+            currentNode.id,
+            updateLostPins(
+              currentNode.pinMappings ?? [],
+              pinMappings,
+              currentNode.lostZonePins,
+            ),
+          );
+        }
       } else {
         clearNodeZones(currentNode.id);
       }
@@ -319,6 +347,43 @@ function WorkspacePage() {
         bpmChanges: args.roundPiece.bpmChanges,
       });
     }
+  }
+
+  // Zones that were given new pins since the keyframes were made: the
+  // keyframes still point at the old pins, so offer to turn the new ones on.
+  const remapSummary =
+    currentNode?.type === "group"
+      ? pendingPinRemaps(
+          currentNode.pinMappings ?? [],
+          currentNode.lostZonePins,
+          ROUNDS.map((r) => songNodes[r]?.frames ?? []),
+        )
+      : null;
+
+  function applyPinRemap() {
+    if (!currentNode || !remapSummary) return;
+    const mappings = currentNode.pinMappings ?? [];
+    const analog = analogPinSet(currentNode);
+    ROUNDS.forEach((r, i) => {
+      const song = songNodes[r];
+      if (!song || remapSummary.keyframesPerList[i] === 0) return;
+      setNodeFrames(
+        song.id,
+        applyPinRemaps(song.frames ?? [], mappings, currentNode.lostZonePins, analog),
+      );
+    });
+    setNodeLostZonePins(
+      currentNode.id,
+      settleLostPins(currentNode.lostZonePins, mappings),
+    );
+  }
+
+  function keepKeyframes() {
+    if (!currentNode) return;
+    setNodeLostZonePins(
+      currentNode.id,
+      settleLostPins(currentNode.lostZonePins, currentNode.pinMappings ?? []),
+    );
   }
 
   // Decide what the user is allowed to create here.
@@ -703,6 +768,15 @@ async function handleFile(
               )}
             </div>
 
+            {!trialOpen && remapSummary && (
+              <PinRemapNotice
+                summary={remapSummary}
+                rounds={ROUNDS}
+                onApply={applyPinRemap}
+                onKeep={keepKeyframes}
+              />
+            )}
+
             {trialOpen && (
               <TrialWorkspace
                 groupNode={currentNode}
@@ -941,6 +1015,7 @@ async function handleFile(
                 tricolorGroups={
                   currentNode.tricolorGroups ?? []
                 }
+                zones={currentNode.zones ?? []}
                 frames={animationChild.frames ?? []}
                 audioAnalysis={
                   animationChild.audioAnalysis
