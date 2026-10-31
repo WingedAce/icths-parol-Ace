@@ -208,6 +208,7 @@ export function buildInbetweens(
       const tolerance = matchTolerance(from.time, to.time, beats);
       let carriedPins = from.litPins;
       let carriedLevels = from.levels;
+      let carriedColors = from.tricolors;
       beats.forEach((time, index) => {
         const match = saved.find(
           (step) => Math.abs(step.time - time) < tolerance,
@@ -215,8 +216,11 @@ export function buildInbetweens(
         if (match) {
           carriedPins = [...match.litPins];
           carriedLevels = match.levels ? { ...match.levels } : undefined;
+          carriedColors = match.tricolors
+            ? { ...match.tricolors }
+            : from.tricolors;
         }
-        push(index, time, [...carriedPins], carriedLevels, from.tricolors);
+        push(index, time, [...carriedPins], carriedLevels, carriedColors);
       });
       continue;
     }
