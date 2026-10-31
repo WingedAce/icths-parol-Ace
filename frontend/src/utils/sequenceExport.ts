@@ -3,12 +3,14 @@ import type {
   Frame,
   PinMapping,
   TricolorGroup,
+  Zone,
 } from "../types";
 import { buildInbetweens } from "./audioTiming";
 import { segmentBpmAt } from "./bpmChanges";
 import {
   groupOfPin,
   isPwmPin,
+  pinPositions,
   levelOf,
   tricolorColor,
   FULL_LEVEL,
@@ -23,6 +25,12 @@ import {
 // in-betweens that buildInbetweens works out), and the same rule: the lights
 // hold the last frame's pins until the next frame. So the delays on the board
 // match what the preview shows, beat for beat.
+
+// Each row of the sketch's table takes 4 bytes of the Mega's flash, and an
+// AVR table can't be bigger than 64 KB (the program itself needs room too).
+// Past this many rows the sketch fails to compile with "size of variable
+// 'SHOW' is too large".
+export const MAX_SHOW_ROWS = 14000;
 
 export type SketchEvent = {
   timeMs: number;
@@ -88,6 +96,9 @@ export function buildSequence(
   frames: Frame[],
   pinMappings: PinMapping[],
   tricolorGroups: TricolorGroup[],
+  // Where the zones sit, so the spin / outwards / inwards / wipe transitions
+  // come out in the same order as in the preview.
+  zones: Zone[] = [],
 ): SequenceBuild {
   const warnings: string[] = [];
 
@@ -145,7 +156,13 @@ export function buildSequence(
 
   // Same frame list the Sequence preview uses.
   const keys = [...frames].sort((a, b) => a.time - b.time);
-  const inbetweens = buildInbetweens(analysis, keys, analog, groups);
+  const inbetweens = buildInbetweens(
+    analysis,
+    keys,
+    analog,
+    groups,
+    pinPositions(zones, pinMappings),
+  );
   const all = [...keys, ...inbetweens].sort((a, b) => a.time - b.time);
 
   const beats = analysis.beatTimes;
@@ -248,6 +265,12 @@ export function buildSequence(
       current.set(pin, 0);
       events.push({ timeMs: endMs, pin, value: 0, note: "song ends" });
     }
+  }
+
+  if (events.length > MAX_SHOW_ROWS) {
+    warnings.push(
+      `This show has ${events.length.toLocaleString()} light changes, but the Arduino Mega can only hold about ${MAX_SHOW_ROWS.toLocaleString()} (the sketch will not compile). Most come from Fade and Alternate transitions, or a high Custom in-between count: every in-between that changes a pin adds a row. Lower the in-between count on those keyframes, or use Hold, Ripple or a sweep preset, which change each pin only once.`,
+    );
   }
 
   return {
