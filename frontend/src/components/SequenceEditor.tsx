@@ -72,6 +72,10 @@ const miniPillClass =
 
 // How far the timeline bar can be stretched. 1 = the whole song fits on screen;
 // 8 = the bar is eight screens wide and scrolls sideways.
+// Playback speeds for the preview. Slower than 1x is for checking where the
+// keyframes land; the song and the lights slow down together.
+const SPEEDS = [0.25, 0.5, 0.75, 1];
+
 const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24, 36, 50, 75, 100];
 
 // Remembers the last result of a calculation and hands it back while every
@@ -306,6 +310,9 @@ function SequenceEditor({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const clockRef = useRef({ startMs: 0, startTime: 0 });
+  // Preview speed. The ref lets the running playback loop see a change.
+  const [speed, setSpeed] = useState(1);
+  const speedRef = useRef(1);
 
   // The small BPM box: which beat it is for and where it is shown.
   const [popover, setPopover] = useState<{
@@ -587,6 +594,10 @@ function SequenceEditor({
     const audio = audioUrl ? audioRef.current : null;
     if (audio) {
       audio.currentTime = clipStart + clockRef.current.startTime;
+      // Slow without changing the pitch. The audio clock is in song seconds,
+      // so the playhead and the keyframe times stay correct at any speed.
+      audio.preservesPitch = true;
+      audio.playbackRate = speedRef.current;
       audio.play().catch(() => setIsPlaying(false));
     }
 
@@ -595,7 +606,8 @@ function SequenceEditor({
       const now = audio
         ? audio.currentTime - clipStart
         : clockRef.current.startTime +
-          (performance.now() - clockRef.current.startMs) / 1000;
+          ((performance.now() - clockRef.current.startMs) / 1000) *
+            speedRef.current;
 
       if (now >= duration) {
         if (loopRef.current && duration > 0) {
@@ -802,6 +814,15 @@ function SequenceEditor({
     }
     target = Math.min(beats.length - 1, Math.max(0, target));
     seek(beats[target]);
+  };
+
+  // Change the preview speed, also while playing. Without a song the
+  // playhead is timed by the clock, so restart that clock from here.
+  const changeSpeed = (next: number) => {
+    speedRef.current = next;
+    setSpeed(next);
+    clockRef.current = { startMs: performance.now(), startTime: time };
+    if (audioRef.current) audioRef.current.playbackRate = next;
   };
 
   // Zoom in or out around the playhead (or around the middle of the view if the
@@ -1531,6 +1552,31 @@ function SequenceEditor({
         >
           {loopOn ? "Loop: on" : "Loop"}
         </button>
+        <div
+          className="flex items-center gap-1 rounded-full border border-white/15 px-2 py-1"
+          role="group"
+          aria-label="Playback speed"
+          title="Slow the song and the lights down to see where the keyframes land"
+        >
+          <span className="px-2 text-[10px] uppercase tracking-[0.2em] text-white/30">
+            Speed
+          </span>
+          {SPEEDS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => changeSpeed(value)}
+              aria-pressed={speed === value}
+              className={`cursor-pointer rounded-full px-2.5 py-1 text-xs transition ${
+                speed === value
+                  ? "bg-white/15 text-white"
+                  : "text-white/50 hover:text-white"
+              }`}
+            >
+              {value}×
+            </button>
+          ))}
+        </div>
         <button onClick={() => stepBeat(-1)} className={navClass}>
           <Chevron direction="left" />
           Beat
