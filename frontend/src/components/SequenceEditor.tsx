@@ -1,11 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import ParolPreview from "./ParolPreview";
+import TransitionTiming from "./TransitionTiming";
 import {
+  autoStepCount,
+  beatsBetween,
   buildInbetweens,
+  changedUnits,
   makeKeyFrames,
   remapFramesToBeats,
 } from "../utils/audioTiming";
+import { PRESETS, PRESET_GROUPS } from "../utils/transitionPresets";
 import {
   MAX_CHANGE_BPM,
   MIN_CHANGE_BPM,
@@ -34,6 +39,7 @@ import {
   formatPin,
   isTricolorOn,
   levelOf,
+  pinPositions,
   pruneLevels,
   setTricolorOn,
   tricolorColor,
@@ -68,29 +74,21 @@ const miniPillClass =
 // 8 = the bar is eight screens wide and scrolls sideways.
 const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24];
 
-// How a keyframe moves on to the next keyframe.
-const TRANSITIONS: { value: Transition; label: string; hint: string }[] = [
-  {
-    value: "hold",
-    label: "Hold",
-    hint: "Keep this keyframe's lights on until the next keyframe.",
-  },
-  {
-    value: "ripple",
-    label: "Ripple",
-    hint: "Change the lights one pin at a time, spread evenly over the beats in between.",
-  },
-  {
-    value: "alternate",
-    label: "Alternate",
-    hint: "Flip between this keyframe's lights and the next one's on every beat.",
-  },
-  {
-    value: "fade",
-    label: "Fade",
-    hint: "Dim analog pins smoothly from this keyframe's brightness to the next one's. Digital pins switch halfway.",
-  },
-];
+// Remembers the last result of a calculation and hands it back while every
+// input is the very same object as last time.
+function makeLastResult<T>() {
+  let last: { deps: unknown[]; value: T } | null = null;
+  return {
+    get(deps: unknown[], compute: () => T): T {
+      if (last && last.deps.every((d, i) => d === deps[i])) return last.value;
+      const value = compute();
+      last = { deps, value };
+      return value;
+    },
+  };
+}
+const lastInbetweens = makeLastResult<Frame[]>();
+const lastAllFrames = makeLastResult<Frame[]>();
 
 type SequenceEditorProps = {
   // The Group node: owns the drawing, zones and pin mappings.
@@ -685,13 +683,24 @@ function SequenceEditor({
   // LED as a single unit (its 3 pins are always on or off together).
   const pinUnits = buildPinUnits(pins, tricolorGroups);
   const mergedGroups = pinUnits.flatMap((u) => (u.group ? [u.group] : []));
-  const inbetweens = buildInbetweens(
-    analysis,
-    frames,
-    analogPins,
-    mergedGroups,
+  const positions = pinPositions(groupNode.zones, groupNode.pinMappings);
+  // The playhead moves this editor's state about 60 times a second while the
+  // preview plays, and nothing below depends on it, so the in-betweens are
+  // only worked out again when the keyframes, the beats or the design change.
+  const inbetweens = lastInbetweens.get(
+    [
+      analysis,
+      animationNode.frames,
+      groupNode.pinMappings,
+      groupNode.zones,
+      groupNode.tricolorGroups,
+    ],
+    () =>
+      buildInbetweens(analysis, frames, analogPins, mergedGroups, positions),
   );
-  const allFrames = [...frames, ...inbetweens].sort((a, b) => a.time - b.time);
+  const allFrames = lastAllFrames.get([inbetweens, animationNode.frames], () =>
+    [...frames, ...inbetweens].sort((a, b) => a.time - b.time),
+  );
 
   const span = duration || 1;
 
@@ -912,6 +921,14 @@ function SequenceEditor({
       frames.map((f) =>
         f.id === keyframeHere.id ? { ...f, transition } : f,
       ),
+    );
+  };
+
+  // Timing of the in-betweens after this keyframe (see TransitionTiming).
+  const setTiming = (patch: Partial<Frame>) => {
+    if (!keyframeHere) return;
+    onFramesChange(
+      frames.map((f) => (f.id === keyframeHere.id ? { ...f, ...patch } : f)),
     );
   };
 
@@ -1906,33 +1923,74 @@ function SequenceEditor({
             <p className={labelClass}>Transition to next keyframe</p>
             {nextKeyframe ? (
               <>
-                <div className="flex flex-wrap gap-2">
-                  {TRANSITIONS.map((option) => {
-                    const isActive =
-                      (keyframeHere.transition ?? "hold") === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        onClick={() => setTransition(option.value)}
-                        disabled={isPlaying}
-                        className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
-                          isActive
-                            ? "border-white/40 bg-white/[0.08] text-white"
-                            : "border-white/10 text-white/50 hover:text-white"
-                        } ${isPlaying ? "cursor-default opacity-60" : "cursor-pointer"}`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-col gap-4">
+                  {PRESET_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/25">
+                        {group.label}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {group.options.map((option) => {
+                          const isActive =
+                            (keyframeHere.transition ?? "hold") ===
+                            option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              onClick={() => setTransition(option.value)}
+                              disabled={isPlaying}
+                              className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
+                                isActive
+                                  ? "border-white/40 bg-white/[0.08] text-white"
+                                  : "border-white/10 text-white/50 hover:text-white"
+                              } ${isPlaying ? "cursor-default opacity-60" : "cursor-pointer"}`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <p className="mt-3 text-xs text-white/30">
                   {
-                    TRANSITIONS.find(
+                    PRESETS.find(
                       (o) => o.value === (keyframeHere.transition ?? "hold"),
                     )?.hint
                   }
                 </p>
+                {(keyframeHere.transition ?? "hold") !== "hold" && (
+                  <div className="mt-5">
+                    <TransitionTiming
+                      from={keyframeHere}
+                      to={nextKeyframe}
+                      autoCount={autoStepCount(
+                        keyframeHere.transition,
+                        changedUnits(
+                          keyframeHere,
+                          nextKeyframe,
+                          analogPins,
+                          mergedGroups,
+                        ).length,
+                      )}
+                      beatCount={
+                        beatsBetween(
+                          analysis,
+                          keyframeHere.time,
+                          nextKeyframe.time,
+                        ).length
+                      }
+                      currentCount={
+                        inbetweens.filter((f) =>
+                          f.id.startsWith(`${keyframeHere.id}-`),
+                        ).length
+                      }
+                      onChange={setTiming}
+                      disabled={isPlaying}
+                    />
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-xs text-white/30">
