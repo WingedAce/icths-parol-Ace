@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
 
 import ConfirmDialog from "./ConfirmDialog";
+import KeyframeGallery from "./KeyframeGallery";
+import PinRemapNotice from "./PinRemapNotice";
 import PinSetup from "./PinSetup";
 import SequenceEditor from "./SequenceEditor";
 import ZoneMapper from "./ZoneMapper";
 import { stable } from "../lib/cloudSync";
 import { localDelete, localGet, localSet } from "../lib/localDraft";
+import { analogPinSet } from "../utils/pins";
+import {
+  applyPinRemaps,
+  pendingPinRemaps,
+  settleLostPins,
+  updateLostPins,
+} from "../utils/pinRemap";
 import { describeParts, mergeDesign, mergeRound } from "../utils/trialMerge";
 import type {
   BpmChange,
@@ -18,7 +27,7 @@ import type {
 } from "../types";
 
 type Round = 1 | 2 | 3;
-type SubTab = "zones" | "pins" | "preview";
+type SubTab = "zones" | "pins" | "preview" | "gallery";
 
 const ROUNDS: Round[] = [1, 2, 3];
 
@@ -26,6 +35,7 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: "zones", label: "Zone Map" },
   { id: "pins", label: "Pins" },
   { id: "preview", label: "Preview" },
+  { id: "gallery", label: "Gallery" },
 ];
 
 const EMPTY_FRAMES: Frame[] = [];
@@ -37,6 +47,8 @@ export type DesignPiece = {
   imageHeight?: number;
   pinMappings: PinMapping[];
   tricolorGroups: TricolorGroup[];
+  // Pin each zone used to be on (see ProjectNode.lostZonePins).
+  lostZonePins?: Record<number, number>;
 };
 
 // The part that belongs to one round (its keyframes and timing).
@@ -85,6 +97,7 @@ const designOf = (node: ProjectNode): DesignPiece => ({
   imageHeight: node.imageHeight,
   pinMappings: node.pinMappings ?? [],
   tricolorGroups: node.tricolorGroups ?? [],
+  lostZonePins: node.lostZonePins,
 });
 
 const roundPieceOf = (node: ProjectNode): RoundPiece => ({
@@ -110,7 +123,10 @@ function readDraft(saved: unknown): TrialDraft {
     rounds: d.rounds && typeof d.rounds === "object" ? d.rounds : {},
     previewRound:
       d.previewRound === 2 || d.previewRound === 3 ? d.previewRound : 1,
-    sub: d.sub === "pins" || d.sub === "preview" ? d.sub : "zones",
+    sub:
+      d.sub === "pins" || d.sub === "preview" || d.sub === "gallery"
+        ? d.sub
+        : "zones",
     liveSync: d.liveSync === true,
     snapshot:
       d.snapshot &&
@@ -266,10 +282,27 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       const current = prev.design
         ? withoutBase(prev.design)
         : sourceDesign;
+      const next = fn(current);
+      // Remember zones that lost their pin, unless the edit already set that
+      // or replaced the zones themselves (new zones, new numbers).
+      let lostZonePins = next.lostZonePins;
+      if (next.zones !== current.zones) {
+        lostZonePins = undefined;
+      } else if (
+        next.pinMappings !== current.pinMappings &&
+        next.lostZonePins === current.lostZonePins
+      ) {
+        lostZonePins = updateLostPins(
+          current.pinMappings,
+          next.pinMappings,
+          current.lostZonePins,
+        );
+      }
       return {
         ...prev,
         design: {
-          ...fn(current),
+          ...next,
+          lostZonePins,
           base: prev.design?.base ?? stable(sourceDesign),
         },
       };
@@ -326,6 +359,40 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
     setNotice(
       "Synced. Parts you haven't changed here now match the real rounds. Parts you edited in the trial were kept.",
     );
+  }
+
+  // ---- Zones that got new pins: offer to turn the new pins on ----
+  const keyframesOf = (r: Round): Frame[] =>
+    draft.rounds[r]?.frames ?? sourceRound(r)?.frames ?? EMPTY_FRAMES;
+
+  const remapSummary = pendingPinRemaps(
+    design.pinMappings,
+    design.lostZonePins,
+    ROUNDS.map(keyframesOf),
+  );
+
+  function applyPinRemap() {
+    if (!remapSummary) return;
+    const analog = analogPinSet(trialGroup);
+    ROUNDS.forEach((r, i) => {
+      if (remapSummary.keyframesPerList[i] === 0) return;
+      editRound(r, {
+        frames: applyPinRemaps(
+          keyframesOf(r),
+          design.pinMappings,
+          design.lostZonePins,
+          analog,
+        ),
+      });
+    });
+    keepKeyframes();
+  }
+
+  function keepKeyframes() {
+    editDesign((d) => ({
+      ...d,
+      lostZonePins: settleLostPins(d.lostZonePins, d.pinMappings),
+    }));
   }
 
   const setSub = (next: SubTab) => setDraft((prev) => ({ ...prev, sub: next }));
@@ -558,6 +625,15 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
 
       {notice && <p className="mb-6 text-xs text-emerald-300/80">{notice}</p>}
 
+      {remapSummary && (
+        <PinRemapNotice
+          summary={remapSummary}
+          rounds={ROUNDS}
+          onApply={applyPinRemap}
+          onKeep={keepKeyframes}
+        />
+      )}
+
       {/* Trial tabs */}
       <div
         role="tablist"
@@ -629,11 +705,11 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
         />
       )}
 
-      {sub === "preview" && (
-        <div className="mx-auto max-w-3xl">
+      {(sub === "preview" || sub === "gallery") && (
+        <div className={`mx-auto ${sub === "gallery" ? "max-w-5xl" : "max-w-3xl"}`}>
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <span className="text-[11px] uppercase tracking-wider text-white/40">
-              Preview
+              {sub === "gallery" ? "Gallery" : "Preview"}
             </span>
             <div
               role="tablist"
@@ -659,18 +735,27 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
           </div>
 
           {realSong && trialSong ? (
-            <SequenceEditor
-              key={`${trialSong.id}-${version}`}
-              groupNode={trialGroup}
-              animationNode={trialSong}
-              audioSourceId={realSong.id}
-              onFramesChange={(frames) => editRound(previewRound, { frames })}
-              onTimingChange={(timing) => editRound(previewRound, timing)}
-            />
+            sub === "preview" ? (
+              <SequenceEditor
+                key={`${trialSong.id}-${version}`}
+                groupNode={trialGroup}
+                animationNode={trialSong}
+                audioSourceId={realSong.id}
+                onFramesChange={(frames) => editRound(previewRound, { frames })}
+                onTimingChange={(timing) => editRound(previewRound, timing)}
+              />
+            ) : (
+              <KeyframeGallery
+                key={`${trialSong.id}-${version}`}
+                groupNode={trialGroup}
+                animationNode={trialSong}
+                onFramesChange={(frames) => editRound(previewRound, { frames })}
+              />
+            )
           ) : (
             <p className="text-center text-sm text-white/40">
               Round {previewRound} has no song yet. Open Round {previewRound}{" "}
-              and add its song on the Song tab, then come back to preview it
+              and add its song on the Song tab, then come back to use it
               here.
             </p>
           )}
