@@ -103,7 +103,10 @@ function DeveloperPage() {
   const {
     workspaces,
     getChildren,
-    deleteNode,
+    deleteNodes,
+    undoDelete,
+    lastDeletion,
+    deletionCount,
     setNodesLocked,
     setNodeParolName,
   } = useProjects();
@@ -123,6 +126,9 @@ function DeveloperPage() {
   // server (instead of this browser) which groups have one.
   const [lockedGroupIds, setLockedGroupIds] = useState<Set<string>>(new Set());
   const [resetError, setResetError] = useState("");
+  // Undo for deletes: busy while it runs, and a short result message.
+  const [undoing, setUndoing] = useState(false);
+  const [undoNote, setUndoNote] = useState("");
 
   async function refreshColorLocks() {
     try {
@@ -235,8 +241,25 @@ function DeveloperPage() {
   // Deleting a group removes its drawing, zones, pins and the song and
   // keyframes of every round.
   function deleteDesigns(list: Design[]) {
-    for (const design of list) deleteNode(design.node.id);
+    setUndoNote("");
+    // One step, so a single Undo brings every one of them back.
+    deleteNodes(list.map((design) => design.node.id));
     stopSelecting();
+  }
+
+  // Brings back the most recent deletion, drawings included.
+  async function handleUndo() {
+    setUndoing(true);
+    setUndoNote("");
+    const result = await undoDelete();
+    setUndoing(false);
+    if (result.ok) {
+      setUndoNote(`Restored ${result.label}.`);
+    } else if (result.reason === "images") {
+      setUndoNote(
+        "Couldn't put the drawings back. Check your connection and try Undo again.",
+      );
+    }
   }
 
   const nameOf = (d: Design) => `${parolLabel(d.node)} (${d.where})`;
@@ -389,6 +412,36 @@ function DeveloperPage() {
 
       {/* Stays at the bottom of the screen, like the buttons in the layout */}
       <div className="sticky bottom-0 mt-8 border-t border-white/10 bg-[#050505]/90 px-6 py-4 backdrop-blur">
+        {lastDeletion && (
+          <div className="mx-auto mb-4 flex max-w-5xl flex-wrap items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/[0.04] px-5 py-3">
+            <p className="text-sm text-white/70">
+              Deleted {lastDeletion.label}.
+              {deletionCount > 1 &&
+                ` ${deletionCount - 1} earlier ${
+                  deletionCount - 1 === 1 ? "deletion" : "deletions"
+                } can be undone after this.`}
+            </p>
+            <button
+              onClick={() => void handleUndo()}
+              disabled={undoing}
+              className="cursor-pointer rounded-full bg-white px-5 py-2 font-serif text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-40"
+            >
+              {undoing ? "Restoring…" : "Undo delete"}
+            </button>
+          </div>
+        )}
+        {undoNote && (
+          <p
+            role="status"
+            className={`mx-auto mb-3 max-w-5xl text-center text-xs ${
+              undoNote.startsWith("Restored")
+                ? "text-white/60"
+                : "text-[#ff8a8e]"
+            }`}
+          >
+            {undoNote}
+          </p>
+        )}
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-3 sm:gap-6">
           {mode === "delete" ? (
             <>
@@ -530,7 +583,7 @@ function DeveloperPage() {
       {pending?.kind === "all" && (
         <ConfirmDialog
           title="Delete all designs?"
-          checkboxLabel="I understand this cannot be undone"
+          checkboxLabel="I understand Undo only works until this page is reloaded"
           confirmLabel="Delete all"
           onCancel={() => setPending(null)}
           onConfirm={() => {
@@ -552,6 +605,10 @@ function DeveloperPage() {
           <p>
             For each group, the drawing, zones, pin assignments, colors and the
             song and keyframes of all three rounds are removed.
+          </p>
+          <p>
+            You can bring them back with Undo delete, but only until you
+            reload or close this page.
           </p>
         </ConfirmDialog>
       )}
@@ -583,7 +640,7 @@ function DeveloperPage() {
       {pending?.kind === "selected" && chosen.length > 0 && (
         <ConfirmDialog
           title={`Delete ${chosen.length} ${chosen.length === 1 ? "design" : "designs"}?`}
-          checkboxLabel="I understand this cannot be undone"
+          checkboxLabel="I understand Undo only works until this page is reloaded"
           confirmLabel="Delete"
           onCancel={() => setPending(null)}
           onConfirm={() => {
@@ -602,6 +659,10 @@ function DeveloperPage() {
           <p>
             For each one, the drawing, zones, pin assignments, colors and the
             song and keyframes of all three rounds are removed.
+          </p>
+          <p>
+            You can bring them back with Undo delete, but only until you
+            reload or close this page.
           </p>
         </ConfirmDialog>
       )}
