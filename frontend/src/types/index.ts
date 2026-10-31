@@ -27,6 +27,10 @@ export type ProjectNode = {
   pinMappings?: PinMapping[];
   // Sets of 3 pins merged into one tricolor LED (see TricolorGroup).
   tricolorGroups?: TricolorGroup[];
+  // For each zone that lost its pin (moved to another pin, or unassigned),
+  // the pin it used to be on. Keyframes only remember pin numbers, so this is
+  // how the website can offer to turn the zone back on with its new pin.
+  lostZonePins?: Record<number, number>;
   // Audio analysis result, lives on the "animation" node — see
   // AudioAnalysis below. audioFileName is kept only for display (the
   // actual MP3 bytes are never stored, only the analysis result).
@@ -141,9 +145,32 @@ export type Session = {
   updatedAt: string;
 };
 
-// "manual" means the user built the in-between frames by hand; the other
-// four are presets that generate them.
-export type Transition = "hold" | "ripple" | "alternate" | "fade" | "manual";
+// "manual" means the user built the in-between frames by hand; the others
+// are presets that generate them. The last nine change the pins one unit at a
+// time in an order that follows where the pins sit on the drawing (spin,
+// outwards, inwards, wipes) or a fixed random order (scatter).
+export type Transition =
+  | "hold"
+  | "ripple"
+  | "alternate"
+  | "fade"
+  | "manual"
+  | "spin-cw"
+  | "spin-ccw"
+  | "outwards"
+  | "inwards"
+  | "wipe-down"
+  | "wipe-up"
+  | "wipe-right"
+  | "wipe-left"
+  | "scatter";
+
+// How many in-betweens a transition gets, and where they sit in time.
+//   auto:   the preset's own default speed (sweeps use one in-between per pin
+//           that changes; every other preset uses one per beat)
+//   beat:   one in-between per beat
+//   custom: the user picks how many, spread evenly between the keyframes
+export type StepTiming = "auto" | "beat" | "custom";
 
 // One hand-made in-between: which pins are on at one beat, and how bright
 // the analog ones are.
@@ -170,4 +197,9 @@ export type Frame = {
   // keyframe and the next. Only used while transition is "manual", but kept
   // when the user switches to a preset so their work isn't lost.
   manualSteps?: ManualStep[];
+  // Timing of this keyframe's in-betweens. Missing means "auto".
+  stepTiming?: StepTiming;
+  // Only used while stepTiming is "custom": how many in-betweens, at most one
+  // per millisecond between this keyframe and the next.
+  stepCount?: number;
 };
