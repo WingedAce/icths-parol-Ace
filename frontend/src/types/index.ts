@@ -178,6 +178,9 @@ export type ManualStep = {
   time: number;
   litPins: number[];
   levels?: PinLevels;
+  // The color of each tricolor LED in this in-between, keyed by
+  // TricolorGroup id. Missing means the first keyframe's colors.
+  tricolors?: Record<string, string>;
 };
 
 export type Frame = {
