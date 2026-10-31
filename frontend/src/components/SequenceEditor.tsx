@@ -72,7 +72,7 @@ const miniPillClass =
 
 // How far the timeline bar can be stretched. 1 = the whole song fits on screen;
 // 8 = the bar is eight screens wide and scrolls sideways.
-const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24];
+const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24, 36, 50, 75, 100];
 
 // Remembers the last result of a calculation and hands it back while every
 // input is the very same object as last time.
@@ -1266,7 +1266,7 @@ function SequenceEditor({
             >
               −
             </button>
-            <span className="w-8 text-center text-xs text-white/60">{zoom}×</span>
+            <span className="w-10 text-center text-xs text-white/60">{zoom}×</span>
             <button
               type="button"
               onClick={() => zoomTo(zoomIndex + 1)}
