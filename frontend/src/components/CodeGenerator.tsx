@@ -8,6 +8,7 @@ import type {
   Frame,
   PinMapping,
   TricolorGroup,
+  Zone,
 } from "../types";
 import { effectiveAnalysis } from "../utils/bpmChanges";
 import {
@@ -23,6 +24,8 @@ import { buildSequence, type SequenceBuild } from "../utils/sequenceExport";
 type CodeGeneratorProps = {
   pinMappings: PinMapping[];
   tricolorGroups?: TricolorGroup[];
+  // Where the zones sit; the spin / wipe transitions need it to order pins.
+  zones?: Zone[];
   frames?: Frame[];
   audioAnalysis?: AudioAnalysis;
   // BPM change points of the song. The beats used for the sketch are the
@@ -161,15 +164,25 @@ function generateSketch(
         "\n"
       : "";
 
-  // One comment line each time the time changes, then the rows for it.
+  // One comment line each time the time changes, then the rows for it. Each
+  // row stores the wait since the previous row (4 bytes per row instead of 6,
+  // so a longer show fits in the Mega's flash). A wait longer than 65535 ms
+  // is split with do-nothing rows (pin 255).
   const rows: string[] = [];
   let lastTime = -1;
+  let previousMs = 0;
   for (const e of build.events) {
     if (e.timeMs !== lastTime) {
       rows.push(`  // ${e.note}`);
       lastTime = e.timeMs;
     }
-    rows.push(`  { ${e.timeMs}, ${e.pin}, ${e.value} },`);
+    let wait = e.timeMs - previousMs;
+    while (wait > 65535) {
+      rows.push(`  { 65535, 255, 0 },`);
+      wait -= 65535;
+    }
+    rows.push(`  { ${wait}, ${e.pin}, ${e.value} },`);
+    previousMs = e.timeMs;
   }
 
   const showTable =
@@ -179,7 +192,7 @@ ${rows.join("\n")}
 };
 const uint16_t SHOW_LENGTH = sizeof(SHOW) / sizeof(Event);`
       : `// No lights are scheduled yet, so this table is empty and nothing will turn on.
-const Event SHOW[1] PROGMEM = { { 0, 0, 0 } };
+const Event SHOW[1] PROGMEM = { { 0, 255, 0 } };
 const uint16_t SHOW_LENGTH = 0;`;
 
   // The keyframe times start at 0 = the beginning of the part of the song the
@@ -216,10 +229,11 @@ const uint8_t LED_PINS[] = { ${pinList} };
 const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};
 ${loop ? `// LOOP MODE: the show starts over after this many ms (the length of the song),\n// and keeps repeating until the Arduino loses power.\nconst uint32_t LOOP_LENGTH_MS = ${loopMs};\n` : ""}
 // ---------- The light show ----------
-// Each row is: time in ms after the start, pin, brightness (0 = off, 255 = on).
+// Each row is: ms to wait after the previous row, pin, brightness
+// (0 = off, 255 = on). Pin 255 means "do nothing" (only used to wait).
 // Pins without PWM can only be fully on or off. That is handled for you.
 struct Event {
-  uint32_t timeMs;
+  uint16_t waitMs;
   uint8_t pin;
   uint8_t value;
 };
@@ -231,6 +245,7 @@ ${showTable}
 bool running = false;
 uint32_t startTime = 0;
 uint16_t nextRow = 0;
+uint32_t rowTime = 0; // when the previous row played, in ms after the start
 
 void allOff() {
   for (uint8_t i = 0; i < sizeof(LED_PINS); i++) {
@@ -241,6 +256,7 @@ void allOff() {
 void startShow() {
   allOff();
   nextRow = 0;
+  rowTime = 0;
   startTime = millis();
   running = true;
   Serial.println(F("Show started"));
@@ -265,9 +281,11 @@ ${
   while (nextRow < SHOW_LENGTH) {
     Event e;
     memcpy_P(&e, &SHOW[nextRow], sizeof(Event));
-    if (e.timeMs > now) return;
+    uint32_t at = rowTime + e.waitMs;
+    if (at > now) return;
+    rowTime = at;
     // analogWrite dims PWM pins and simply switches other pins on or off.
-    analogWrite(e.pin, e.value);
+    if (e.pin != 255) analogWrite(e.pin, e.value);
     nextRow++;
   }
 
@@ -276,6 +294,7 @@ ${
 
   allOff();
   nextRow = 0;
+  rowTime = 0;
   // Adding the length (instead of reading millis() again) stops the loop
   // from slowly drifting away from the song.
   startTime += LOOP_LENGTH_MS;
@@ -290,9 +309,11 @@ ${
   while (nextRow < SHOW_LENGTH) {
     Event e;
     memcpy_P(&e, &SHOW[nextRow], sizeof(Event));
-    if (e.timeMs > now) return;
+    uint32_t at = rowTime + e.waitMs;
+    if (at > now) return;
+    rowTime = at;
     // analogWrite dims PWM pins and simply switches other pins on or off.
-    analogWrite(e.pin, e.value);
+    if (e.pin != 255) analogWrite(e.pin, e.value);
     nextRow++;
   }
 
@@ -307,6 +328,7 @@ ${
 function CodeGenerator({
   pinMappings,
   tricolorGroups = [],
+  zones = [],
   frames = [],
   audioAnalysis: storedAnalysis,
   bpmChanges,
@@ -343,6 +365,7 @@ function CodeGenerator({
       frames,
       pinMappings,
       tricolorGroups,
+      zones,
     );
     setBuild(result);
     setCode(
