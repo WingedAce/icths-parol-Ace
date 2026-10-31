@@ -21,12 +21,15 @@ import { effectiveAnalysis } from "../utils/bpmChanges";
 import {
   FULL_LEVEL,
   MIN_LEVEL,
+  PIN_COLORS,
   analogPinSet,
   describePins,
+  formatPin,
   levelOf,
   pinPositions,
   pruneLevels,
   sameLights,
+  tricolorColor,
 } from "../utils/pins";
 import type {
   AudioAnalysis,
@@ -434,12 +437,24 @@ function PairView({
     index: number;
     litPins: number[];
     levels: PinLevels;
+    tricolors: Record<string, string>;
   } | null>(null);
 
   const draftNow =
     canEdit && draft !== null && draft.index === activeIndex ? draft : null;
   const displayLit = draftNow?.litPins ?? showing.litPins;
   const displayLevels = draftNow?.levels ?? showing.levels;
+  const displayColors = draftNow?.tricolors ?? showing.tricolors;
+
+  // The tricolor LEDs this pair uses (any of their three pins is on in
+  // keyframe 1 or 2), so Manual mode only lists colors that can matter.
+  const colorGroups = useMemo(
+    () =>
+      (groupNode.tricolorGroups ?? []).filter((g) =>
+        g.pins.some((pin) => usedPins.includes(pin)),
+      ),
+    [groupNode.tricolorGroups, usedPins],
+  );
 
   const isSavedAt = (time: number) =>
     (from.manualSteps ?? []).some(
@@ -449,15 +464,24 @@ function PairView({
     .slice(1, -1)
     .filter((step) => isSavedAt(step.time)).length;
   const isSavedHere = isBetween && isSavedAt(showing.time);
+  const sameColors = (
+    a: Record<string, string> | undefined,
+    b: Record<string, string> | undefined,
+  ) =>
+    colorGroups.every(
+      (g) =>
+        tricolorColor(g, a).toLowerCase() === tricolorColor(g, b).toLowerCase(),
+    );
   const draftChanged =
     draftNow !== null &&
-    !sameLights(
+    (!sameLights(
       draftNow.litPins,
       draftNow.levels,
       showing.litPins,
       showing.levels,
       analog,
-    );
+    ) ||
+      !sameColors(draftNow.tricolors, showing.tricolors));
   const canSave = canEdit && (draftChanged || !isSavedHere);
 
   const selectStep = (index: number) => {
@@ -520,6 +544,7 @@ function PairView({
             time,
             litPins: [...from.litPins],
             ...(from.levels ? { levels: { ...from.levels } } : {}),
+            ...(from.tricolors ? { tricolors: { ...from.tricolors } } : {}),
           }))
         : buildInbetweens(
             analysis,
@@ -540,17 +565,25 @@ function PairView({
             time: f.time,
             litPins: [...f.litPins],
             ...(f.levels ? { levels: { ...f.levels } } : {}),
+            ...(f.tricolors ? { tricolors: { ...f.tricolors } } : {}),
           }));
     onChangeFrame({ transition: "manual", manualSteps: seeded });
   };
 
-  const startDraft = (litPins: number[], levels?: PinLevels) => {
+  // `tricolors` defaults to the colors showing now, so toggling a pin or
+  // moving a slider never resets a color the user picked.
+  const startDraft = (
+    litPins: number[],
+    levels?: PinLevels,
+    tricolors: Record<string, string> | undefined = displayColors,
+  ) => {
     if (!canEdit) return;
     const sorted = [...litPins].sort((a, b) => a - b);
     setDraft({
       index: activeIndex,
       litPins: sorted,
       levels: pruneLevels(levels, sorted) ?? {},
+      tricolors: { ...(tricolors ?? {}) },
     });
   };
 
@@ -561,6 +594,13 @@ function PairView({
       displayLevels,
     );
   };
+
+  // Color of one tricolor LED in the in-between that is showing.
+  const setColor = (groupId: string, color: string) =>
+    startDraft(displayLit, displayLevels, {
+      ...(displayColors ?? {}),
+      [groupId]: color,
+    });
 
   // Brightness of one analog pin that is on, in percent.
   const setLevel = (pin: number, level: number) =>
@@ -583,6 +623,9 @@ function PairView({
           time: showing.time,
           litPins: sortedPins,
           ...(keptLevels ? { levels: keptLevels } : {}),
+          ...(displayColors && Object.keys(displayColors).length > 0
+            ? { tricolors: { ...displayColors } }
+            : {}),
         },
       ].sort((a, b) => a.time - b.time),
     });
@@ -646,7 +689,7 @@ function PairView({
                 node={groupNode}
                 litPins={displayLit}
                 levels={displayLevels}
-                tricolorColors={from.tricolors}
+                tricolorColors={displayColors}
               />
               <div className="mt-3 flex items-baseline justify-between gap-3">
                 <p className="font-serif text-2xl text-white">
@@ -720,7 +763,9 @@ function PairView({
                       node={groupNode}
                       litPins={index === activeIndex ? displayLit : step.litPins}
                       levels={index === activeIndex ? displayLevels : step.levels}
-                      tricolorColors={from.tricolors}
+                      tricolorColors={
+                        index === activeIndex ? displayColors : step.tricolors
+                      }
                     />
                   </div>
                   <p className="mt-2 text-xs text-white/50">{index}</p>
@@ -894,6 +939,68 @@ function PairView({
                         {toNumber} are shown.
                       </p>
 
+                      {/* One color per tricolor LED, for this in-between only */}
+                      {colorGroups.length > 0 && (
+                        <div className="mt-5">
+                          <p className={labelClass}>Tricolor colors</p>
+                          <div className="flex flex-col gap-2">
+                            {colorGroups.map((g) => {
+                              const current = tricolorColor(g, displayColors);
+                              const sortedPins = [...g.pins].sort(
+                                (a, b) => a - b,
+                              );
+                              const label = sortedPins.map(formatPin).join("+");
+                              return (
+                                <div
+                                  key={g.id}
+                                  className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+                                >
+                                  <span className="mr-1 text-[11px] text-white/45">
+                                    Tricolor {label}
+                                  </span>
+                                  {PIN_COLORS.map((c) => {
+                                    const picked =
+                                      current.toLowerCase() ===
+                                      c.hex.toLowerCase();
+                                    return (
+                                      <button
+                                        key={c.name}
+                                        type="button"
+                                        title={c.name}
+                                        aria-label={`${c.name} for tricolor ${label}`}
+                                        aria-pressed={picked}
+                                        disabled={!canEdit}
+                                        onClick={() => setColor(g.id, c.hex)}
+                                        className={`h-6 w-6 rounded-full border-2 transition ${
+                                          picked
+                                            ? "border-white ring-2 ring-white/30"
+                                            : "border-transparent"
+                                        } ${
+                                          canEdit
+                                            ? "cursor-pointer hover:scale-110"
+                                            : "cursor-default opacity-50"
+                                        }`}
+                                        style={{ backgroundColor: c.hex }}
+                                      />
+                                    );
+                                  })}
+                                  <input
+                                    type="color"
+                                    value={current}
+                                    disabled={!canEdit}
+                                    onChange={(event) =>
+                                      setColor(g.id, event.target.value)
+                                    }
+                                    aria-label={`Custom color for tricolor ${label}`}
+                                    className="h-6 w-8 cursor-pointer rounded border border-white/10 bg-transparent disabled:cursor-default disabled:opacity-50"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Brightness for each analog pin that is on */}
                       {canEdit &&
                         usedPins.some(
@@ -961,14 +1068,14 @@ function PairView({
 
                   <div className="mt-4 flex flex-wrap gap-4">
                     <button
-                      onClick={() => startDraft(from.litPins, from.levels)}
+                      onClick={() => startDraft(from.litPins, from.levels, from.tricolors)}
                       disabled={!canEdit}
                       className={linkClass}
                     >
                       Copy keyframe {fromNumber}
                     </button>
                     <button
-                      onClick={() => startDraft(to.litPins, to.levels)}
+                      onClick={() => startDraft(to.litPins, to.levels, to.tricolors)}
                       disabled={!canEdit}
                       className={linkClass}
                     >
