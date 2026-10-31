@@ -1,4 +1,4 @@
-import type { PinLevels, ProjectNode } from "../types";
+import type { PinLevels, PinMapping, ProjectNode, Zone } from "../types";
 
 // The pins that can dim an LED on an Arduino Mega (the ones marked ~ on the
 // board): 2-13 and 44-46. The A0-A15 header has no PWM, so it can't dim.
@@ -212,4 +212,31 @@ export function buildPinUnits<
     }
   }
   return units;
+}
+
+
+// ---- Where each pin sits on the drawing ----
+// Used by the spin / outwards / inwards / wipe transitions. A pin's position
+// is the average of the centers of the zones it drives.
+
+export type Point = [number, number];
+
+export function pinPositions(
+  zones: Zone[] | undefined,
+  pinMappings: PinMapping[] | undefined,
+): Map<number, Point> {
+  const zoneById = new Map((zones ?? []).map((z) => [z.id, z]));
+  const sums = new Map<number, { x: number; y: number; n: number }>();
+  for (const m of pinMappings ?? []) {
+    const zone = zoneById.get(m.zoneId);
+    if (!zone) continue;
+    const entry = sums.get(m.pin) ?? { x: 0, y: 0, n: 0 };
+    entry.x += zone.cx;
+    entry.y += zone.cy;
+    entry.n += 1;
+    sums.set(m.pin, entry);
+  }
+  const result = new Map<number, Point>();
+  for (const [pin, e] of sums) result.set(pin, [e.x / e.n, e.y / e.n]);
+  return result;
 }
