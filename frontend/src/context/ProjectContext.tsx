@@ -30,6 +30,7 @@ import {
   type NodeRow,
 } from "../lib/cloudSync";
 import { ensureSession } from "../lib/supabase";
+import { updateLostPins } from "../utils/pinRemap";
 import { localGet, localSet } from "../lib/localDraft";
 import type {
   AudioAnalysis,
@@ -84,6 +85,11 @@ type ProjectContextType = {
     imageHeight: number,
   ) => void;
   setNodePinMappings: (id: string, pinMappings: PinMapping[]) => void;
+  // Sets the "pin a zone used to be on" memory (see ProjectNode).
+  setNodeLostZonePins: (
+    id: string,
+    lostZonePins: Record<number, number> | undefined,
+  ) => void;
   setNodeTricolorGroups: (id: string, groups: TricolorGroup[]) => void;
   clearNodeZones: (id: string) => void;
   setNodeAudio: (
@@ -958,6 +964,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               imageHeight: undefined,
               pinMappings: [],
               tricolorGroups: [],
+              lostZonePins: undefined,
             }
             : node,
         );
@@ -985,6 +992,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               imageHeight: undefined,
               pinMappings: [],
               tricolorGroups: [],
+              lostZonePins: undefined,
             }
             : node,
         );
@@ -1017,6 +1025,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               imageHeight,
               pinMappings: [],
               tricolorGroups: [],
+              lostZonePins: undefined,
             }
             : node,
         );
@@ -1032,7 +1041,34 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) =>
-          node.id === id ? { ...node, pinMappings } : node,
+          node.id === id
+            ? {
+              ...node,
+              pinMappings,
+              lostZonePins: updateLostPins(
+                node.pinMappings ?? [],
+                pinMappings,
+                node.lostZonePins,
+              ),
+            }
+            : node,
+        );
+      }
+
+      return next;
+    });
+  }
+
+  function setNodeLostZonePins(
+    id: string,
+    lostZonePins: Record<number, number> | undefined,
+  ) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, lostZonePins } : node,
         );
       }
 
@@ -1071,6 +1107,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               imageHeight: undefined,
               pinMappings: [],
               tricolorGroups: [],
+              lostZonePins: undefined,
             }
             : node,
         );
@@ -1238,6 +1275,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         removeNodeImage,
         setNodeZones,
         setNodePinMappings,
+        setNodeLostZonePins,
         setNodeTricolorGroups,
         clearNodeZones,
         setNodeAudio,
