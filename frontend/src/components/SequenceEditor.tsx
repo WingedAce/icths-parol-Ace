@@ -31,6 +31,11 @@ import {
   type PinClipboard,
 } from "../utils/pinClipboard";
 import {
+  getKeyframeClipboard,
+  setKeyframeClipboard,
+  type KeyframeClip,
+} from "../utils/keyframeClipboard";
+import {
   FULL_LEVEL,
   MIN_LEVEL,
   PIN_COLORS,
@@ -358,6 +363,13 @@ function SequenceEditor({
   // ---- Pin clipboard (copy pins from one keyframe, paste on another) ----
   // Kept outside the keyframes (see utils/pinClipboard.ts), so it survives
   // moving between keyframes and is never saved with the project.
+  // Select keyframe mode: tapping markers on the timeline picks them to copy.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [keyClip, setKeyClip] = useState<KeyframeClip[] | null>(() =>
+    getKeyframeClipboard(),
+  );
+  const [keyNote, setKeyNote] = useState("");
   const [pinClip, setPinClip] = useState<PinClipboard | null>(() =>
     getPinClipboard(),
   );
@@ -1056,6 +1068,68 @@ function SequenceEditor({
     applyPins({ litPins: previousKeyframe.litPins, levels: previousKeyframe.levels });
   };
 
+  // ---- Copy / paste whole keyframes ----
+  const toggleSelected = (id: string) =>
+    setSelectedIds((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+    );
+
+  const toggleSelectMode = () => {
+    setSelectMode((on) => !on);
+    setSelectedIds([]);
+    setKeyNote("");
+  };
+
+  const copyKeyframes = () => {
+    const picked = frames.filter((f) => selectedIds.includes(f.id));
+    if (picked.length === 0) return;
+    setKeyframeClipboard(picked);
+    setKeyClip(getKeyframeClipboard());
+    setKeyNote(`Copied ${picked.length} keyframe${picked.length === 1 ? "" : "s"}.`);
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
+
+  // The first copied keyframe goes at the playhead and the others keep the
+  // same gaps. A keyframe that would land on (or too close to) one that is
+  // already there, or past the end of the song, is skipped.
+  const pasteKeyframes = () => {
+    if (!keyClip || keyClip.length === 0) return;
+    const base = isManual ? round2(time) : beats[beatIndex];
+    const added: Frame[] = [];
+    let skipped = 0;
+    for (const clip of keyClip) {
+      const at = base + clip.time;
+      const taken = [...frames, ...added].some(
+        (f) => Math.abs(f.time - at) < MIN_KEY_GAP,
+      );
+      if (at > duration || taken) {
+        skipped += 1;
+        continue;
+      }
+      added.push({
+        ...structuredClone(clip),
+        id: crypto.randomUUID(),
+        kind: "key",
+        sectionId: sectionAt(at)?.id,
+        time: at,
+        ...(clip.manualSteps
+          ? {
+              manualSteps: clip.manualSteps.map((step) => ({
+                ...step,
+                time: step.time + base,
+              })),
+            }
+          : {}),
+      });
+    }
+    if (added.length > 0) onFramesChange(sortByTime([...frames, ...added]));
+    setKeyNote(
+      `Pasted ${added.length} keyframe${added.length === 1 ? "" : "s"}` +
+        (skipped > 0 ? `, skipped ${skipped} (already a keyframe there, or past the end).` : "."),
+    );
+  };
+
   // ---- Save as video ----
   const startVideoExport = async () => {
     if (videoExport.state === "working") return;
@@ -1392,7 +1466,8 @@ function SequenceEditor({
             // Manual timing: a keyframe can be dragged along the bar. It stays
             // between its neighbours so the order (and the transitions) never
             // change. A plain click still just moves the playhead there.
-            const canDrag = isManual && !isPlaying;
+            const canDrag = isManual && !isPlaying && !selectMode;
+            const isSelected = selectedIds.includes(frame.id);
             const shownTime = drag?.id === frame.id ? drag.time : frame.time;
             return (
               <button
@@ -1437,14 +1512,20 @@ function SequenceEditor({
                 }}
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (selectMode) {
+                    toggleSelected(frame.id);
+                    return;
+                  }
                   if (!canDrag) seek(frame.time);
                 }}
                 className={`absolute inset-y-2 w-2 -translate-x-1/2 cursor-pointer rounded-full transition ${
                   canDrag ? "touch-none" : ""
                 } ${
-                  frame.id === keyframeHere?.id
-                    ? "bg-white"
-                    : "bg-white/40 hover:bg-white/80"
+                  isSelected
+                    ? "bg-sky-400 ring-2 ring-sky-300/60"
+                    : frame.id === keyframeHere?.id
+                      ? "bg-white"
+                      : "bg-white/40 hover:bg-white/80"
                 }`}
                 style={{ left: `${(shownTime / span) * 100}%` }}
               />
@@ -1726,6 +1807,46 @@ function SequenceEditor({
         )}
       </div>
 
+      {/* Select keyframes to copy */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleSelectMode}
+          disabled={isPlaying || frames.length === 0}
+          aria-pressed={selectMode}
+          className="flex cursor-pointer items-center gap-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:text-white disabled:cursor-default disabled:opacity-30"
+        >
+          Select keyframe
+          <span
+            className={`flex h-4 w-4 items-center justify-center rounded border ${
+              selectMode ? "border-sky-400 bg-sky-400" : "border-white/30"
+            }`}
+          >
+            {selectMode && (
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="#000" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12.5l4.5 4.5L19 7.5" />
+              </svg>
+            )}
+          </span>
+        </button>
+        {selectMode && (
+          <button
+            type="button"
+            onClick={copyKeyframes}
+            disabled={selectedIds.length === 0}
+            className={miniPillClass}
+          >
+            Copy keyframes ({selectedIds.length})
+          </button>
+        )}
+        {selectMode && (
+          <span className="text-[11px] text-white/30">
+            Tap keyframes on the timeline to pick them.
+          </span>
+        )}
+        {keyNote && <span className="text-[11px] text-white/40">{keyNote}</span>}
+      </div>
+
       {/* Keyframe at the playhead */}
       <div>
         <p className={labelClass}>
@@ -1805,6 +1926,19 @@ function SequenceEditor({
             >
               Paste pins
               {pinClip ? ` (${pinClip.litPins.length})` : ""}
+            </button>
+            <button
+              onClick={pasteKeyframes}
+              disabled={isPlaying || !keyClip}
+              title={
+                keyClip
+                  ? `Paste ${keyClip.length} copied keyframe${keyClip.length === 1 ? "" : "s"} starting at the playhead`
+                  : "Select and copy keyframes first"
+              }
+              className={miniPillClass}
+            >
+              Paste keyframes
+              {keyClip ? ` (${keyClip.length})` : ""}
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
