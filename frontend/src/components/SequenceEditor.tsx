@@ -54,7 +54,8 @@ import type {
 } from "../types";
 
 // Two times closer than this (in seconds) count as "the same moment".
-const SAME_MOMENT = 0.02;
+// Smaller than the 0.01s nudge, so one nudge always leaves the keyframe.
+const SAME_MOMENT = 0.004;
 // A keyframe this close (in seconds) to a beat counts as sitting on it.
 const ON_BEAT = 0.001;
 // How close a dragged keyframe may get to the keyframe next to it.
@@ -735,6 +736,10 @@ function SequenceEditor({
 
   // Lights hold the last keyframe's pins until the next keyframe.
   const frameAt = (t: number): Frame | undefined => {
+    // A keyframe at the playhead always wins, so what you edit is what the
+    // preview shows (an in-between right after it must not cover it).
+    const key = frames.find((f) => Math.abs(f.time - t) < SAME_MOMENT);
+    if (key) return key;
     let current: Frame | undefined;
     for (const frame of allFrames) {
       if (frame.time <= t + SAME_MOMENT) current = frame;
@@ -759,6 +764,11 @@ function SequenceEditor({
   const nextKeyframe = keyframeHere
     ? frames.find((f) => f.time > keyframeHere.time + SAME_MOMENT)
     : undefined;
+  // Keyframe buttons: step from the keyframe we are on (if any), so none is
+  // skipped when the playhead sits a hair before or after it.
+  const keyFrom = keyframeHere ? keyframeHere.time : time;
+  const nextKey = frames.find((f) => f.time > keyFrom + SAME_MOMENT);
+  const prevKey = [...frames].reverse().find((f) => f.time < keyFrom - SAME_MOMENT);
 
   // ---- Timing mode and tempo changes ----
   const isManual = animationNode.timingMode === "manual";
@@ -859,10 +869,7 @@ function SequenceEditor({
   };
 
   const jumpKeyframe = (direction: 1 | -1) => {
-    const target =
-      direction === 1
-        ? frames.find((f) => f.time > time + SAME_MOMENT)
-        : [...frames].reverse().find((f) => f.time < time - SAME_MOMENT);
+    const target = direction === 1 ? nextKey : prevKey;
     if (target) seek(target.time);
   };
 
@@ -1587,7 +1594,7 @@ function SequenceEditor({
         </button>
         <button
           onClick={() => jumpKeyframe(-1)}
-          disabled={!frames.some((f) => f.time < time - SAME_MOMENT)}
+          disabled={!prevKey}
           className={navClass}
         >
           <Chevron direction="left" />
@@ -1595,7 +1602,7 @@ function SequenceEditor({
         </button>
         <button
           onClick={() => jumpKeyframe(1)}
-          disabled={!frames.some((f) => f.time > time + SAME_MOMENT)}
+          disabled={!nextKey}
           className={navClass}
         >
           Keyframe
