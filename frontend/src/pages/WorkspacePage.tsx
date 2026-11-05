@@ -14,6 +14,7 @@ import PinSetup from "../components/PinSetup";
 import AudioUploader from "../components/AudioUploader";
 
 import SequenceEditor from "../components/SequenceEditor";
+import GroupPresence from "../components/GroupPresence";
 
 import SaveButton from "../components/SaveButton";
 
@@ -638,6 +639,9 @@ async function handleFile(
           </div>
 
           <div className="flex items-center gap-2">
+            {currentNode?.type === "group" && (
+              <GroupPresence groupId={currentNode.id} />
+            )}
             <SaveButton />
             {!currentNode && (
               <>
