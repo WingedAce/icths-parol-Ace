@@ -1090,6 +1090,21 @@ function SequenceEditor({
     setSelectedIds([]);
   };
 
+  // Delete the picked keyframes (their in-betweens go with them, since those
+  // are worked out from the keyframes). Ctrl+Z brings them back.
+  const deleteSelectedKeyframes = () => {
+    const count = selectedIds.length;
+    if (count === 0) return;
+    const ok = window.confirm(
+      `Delete ${count} keyframe${count === 1 ? "" : "s"}? You can undo this with Ctrl+Z or the Undo button.`,
+    );
+    if (!ok) return;
+    onFramesChange(frames.filter((f) => !selectedIds.includes(f.id)));
+    setKeyNote(`Deleted ${count} keyframe${count === 1 ? "" : "s"}.`);
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
+
   // The first copied keyframe goes at the playhead and the others keep the
   // same gaps. A keyframe that would land on (or too close to) one that is
   // already there, or past the end of the song, is skipped.
@@ -1837,6 +1852,16 @@ function SequenceEditor({
             className={miniPillClass}
           >
             Copy keyframes ({selectedIds.length})
+          </button>
+        )}
+        {selectMode && (
+          <button
+            type="button"
+            onClick={deleteSelectedKeyframes}
+            disabled={selectedIds.length === 0}
+            className={`${miniPillClass} hover:!border-red-400/60 hover:!text-red-300`}
+          >
+            Delete keyframes ({selectedIds.length})
           </button>
         )}
         {selectMode && (
