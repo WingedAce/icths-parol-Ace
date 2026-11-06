@@ -856,14 +856,28 @@ function PairView({
 
               <div className="mt-6 flex flex-wrap gap-4">
                 <button
-                  onClick={() => onApplyToAll(activePreset)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Change the transition of EVERY keyframe to ${presetLabel(activePreset)}? This replaces the transition each keyframe has now.`,
+                      )
+                    )
+                      onApplyToAll(activePreset);
+                  }}
                   className={linkClass}
                 >
                   Use {presetLabel(activePreset)} for every keyframe
                 </button>
                 {sectionName && sectionMates > 0 && (
                   <button
-                    onClick={() => onApplyToSection(activePreset)}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Change the transition of every keyframe in ${sectionName} to ${presetLabel(activePreset)}? This replaces what they have now.`,
+                        )
+                      )
+                        onApplyToSection(activePreset);
+                    }}
                     className={linkClass}
                   >
                     Use {presetLabel(activePreset)} for all of {sectionName}
