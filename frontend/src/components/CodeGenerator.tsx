@@ -19,38 +19,31 @@ import {
   pinLedLoad,
   totalLeds,
 } from "../utils/pins";
-import { buildSequence, type SequenceBuild } from "../utils/sequenceExport";
+import {
+  MAX_SHOW_ROWS,
+  ROWS_PER_TABLE,
+  buildSequence,
+  type SequenceBuild,
+} from "../utils/sequenceExport";
 
 type CodeGeneratorProps = {
   pinMappings: PinMapping[];
   tricolorGroups?: TricolorGroup[];
-  // Where the zones sit; the spin / wipe transitions need it to order pins.
   zones?: Zone[];
   frames?: Frame[];
   audioAnalysis?: AudioAnalysis;
-  // BPM change points of the song. The beats used for the sketch are the
-  // stored beats with these applied, same as the Preview tab.
   bpmChanges?: BpmChange[];
   songName: string;
-  // Which round (1-3) this sketch is for.
   round?: number;
 };
 
 
-// The show starts by itself this long after power-up or after pressing the
-// board's RESET button, so the sketch needs no extra hardware.
 const AUTO_START_DELAY_MS = 5000;
 
-// Arduino Mega 2560: digital pins 0-53, then the analog pins A0-A15 which
-// are ordinary digital pins numbered 54-69 (70 total). Pins 0 and 1 are the
-// USB/serial pins. Pin 0 can't drive a zone; pins 1 and 53 can (pin 1 shares
-// the USB line, so its wire must be unplugged while uploading).
 const MEGA_MAX_PIN = 69;
-const ANALOG_PIN_BASE = 54; // A0 === 54, A15 === 69
+const ANALOG_PIN_BASE = 54;
 const RESERVED_PINS = new Set([0]);
 
-// Accepts a plain pin number (54-69 for analog) or an "A0"-"A15" label,
-// and returns the Arduino pin number, or null if it can't be understood.
 function normalizePin(raw: unknown): number | null {
   if (typeof raw === "number") return Number.isInteger(raw) ? raw : null;
   if (typeof raw === "string") {
@@ -65,8 +58,6 @@ function normalizePin(raw: unknown): number | null {
   return null;
 }
 
-// Cleans the Zone Map pins into a sorted, de-duplicated list and reports
-// anything that would make the sketch wrong on a Mega.
 function analyzePins(pinMappings: PinMapping[]): {
   pins: number[];
   problems: string[];
@@ -90,7 +81,6 @@ function analyzePins(pinMappings: PinMapping[]): {
     }
   }
 
-  // Same hard limit as the Zone Map: no pin may drive more than 10 LEDs.
   for (const pin of new Set(pinMappings.map((m) => m.pin))) {
     const load = pinLedLoad(pinMappings, pin);
     if (load > LED_MAX_PER_PIN) {
@@ -108,7 +98,6 @@ function analyzePins(pinMappings: PinMapping[]): {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-// m:ss.t
 function formatClock(seconds: number) {
   const tenths = Math.round(seconds * 10);
   const minutes = Math.floor(tenths / 600);
@@ -118,9 +107,6 @@ function formatClock(seconds: number) {
 
 const oneLine = (text: string) => text.replace(/[\r\n]+/g, " ").trim();
 
-// Builds the ready-to-upload .ino sketch. It is deliberately plain: a list of
-// pins, a table of "at this millisecond, set this pin to this value", and a
-// short loop that plays the table back with millis().
 function generateSketch(
   pins: number[],
   songName: string,
@@ -131,9 +117,6 @@ function generateSketch(
 ): string {
   const pinList = pins.join(", ");
   const durationMs = analysis ? Math.round(analysis.duration * 1000) : 0;
-  // One loop lasts as long as the song (or until the last light change, if
-  // that is later), so a song that is also on repeat stays in step with the
-  // lights.
   const lastEventMs = build.events.reduce(
     (latest, e) => Math.max(latest, e.timeMs),
     0,
@@ -164,40 +147,57 @@ function generateSketch(
         "\n"
       : "";
 
-  // One comment line each time the time changes, then the rows for it. Each
-  // row stores the wait since the previous row (4 bytes per row instead of 6,
-  // so a longer show fits in the Mega's flash). A wait longer than 65535 ms
-  // is split with do-nothing rows (pin 255).
-  const rows: string[] = [];
+  const withNotes = build.events.length <= 4000;
+  type Row = { wait: number; pin: number; value: number; note?: string };
+  const allRows: Row[] = [];
   let lastTime = -1;
   let previousMs = 0;
   for (const e of build.events) {
+    let note: string | undefined;
     if (e.timeMs !== lastTime) {
-      rows.push(`  // ${e.note}`);
+      note = e.note;
       lastTime = e.timeMs;
     }
     let wait = e.timeMs - previousMs;
     while (wait > 65535) {
-      rows.push(`  { 65535, 255, 0 },`);
+      allRows.push({ wait: 65535, pin: 255, value: 0 });
       wait -= 65535;
     }
-    rows.push(`  { ${wait}, ${e.pin}, ${e.value} },`);
+    allRows.push({ wait, pin: e.pin, value: e.value, note });
     previousMs = e.timeMs;
   }
 
-  const showTable =
-    rows.length > 0
-      ? `const Event SHOW[] PROGMEM = {
-${rows.join("\n")}
-};
-const uint16_t SHOW_LENGTH = sizeof(SHOW) / sizeof(Event);`
-      : `// No lights are scheduled yet, so this table is empty and nothing will turn on.
-const Event SHOW[1] PROGMEM = { { 0, 255, 0 } };
-const uint16_t SHOW_LENGTH = 0;`;
+  const tables: string[] = [];
+  for (let start = 0; start < allRows.length; start += ROWS_PER_TABLE) {
+    const lines: string[] = [];
+    for (const r of allRows.slice(start, start + ROWS_PER_TABLE)) {
+      if (withNotes && r.note) lines.push(`  // ${r.note}`);
+      lines.push(`  { ${r.wait}, ${r.pin}, ${r.value} },`);
+    }
+    tables.push(
+      `const Event SHOW${tables.length}[] PROGMEM = {\n${lines.join("\n")}\n};`,
+    );
+  }
 
-  // The keyframe times start at 0 = the beginning of the part of the song the
-  // student picked on the Song tab. If that part doesn't start at 0:00, the
-  // song has to be played from there to line up with the lights.
+  const showTable =
+    allRows.length > 0
+      ? `${tables.join("\n\n")}
+
+const uint32_t SHOW_LENGTH = ${allRows.length}; // rows in total
+const uint16_t ROWS_PER_TABLE = ${ROWS_PER_TABLE};
+
+// Flash address of the start of each table.
+uint32_t tableAddress(uint8_t t) {
+  switch (t) {
+${tables.map((_, i) => `    case ${i}: return pgm_get_far_address(SHOW${i});`).join("\n")}
+  }
+  return 0;
+}`
+      : `// No lights are scheduled yet, so there is nothing to play.
+const uint32_t SHOW_LENGTH = 0;
+const uint16_t ROWS_PER_TABLE = ${ROWS_PER_TABLE};
+uint32_t tableAddress(uint8_t) { return 0; }`;
+
   const clipStart = analysis?.clipStart ?? 0;
   const playFrom =
     clipStart > 0 ? ` from ${formatClock(clipStart)}` : "";
@@ -223,6 +223,8 @@ ${pins.includes(1) ? "// NOTE: pin 1 is the Mega's USB transmit line. Unplug the
 //   1. Upload this sketch to the Arduino Mega 2560.
 ${startSteps}
 
+#include <avr/pgmspace.h>
+
 // ---------- Settings ----------
 const uint8_t LED_PINS[] = { ${pinList} };
 // The show starts this long after power-up or reset.
@@ -238,14 +240,23 @@ struct Event {
   uint8_t value;
 };
 
-// PROGMEM keeps the table in the Mega's flash (its RAM is too small for it).
+// PROGMEM keeps the tables in the Mega's flash (its RAM is too small for them).
 ${showTable}
 
 // ---------- Code (no need to change anything below) ----------
 bool running = false;
 uint32_t startTime = 0;
-uint16_t nextRow = 0;
+uint32_t nextRow = 0;
 uint32_t rowTime = 0; // when the previous row played, in ms after the start
+
+// Copies row number "index" out of flash (far access, so it works past 64 KB).
+void readRow(uint32_t index, Event &e) {
+  uint32_t address = tableAddress(index / ROWS_PER_TABLE) +
+                     (uint32_t)(index % ROWS_PER_TABLE) * sizeof(Event);
+  e.waitMs = pgm_read_word_far(address);
+  e.pin = pgm_read_byte_far(address + 2);
+  e.value = pgm_read_byte_far(address + 3);
+}
 
 void allOff() {
   for (uint8_t i = 0; i < sizeof(LED_PINS); i++) {
@@ -280,7 +291,7 @@ ${
 
   while (nextRow < SHOW_LENGTH) {
     Event e;
-    memcpy_P(&e, &SHOW[nextRow], sizeof(Event));
+    readRow(nextRow, e);
     uint32_t at = rowTime + e.waitMs;
     if (at > now) return;
     rowTime = at;
@@ -308,7 +319,7 @@ ${
 
   while (nextRow < SHOW_LENGTH) {
     Event e;
-    memcpy_P(&e, &SHOW[nextRow], sizeof(Event));
+    readRow(nextRow, e);
     uint32_t at = rowTime + e.waitMs;
     if (at > now) return;
     rowTime = at;
@@ -335,12 +346,10 @@ function CodeGenerator({
   songName,
   round = 1,
 }: CodeGeneratorProps) {
-  // Stored beats plus the BPM change points.
   const audioAnalysis = effectiveAnalysis(storedAnalysis, bpmChanges);
   const [code, setCode] = useState<string | null>(null);
   const [build, setBuild] = useState<SequenceBuild | null>(null);
   const [showCredits, setShowCredits] = useState(false);
-  // Play the show again and again until the board loses power.
   const [loopShow, setLoopShow] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
@@ -348,8 +357,6 @@ function CodeGenerator({
   const { pins, problems } = analyzePins(pinMappings);
   const hasPins = pins.length > 0 && problems.length === 0;
 
-  // Over the whole-parol limit is only a warning (same as the Zone Map), so
-  // it never blocks generating the code.
   const parolLeds = totalLeds(pinMappings);
   const parolWarning =
     parolLeds > LED_PAROL_LIMIT
@@ -373,7 +380,6 @@ function CodeGenerator({
     );
   }
 
-  // Switching the option also rewrites the code that is already on screen.
   function handleLoopChange(next: boolean) {
     setLoopShow(next);
     if (build && code) {
@@ -423,7 +429,6 @@ function CodeGenerator({
       await navigator.clipboard.writeText(code);
       setCopyState("copied");
     } catch {
-      // Blocked by the browser (for example on a non-https page).
       setCopyState("failed");
     }
     setTimeout(() => setCopyState("idle"), 2500);
@@ -520,8 +525,8 @@ function CodeGenerator({
                     } BPM · ${audioAnalysis.duration.toFixed(1)}s · `
                   : ""}
                 {build.events.length} event{build.events.length === 1 ? "" : "s"}{" "}
-                · about {Math.max(1, Math.ceil((build.events.length * 6) / 1024))} KB
-                of the Mega's flash
+                · about {Math.max(1, Math.ceil((build.events.length * 4) / 1024))} KB
+                of the Mega's flash (it has about {Math.floor((MAX_SHOW_ROWS * 4) / 1024)} KB free for a show)
               </p>
               {build.events.length === 0 && (
                 <p className="text-xs text-amber-300/80">
