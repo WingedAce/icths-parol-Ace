@@ -26,10 +26,12 @@ import {
   pushWorkspaces,
   rowKey,
   rowToNode,
+  stable,
   workspaceKey,
   type NodeRow,
 } from "../lib/cloudSync";
 import { ensureSession } from "../lib/supabase";
+import { mergeFrames } from "../utils/frameMerge";
 import { updateLostPins } from "../utils/pinRemap";
 import { localGet, localSet } from "../lib/localDraft";
 import type {
@@ -48,19 +50,12 @@ import type {
 
 export type SyncStatus = "loading" | "synced" | "saving" | "error";
 
-// How often each open screen checks whether another device changed anything.
 const POLL_MS = 10_000;
-// Wait this long after the last edit before saving (so typing isn't spammy).
 const PUSH_DEBOUNCE_MS = 200;
 
 type ProjectContextType = {
   syncStatus: SyncStatus;
-  // When the cloud last confirmed a save on this screen (null until the first
-  // save of this visit).
   lastSavedAt: number | null;
-  // Saves everything right now instead of waiting for the short delay.
-  // Resolves true when the cloud has it all, false when it could not be
-  // saved (the work is still kept in this browser and retried).
   saveNow: () => Promise<boolean>;
   workspaces: Workspace[];
   getChildren: (parentId: string) => ProjectNode[];
@@ -68,15 +63,9 @@ type ProjectContextType = {
   addWorkspace: (name: string, type: WorkspaceType) => string;
   renameWorkspace: (id: string, name: string) => void;
   deleteWorkspace: (id: string) => void;
-  // Deletes several nodes (and everything under them) as ONE step, so a
-  // single Undo brings all of them back.
   deleteNodes: (ids: string[]) => void;
-  // Puts back the most recent deletion (drawings included). Deletions are
-  // remembered in memory only, so they are forgotten when the page reloads.
   undoDelete: () => Promise<UndoResult>;
-  // The most recent deletion that can still be undone, if any.
   lastDeletion: { label: string; at: number } | null;
-  // How many deletions can still be undone.
   deletionCount: number;
   addNode: (
     parentId: string,
@@ -95,7 +84,6 @@ type ProjectContextType = {
     imageHeight: number,
   ) => void;
   setNodePinMappings: (id: string, pinMappings: PinMapping[]) => void;
-  // Sets the "pin a zone used to be on" memory (see ProjectNode).
   setNodeLostZonePins: (
     id: string,
     lostZonePins: Record<number, number> | undefined,
@@ -113,7 +101,6 @@ type ProjectContextType = {
   ) => void;
   clearNodeAudio: (id: string) => void;
   setNodeFrames: (id: string, frames: Frame[]) => void;
-  // Sets (or, with an empty name, clears) the display name of a parol.
   setNodeParolName: (id: string, parolName: string) => void;
   setNodeTiming: (
     id: string,
@@ -124,26 +111,19 @@ type ProjectContextType = {
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
 
-// What one delete removed, kept in memory so it can be undone.
 type DeletedBatch = {
   at: number;
   label: string;
-  // Every removed node (with everything under it) and where it sat in its
-  // parent's list.
   nodes: { node: ProjectNode; index: number }[];
-  // Set when a whole workspace was deleted.
   workspace?: { workspace: Workspace; index: number };
 };
 
-// The newest deletions that stay undoable.
 const MAX_UNDO = 10;
 
 export type UndoResult =
   | { ok: true; label: string }
   | { ok: false; reason: "nothing" | "busy" | "images" };
 
-// Copies the nodes with these ids, and everything below them, out of the
-// tree (read-only; nothing is changed).
 function snapshotBranches(
   rootIds: Set<string>,
   nodes: Record<string, ProjectNode[]>,
@@ -183,26 +163,32 @@ function deleteBranch(
   return removedIds;
 }
 
+function frameBases(
+  nodes: Record<string, ProjectNode[]>,
+): Map<string, Frame[]> {
+  const out = new Map<string, Frame[]>();
+  for (const list of Object.values(nodes)) {
+    for (const node of list) {
+      if (node.frames !== undefined) out.set(node.id, node.frames);
+    }
+  }
+  return out;
+}
+
 type RemoteNodes = {
-  // fingerprints of what the server held when we last synced
+  baseFrames: Map<string, Frame[]>;
   oldKeys: Map<string, string>;
-  // rows that changed on the server since then
   rowById: Map<string, NodeRow>;
-  // every node id that exists on the server right now
   remoteIds: Set<string>;
-  // ids where the server's version must win even over local edits
   force: Set<string>;
-  // drawings that were added/changed (url) or removed (null) elsewhere
   imageUpdates: Map<string, string | null>;
 };
 
-// Folds what OTHER devices changed into this device's screen, without ever
-// overwriting something this device has edited but not finished saving yet.
 function mergeRemoteNodes(
   prev: Record<string, ProjectNode[]>,
   ctx: RemoteNodes,
 ): Record<string, ProjectNode[]> {
-  const { oldKeys, rowById, remoteIds, force, imageUpdates } = ctx;
+  const { oldKeys, rowById, remoteIds, force, imageUpdates, baseFrames } = ctx;
 
   let changed = false;
   const kept: ProjectNode[] = [];
@@ -212,12 +198,10 @@ function mergeRemoteNodes(
     for (const node of list) {
       seen.add(node.id);
 
-      // "Dirty" = edited here and not saved yet. Those edits win.
       const dirty = !force.has(node.id) && oldKeys.get(node.id) !== nodeKey(node);
       let out = node;
 
       if (!remoteIds.has(node.id)) {
-        // Deleted on another device (only if we had it synced and left it alone).
         if (oldKeys.has(node.id) && !dirty) {
           changed = true;
           continue;
@@ -227,6 +211,21 @@ function mergeRemoteNodes(
         if (row && !dirty && rowKey(row) !== nodeKey(node)) {
           out = { ...rowToNode(row), imageDataUrl: node.imageDataUrl };
           changed = true;
+        } else if (
+          row &&
+          dirty &&
+          node.frames !== undefined &&
+          rowKey(row) !== oldKeys.get(node.id)
+        ) {
+          const merged = mergeFrames(
+            baseFrames.get(node.id) ?? [],
+            node.frames,
+            rowToNode(row).frames ?? [],
+          );
+          if (stable(merged) !== stable(node.frames)) {
+            out = { ...node, frames: merged };
+            changed = true;
+          }
         }
       }
 
@@ -242,9 +241,6 @@ function mergeRemoteNodes(
     }
   }
 
-  // Brand-new nodes created on another device. (A node we already knew about
-  // but no longer have was deleted HERE and is still waiting to be saved —
-  // don't bring it back.)
   const additions = [...rowById.values()]
     .filter((row) => !seen.has(row.id) && !oldKeys.has(row.id))
     .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
@@ -281,7 +277,7 @@ function mergeRemoteWorkspaces(
 
     if (!theirs) {
       if (oldKeys.has(workspace.id) && !dirty) {
-        changed = true; // deleted on another device
+        changed = true;
         continue;
       }
       out.push(workspace);
@@ -303,26 +299,16 @@ function mergeRemoteWorkspaces(
   return changed ? out : prev;
 }
 
-// ---- Local safety copy ----
-// Everything the user did but the cloud has not confirmed yet is also kept in
-// this browser (see lib/localDraft.ts). On the next start, anything the cloud
-// never received is put back, so a dropped connection or a closed tab never
-// loses work.
 const DRAFT_KEY = "draft-v1";
 
 type Draft = {
   savedAt: number;
-  // Nodes edited here and not yet saved to the cloud (drawing left out: it
-  // lives in Storage).
   nodes: ProjectNode[];
-  // What the cloud held for each of them when the edit started (null = it
-  // was created here and never reached the cloud).
   base: Record<string, string | null>;
   workspaces: Workspace[];
   workspaceBase: Record<string, string | null>;
 };
 
-// Puts unsaved work from the safety copy back on top of what the cloud sent.
 async function applyDraft(
   cloud: Awaited<ReturnType<typeof fetchCloud>>,
   nodes: Record<string, ProjectNode[]>,
@@ -338,17 +324,15 @@ async function applyDraft(
 
   for (const local of draft.nodes ?? []) {
     const cloudKey = cloud.keys.get(local.id);
-    if (cloudKey === nodeKey(local)) continue; // the cloud already has it
+    if (cloudKey === nodeKey(local)) continue;
 
     const baseKey = draft.base?.[local.id] ?? null;
     let restore: boolean;
     if (cloudKey === undefined) {
-      // Not in the cloud: new here (keep it), or deleted on another device.
       restore = baseKey === null;
     } else if (cloudKey === baseKey) {
-      restore = true; // nobody else touched it, so our edit goes on top
+      restore = true;
     } else {
-      // Changed here AND somewhere else: the newer one wins.
       const stamp = cloud.stamps.get(local.id);
       restore = stamp ? Date.parse(stamp) < draft.savedAt : false;
     }
@@ -402,25 +386,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
-  // Recent deletions that can be undone (newest last). Memory only.
   const [deletions, setDeletions] = useState<DeletedBatch[]>([]);
   const deletionsRef = useRef<DeletedBatch[]>([]);
   const undoing = useRef(false);
 
-  // Latest values, readable from timers and network callbacks.
   const nodesRef = useRef(nodesByParent);
   const workspacesRef = useRef(workspaces);
   const commitWaiters = useRef<Array<() => void>>([]);
 
-  // What the server is known to hold, as fingerprints, so we only ever send or
-  // receive the DIFFERENCES (and one stale screen can't wipe other people's work).
   const syncedNodeKeys = useRef(new Map<string, string>());
+  const syncedFrames = useRef(new Map<string, Frame[]>());
   const nodeStamps = useRef(new Map<string, string>());
   const syncedWorkspaceKeys = useRef(new Map<string, string>());
   const imageStamps = useRef(new Map<string, string>());
   const stampsSupported = useRef(true);
 
-  // Saving and checking-for-updates never run at the same time.
   const chain = useRef<Promise<void>>(Promise.resolve());
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -433,8 +413,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     pullError: false,
   });
 
-  // The helpers below only touch refs and state setters, so it never matters
-  // which render's copy of them a timer happens to call.
   function refreshStatus() {
     const f = flags.current;
     setSyncStatus(
@@ -450,8 +428,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     chain.current = chain.current.then(task).catch(() => {});
   }
 
-  // Keeps a copy of every change the cloud has not confirmed yet in this
-  // browser. Once the cloud has everything, the copy is empty.
   function writeDraft() {
     const synced = syncedNodeKeys.current;
     const dirtyNodes: ProjectNode[] = [];
@@ -487,7 +463,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     void localSet(DRAFT_KEY, draft);
   }
 
-  // The "Save now" button: don't wait, save everything this second.
   async function saveNow(): Promise<boolean> {
     if (pushTimer.current) {
       clearTimeout(pushTimer.current);
@@ -501,7 +476,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return !flags.current.pushError;
   }
 
-  // Resolves once React has put the latest state on screen (and in nodesRef).
   function waitForCommit() {
     return new Promise<void>((resolve) => {
       commitWaiters.current.push(resolve);
@@ -540,7 +514,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         );
       }
 
-      // Drawings live in Storage: pick up new/changed/removed ones too.
       const files = await listImageStamps();
       const imageUpdates = new Map<string, string | null>();
       const nextImageStamps = new Map(imageStamps.current);
@@ -568,7 +541,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       const oldKeys = syncedNodeKeys.current;
       const oldWorkspaceKeys = syncedWorkspaceKeys.current;
+      const oldFrames = syncedFrames.current;
       const ctx: RemoteNodes = {
+        baseFrames: oldFrames,
         oldKeys,
         rowById: new Map(rows.map((row) => [row.id, row])),
         remoteIds,
@@ -584,13 +559,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           oldWorkspaceKeys,
         ) !== workspacesRef.current;
 
-      // Now we know what the server holds.
       const nextKeys = new Map(oldKeys);
       for (const id of [...nextKeys.keys()]) {
         if (!remoteIds.has(id)) nextKeys.delete(id);
       }
       for (const row of rows) nextKeys.set(row.id, rowKey(row));
       syncedNodeKeys.current = nextKeys;
+      const nextFrames = new Map(oldFrames);
+      for (const id of [...nextFrames.keys()]) {
+        if (!remoteIds.has(id)) nextFrames.delete(id);
+      }
+      for (const row of rows) {
+        const frames = rowToNode(row).frames;
+        if (frames) nextFrames.set(row.id, frames);
+        else nextFrames.delete(row.id);
+      }
+      syncedFrames.current = nextFrames;
       if (stamps) nodeStamps.current = new Map(stamps);
       imageStamps.current = nextImageStamps;
       syncedWorkspaceKeys.current = new Map(
@@ -626,21 +610,92 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  async function mergeBeforePush() {
+    const synced = syncedNodeKeys.current;
+    const ids: string[] = [];
+    for (const list of Object.values(nodesRef.current)) {
+      for (const node of list) {
+        if (
+          node.frames !== undefined &&
+          synced.has(node.id) &&
+          synced.get(node.id) !== nodeKey(node)
+        ) {
+          ids.push(node.id);
+        }
+      }
+    }
+    if (ids.length === 0) return;
+
+    const rows = await fetchNodesByIds(ids);
+    const oldFrames = syncedFrames.current;
+    const theirs = new Map<string, Frame[]>();
+    const keys = new Map(synced);
+    const bases = new Map(oldFrames);
+    for (const row of rows) {
+      if (rowKey(row) === synced.get(row.id)) continue;
+      const frames = rowToNode(row).frames ?? [];
+      theirs.set(row.id, frames);
+      keys.set(row.id, rowKey(row));
+      bases.set(row.id, frames);
+      if (row.updated_at) nodeStamps.current.set(row.id, row.updated_at);
+    }
+    if (theirs.size === 0) return;
+
+    const apply = (prev: Record<string, ProjectNode[]>) => {
+      let changed = false;
+      const next: Record<string, ProjectNode[]> = {};
+      for (const [parentId, list] of Object.entries(prev)) {
+        next[parentId] = list.map((node) => {
+          const remote = theirs.get(node.id);
+          if (!remote || node.frames === undefined) return node;
+          const merged = mergeFrames(
+            oldFrames.get(node.id) ?? [],
+            node.frames,
+            remote,
+          );
+          if (stable(merged) === stable(node.frames)) return node;
+          changed = true;
+          return { ...node, frames: merged };
+        });
+      }
+      return changed ? next : prev;
+    };
+
+    nodesRef.current = apply(nodesRef.current);
+    setNodesByParent(apply);
+    syncedNodeKeys.current = keys;
+    syncedFrames.current = bases;
+  }
+
   async function pushTask() {
     flags.current.pushing += 1;
     refreshStatus();
 
     try {
+      await mergeBeforePush();
+
       syncedWorkspaceKeys.current = await pushWorkspaces(
         syncedWorkspaceKeys.current,
         workspacesRef.current,
       );
 
+      const snapshot = nodesRef.current;
       const result = await pushNodes(
         syncedNodeKeys.current,
-        nodesRef.current,
+        snapshot,
         stampsSupported.current,
       );
+
+      const pushedFrames = new Map(syncedFrames.current);
+      for (const list of Object.values(snapshot)) {
+        for (const node of list) {
+          if (result.keys.has(node.id) && node.frames !== undefined) {
+            pushedFrames.set(node.id, node.frames);
+          }
+        }
+      }
+      for (const id of result.deleted) pushedFrames.delete(id);
+      syncedFrames.current = pushedFrames;
 
       const keys = new Map(syncedNodeKeys.current);
       for (const [id, key] of result.keys) keys.set(id, key);
@@ -654,12 +709,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       flags.current.pushError = false;
       retryDelay.current = 5000;
       setLastSavedAt(Date.now());
-      // The cloud has it now, so the local safety copy shrinks to whatever
-      // was edited while this save was running (usually nothing).
       writeDraft();
 
-      // The server refused these (an admin locked them): show the server's
-      // version instead of leaving a change that can never be saved.
       if (result.rejected.length > 0) {
         const rejected = new Set(result.rejected);
         enqueue(() => pullTask(rejected));
@@ -683,8 +734,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     retryDelay.current = Math.min(retryDelay.current * 2, 60_000);
   }
 
-  // Save right now instead of waiting for the usual short delay (used when
-  // the page is about to be hidden — phones can freeze a page in the background).
   function flushPush() {
     if (!pushTimer.current) return;
     clearTimeout(pushTimer.current);
@@ -693,8 +742,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     enqueue(pushTask);
   }
 
-  // Keep the refs pointing at the latest screen state, and wake anyone
-  // waiting for a render to land.
   useEffect(() => {
     nodesRef.current = nodesByParent;
     workspacesRef.current = workspaces;
@@ -703,15 +750,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     waiters.forEach((resolve) => resolve());
   }, [nodesByParent, workspaces]);
 
-  // Load cloud data and drawings before enabling writes.
   useEffect(() => {
     let cancelled = false;
 
     async function loadInitialData() {
       for (let attempt = 0; !cancelled; attempt++) {
         try {
-          // No session = Supabase answers with EMPTY lists instead of an
-          // error. Never treat that as "no data".
           if (!(await ensureSession())) {
             throw new Error("Could not start a session with Supabase");
           }
@@ -736,12 +780,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               ]),
             );
           } catch (error) {
-            // The next update check will fetch the drawings again.
             console.error("Could not load drawings from Supabase:", error);
           }
 
-          // Anything the cloud never received (closed tab, lost connection)
-          // comes back from this browser's safety copy.
           let restoredWorkspaces = cloud.workspaces;
           try {
             const applied = await applyDraft(
@@ -761,6 +802,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             cloud.workspaces.map((w) => [w.id, workspaceKey(w)]),
           );
           syncedNodeKeys.current = cloud.keys;
+          syncedFrames.current = frameBases(cloud.nodes);
           nodeStamps.current = cloud.stamps;
           imageStamps.current = loadedImageStamps;
           stampsSupported.current = cloud.stampsSupported;
@@ -792,8 +834,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Keep the local safety copy up to date with every edit, almost at once
-  // (much faster than the cloud save, so a closed tab loses nothing).
   useEffect(() => {
     if (!cloudLoaded) return;
     const timer = setTimeout(writeDraft, 100);
@@ -801,7 +841,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodesByParent, workspaces, cloudLoaded]);
 
-  // Closing the tab while a save is still running (or failing): ask first.
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
       const f = flags.current;
@@ -814,7 +853,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
-  // Save changes shortly after the last edit.
   useEffect(() => {
     if (!cloudLoaded) return;
 
@@ -830,8 +868,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodesByParent, workspaces, cloudLoaded]);
 
-  // Check for other devices' changes: on a timer while the page is open, and
-  // right away when the page comes back into view or the network returns.
   useEffect(() => {
     if (!cloudLoaded) return;
 
@@ -961,7 +997,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
 
     setNodesByParent((previous) => {
-      // A group has one song slot per round.
       if (
         type === "animation" &&
         (previous[parentId] ?? []).some(
@@ -996,8 +1031,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  // Deletes the nodes and everything under them in ONE step, and remembers
-  // them (drawings included) so undoDelete can bring them back.
   function deleteNodes(ids: string[]) {
     const roots = new Set(ids);
     const removed = snapshotBranches(roots, nodesRef.current);
@@ -1034,9 +1067,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     deleteNodes([id]);
   }
 
-  // Puts back the most recent deletion: the drawings first (they were
-  // removed from Storage), then the nodes. If a drawing can't be uploaded
-  // nothing is restored and the deletion stays undoable, so it can be retried.
   async function undoDelete(): Promise<UndoResult> {
     if (undoing.current) return { ok: false, reason: "busy" };
     const batch = deletionsRef.current[deletionsRef.current.length - 1];
@@ -1056,8 +1086,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         return { ok: false, reason: "images" };
       }
 
-      // Remember the new drawing stamps so our own update check doesn't
-      // download them again or mistake them for another device's change.
       try {
         const stamps = await listImageStamps();
         for (const r of withImages) {
@@ -1065,7 +1093,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           if (stamp) imageStamps.current.set(r.node.id, stamp);
         }
       } catch {
-        // harmless: worst case the next check re-downloads them once
       }
 
       setDeletionStack(deletionsRef.current.filter((b) => b !== batch));
@@ -1089,8 +1116,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
         for (const { node, index } of ordered) {
           const list = next[node.parentId] ?? [];
-          // Never overwrite something that exists again (or a new song
-          // slot that was filled in the meantime).
           if (list.some((item) => item.id === node.id)) continue;
           if (
             node.type === "animation" &&
@@ -1120,13 +1145,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   async function setNodeImage(id: string, imageDataUrl: string) {
     await saveImage(id, imageDataUrl);
 
-    // Remember this drawing's stamp so our own update check doesn't
-    // download the image we just uploaded.
     try {
       const stamp = (await listImageStamps()).get(id);
       if (stamp) imageStamps.current.set(id, stamp);
     } catch {
-      // harmless: worst case the next check re-downloads it once
     }
 
     setNodesByParent((previous) => {
@@ -1392,7 +1414,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       for (const parentId of Object.keys(next)) {
         next[parentId] = next[parentId].map((node) => {
           if (node.id !== id) return node;
-          // An empty name goes back to the original ("Group 3").
           if (clean) return { ...node, parolName: clean };
           const { parolName: _removed, ...rest } = node;
           return rest;
