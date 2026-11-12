@@ -17,7 +17,7 @@ import {
   PIN_COLORS,
 } from "./pins";
 
-export const ROWS_PER_TABLE = 15000;
+export const ROWS_PER_TABLE = 8000;
 export const MAX_SHOW_ROWS = 55000;
 
 export type SketchEvent = {
