@@ -105,14 +105,10 @@ function formatClock(seconds: number) {
   return `${minutes}:${String(secs).padStart(2, "0")}.${tenths % 10}`;
 }
 
-const oneLine = (text: string) => text.replace(/[\r\n]+/g, " ").trim();
-
 function generateSketch(
   pins: number[],
-  songName: string,
   build: SequenceBuild,
   analysis: AudioAnalysis | undefined,
-  round: number,
   loop: boolean,
 ): string {
   const pinList = pins.join(", ");
@@ -122,48 +118,17 @@ function generateSketch(
     0,
   );
   const loopMs = Math.max(durationMs, lastEventMs);
-  const bpm = analysis ? round1(analysis.bpm) : 0;
 
-  const segmentLines = (analysis?.tempoSegments ?? []).map(
-    (seg) =>
-      `//   from ${formatClock(seg.start)}: ${round1(seg.bpm)} BPM`,
-  );
-  const tempoHeader =
-    segmentLines.length > 0
-      ? `// Length: ${formatClock(durationMs / 1000)}\n// BPM changes during the song:\n${segmentLines.join("\n")}`
-      : `// Length: ${formatClock(durationMs / 1000)}   BPM: ${bpm}`;
-
-  const dimHeader =
-    build.dimmablePins.length > 0
-      ? `// Dimmable pins (brightness 0-255): ${build.dimmablePins.join(", ")}\n`
-      : "";
-
-  const tricolorHeader =
-    build.tricolor.length > 0
-      ? "// Tricolor LEDs (pins are the RED, GREEN and BLUE legs, in this order):\n" +
-        build.tricolor
-          .map((g) => `//   ${g.pins.join(", ")}`)
-          .join("\n") +
-        "\n"
-      : "";
-
-  const withNotes = build.events.length <= 4000;
-  type Row = { wait: number; pin: number; value: number; note?: string };
+  type Row = { wait: number; pin: number; value: number };
   const allRows: Row[] = [];
-  let lastTime = -1;
   let previousMs = 0;
   for (const e of build.events) {
-    let note: string | undefined;
-    if (e.timeMs !== lastTime) {
-      note = e.note;
-      lastTime = e.timeMs;
-    }
     let wait = e.timeMs - previousMs;
     while (wait > 65535) {
       allRows.push({ wait: 65535, pin: 255, value: 0 });
       wait -= 65535;
     }
-    allRows.push({ wait, pin: e.pin, value: e.value, note });
+    allRows.push({ wait, pin: e.pin, value: e.value });
     previousMs = e.timeMs;
   }
 
@@ -171,7 +136,6 @@ function generateSketch(
   for (let start = 0; start < allRows.length; start += ROWS_PER_TABLE) {
     const lines: string[] = [];
     for (const r of allRows.slice(start, start + ROWS_PER_TABLE)) {
-      if (withNotes && r.note) lines.push(`  // ${r.note}`);
       lines.push(`  { ${r.wait}, ${r.pin}, ${r.value} },`);
     }
     tables.push(
@@ -183,73 +147,37 @@ function generateSketch(
     allRows.length > 0
       ? `${tables.join("\n\n")}
 
-const uint32_t SHOW_LENGTH = ${allRows.length}; // rows in total
+const uint32_t SHOW_LENGTH = ${allRows.length};
 const uint16_t ROWS_PER_TABLE = ${ROWS_PER_TABLE};
 
-// Flash address of the start of each table.
 uint32_t tableAddress(uint8_t t) {
   switch (t) {
 ${tables.map((_, i) => `    case ${i}: return pgm_get_far_address(SHOW${i});`).join("\n")}
   }
   return 0;
 }`
-      : `// No lights are scheduled yet, so there is nothing to play.
-const uint32_t SHOW_LENGTH = 0;
+      : `const uint32_t SHOW_LENGTH = 0;
 const uint16_t ROWS_PER_TABLE = ${ROWS_PER_TABLE};
 uint32_t tableAddress(uint8_t) { return 0; }`;
 
-  const clipStart = analysis?.clipStart ?? 0;
-  const playFrom =
-    clipStart > 0 ? ` from ${formatClock(clipStart)}` : "";
+  return `#include <avr/pgmspace.h>
 
-  const startSteps = loop
-    ? `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
-//      powers up or after you press its RESET button. Press play on the
-//      song${playFrom} when it starts, and set the song to repeat.
-//   3. LOOP MODE: the show plays again and again, every ${formatClock(loopMs / 1000)},
-//      until the Arduino is disconnected from its power source.
-//      (The ${AUTO_START_DELAY_MS / 1000} second wait happens only once, at power-up.)`
-    : `//   2. The show starts by itself ${AUTO_START_DELAY_MS / 1000} seconds after the board
-//      powers up or after you press its RESET button. Press play on the
-//      song${playFrom} when it starts.
-//      (Press RESET again to run the show again.)`;
-
-  return `// I-Parol - Round ${round}
-// Song: ${oneLine(songName || "untitled")}
-${tempoHeader}
-${clipStart > 0 ? `// Play the song from: ${formatClock(clipStart)} (the part you picked on the Song tab)\n` : ""}// Pins used: ${pinList}
-${pins.includes(1) ? "// NOTE: pin 1 is the Mega's USB transmit line. Unplug the wire from pin 1 while uploading this sketch, then plug it back in.\n" : ""}${dimHeader}${tricolorHeader}//
-// HOW TO USE
-//   1. Upload this sketch to the Arduino Mega 2560.
-${startSteps}
-
-#include <avr/pgmspace.h>
-
-// ---------- Settings ----------
 const uint8_t LED_PINS[] = { ${pinList} };
-// The show starts this long after power-up or reset.
 const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};
-${loop ? `// LOOP MODE: the show starts over after this many ms (the length of the song),\n// and keeps repeating until the Arduino loses power.\nconst uint32_t LOOP_LENGTH_MS = ${loopMs};\n` : ""}
-// ---------- The light show ----------
-// Each row is: ms to wait after the previous row, pin, brightness
-// (0 = off, 255 = on). Pin 255 means "do nothing" (only used to wait).
-// Pins without PWM can only be fully on or off. That is handled for you.
+${loop ? `const uint32_t LOOP_LENGTH_MS = ${loopMs};\n` : ""}
 struct Event {
   uint16_t waitMs;
   uint8_t pin;
   uint8_t value;
 };
 
-// PROGMEM keeps the tables in the Mega's flash (its RAM is too small for them).
 ${showTable}
 
-// ---------- Code (no need to change anything below) ----------
 bool running = false;
 uint32_t startTime = 0;
 uint32_t nextRow = 0;
-uint32_t rowTime = 0; // when the previous row played, in ms after the start
+uint32_t rowTime = 0;
 
-// Copies row number "index" out of flash (far access, so it works past 64 KB).
 void readRow(uint32_t index, Event &e) {
   uint32_t address = tableAddress(index / ROWS_PER_TABLE) +
                      (uint32_t)(index % ROWS_PER_TABLE) * sizeof(Event);
@@ -295,25 +223,21 @@ ${
     uint32_t at = rowTime + e.waitMs;
     if (at > now) return;
     rowTime = at;
-    // analogWrite dims PWM pins and simply switches other pins on or off.
     if (e.pin != 255) analogWrite(e.pin, e.value);
     nextRow++;
   }
 
-  // Every row has played. Wait out the rest of the song, then start over.
   if (now < LOOP_LENGTH_MS) return;
 
   allOff();
   nextRow = 0;
   rowTime = 0;
-  // Adding the length (instead of reading millis() again) stops the loop
-  // from slowly drifting away from the song.
   startTime += LOOP_LENGTH_MS;
   Serial.println(F("Show restarted"));
 }
 `
       : `void loop() {
-  if (!running) return; // finished. Press RESET to run again.
+  if (!running) return;
 
   uint32_t now = millis() - startTime;
 
@@ -323,7 +247,6 @@ ${
     uint32_t at = rowTime + e.waitMs;
     if (at > now) return;
     rowTime = at;
-    // analogWrite dims PWM pins and simply switches other pins on or off.
     if (e.pin != 255) analogWrite(e.pin, e.value);
     nextRow++;
   }
@@ -343,7 +266,6 @@ function CodeGenerator({
   frames = [],
   audioAnalysis: storedAnalysis,
   bpmChanges,
-  songName,
   round = 1,
 }: CodeGeneratorProps) {
   const audioAnalysis = effectiveAnalysis(storedAnalysis, bpmChanges);
@@ -376,7 +298,7 @@ function CodeGenerator({
     );
     setBuild(result);
     setCode(
-      generateSketch(pins, songName, result, audioAnalysis, round, loopShow),
+      generateSketch(pins, result, audioAnalysis, loopShow),
     );
   }
 
@@ -384,7 +306,7 @@ function CodeGenerator({
     setLoopShow(next);
     if (build && code) {
       setCode(
-        generateSketch(pins, songName, build, audioAnalysis, round, next),
+        generateSketch(pins, build, audioAnalysis, next),
       );
     }
   }
