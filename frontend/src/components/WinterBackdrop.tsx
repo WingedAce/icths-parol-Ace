@@ -554,6 +554,46 @@ export default function WinterBackdrop({
     [],
   );
 
+  // Page content sits on top of the sky (on a phone the centred column covers
+  // all of it), so a tap on Santa often lands on the content and never reaches
+  // his button. Hit-test the tap against his box ourselves. Taps on buttons,
+  // links and form fields are left alone, and a drag or scroll is not a tap.
+  useEffect(() => {
+    if (!profile.sleigh) return;
+    let down: { x: number; y: number; t: number } | null = null;
+    const onDown = (e: PointerEvent) => {
+      down = { x: e.clientX, y: e.clientY, t: performance.now() };
+    };
+    const onUp = (e: PointerEvent) => {
+      const d = down;
+      down = null;
+      if (!d || performance.now() - d.t > 700) return;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) return;
+      const sleigh = sleighRef.current;
+      const btn = santaBtnRef.current;
+      if (!sleigh || !btn || sleigh.style.visibility !== "visible" || santaHoldRef.current) return;
+      const target = e.target as Element | null;
+      if (target?.closest("button, a, input, select, textarea, label, [role='button']")) return;
+      const slop = e.pointerType === "touch" ? 14 : 0;
+      const r = btn.getBoundingClientRect();
+      if (
+        e.clientX < r.left - slop ||
+        e.clientX > r.right + slop ||
+        e.clientY < r.top - slop ||
+        e.clientY > r.bottom + slop
+      ) {
+        return;
+      }
+      greetSanta();
+    };
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [profile.sleigh, greetSanta]);
+
   const garlandStyle = (url: string): CSSProperties => ({
     backgroundImage: `url(${url})`,
   });
