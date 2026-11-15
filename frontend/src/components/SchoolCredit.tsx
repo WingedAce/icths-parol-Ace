@@ -4,7 +4,7 @@ const SCHOOL_CREDIT_TEXT =
 
 function SchoolCredit() {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#050505]/85 px-4 py-2 text-center text-[10px] uppercase tracking-[0.3em] text-white/40 backdrop-blur">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/95 px-4 py-2 text-center font-serif text-xs font-medium tracking-[0.03em] text-warn/90">
       {SCHOOL_CREDIT_TEXT}
     </div>
   );

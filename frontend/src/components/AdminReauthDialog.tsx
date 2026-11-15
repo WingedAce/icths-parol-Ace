@@ -54,12 +54,12 @@ function AdminReauthDialog({
         if (event.target === event.currentTarget && !checking) onCancel();
       }}
     >
-      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#0b0b0b] p-8">
-        <h2 id="reauth-title" className="font-serif text-3xl">
+      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-xl bg-surface p-8">
+        <h2 id="reauth-title" className="font-semibold tracking-tight text-3xl">
           Confirm it's you
         </h2>
-        <p className="mt-4 text-sm leading-relaxed text-white/55">
-          To open <span className="text-white/85">{designLabel}</span>, enter
+        <p className="mt-4 text-sm leading-relaxed text-fg-soft">
+          To open <span className="text-fg">{designLabel}</span>, enter
           the email and password you used to sign in to the Developer Window.
         </p>
 
@@ -71,7 +71,7 @@ function AdminReauthDialog({
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Email"
-            className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
+            className="w-full rounded-lg border px-4 py-3 text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated"
           />
           <input
             type="password"
@@ -82,12 +82,12 @@ function AdminReauthDialog({
               if (event.key === "Enter") void submit();
             }}
             placeholder="Password"
-            className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
+            className="w-full rounded-lg border px-4 py-3 text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated"
           />
         </div>
 
         {error && (
-          <p role="alert" className="mt-4 text-xs text-[#ff8a8e]">
+          <p role="alert" className="mt-4 text-xs text-holly-soft">
             {error}
           </p>
         )}
@@ -96,14 +96,14 @@ function AdminReauthDialog({
           <button
             onClick={onCancel}
             disabled={checking}
-            className="flex-1 cursor-pointer rounded-lg border border-white/10 px-4 py-3 text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-40"
+            className="flex-1 cursor-pointer rounded-full px-4 py-3 text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-40 bg-elevated hover:bg-line-strong"
           >
             Cancel
           </button>
           <button
             onClick={() => void submit()}
             disabled={checking || !email.trim() || !password}
-            className="flex-1 cursor-pointer rounded-lg bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white"
+            className="flex-1 cursor-pointer rounded-lg bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-fg"
           >
             {checking ? "Checking…" : "Verify and open"}
           </button>

@@ -33,11 +33,11 @@ function RenameParolDialog({
         if (event.target === event.currentTarget) onCancel();
       }}
     >
-      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#0b0b0b] p-8">
-        <h2 id="rename-title" className="font-serif text-3xl">
+      <div className="max-h-full w-full max-w-md overflow-y-auto rounded-xl bg-surface p-8">
+        <h2 id="rename-title" className="font-semibold tracking-tight text-3xl">
           Rename parol
         </h2>
-        <p className="mt-4 text-sm leading-relaxed text-white/55">
+        <p className="mt-4 text-sm leading-relaxed text-fg-soft">
           This only changes the name shown here. Students still open their
           design with the same group number ({originalName}).
         </p>
@@ -51,22 +51,22 @@ function RenameParolDialog({
             if (event.key === "Enter") onSave(value);
           }}
           placeholder={originalName}
-          className="mt-6 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
+          className="mt-6 w-full rounded-lg border px-4 py-3 text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated"
         />
-        <p className="mt-2 text-[11px] text-white/30">
+        <p className="mt-2 text-xs text-fg-muted">
           Leave it empty to go back to "{originalName}".
         </p>
 
         <div className="mt-6 flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 cursor-pointer rounded-lg border border-white/10 px-4 py-3 text-white/60 transition hover:border-white/25 hover:text-white"
+            className="flex-1 cursor-pointer rounded-full px-4 py-3 text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
           >
             Cancel
           </button>
           <button
             onClick={() => onSave(value)}
-            className="flex-1 cursor-pointer rounded-lg bg-white px-4 py-3 text-black transition hover:bg-white/90"
+            className="flex-1 cursor-pointer rounded-lg bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90"
           >
             Save name
           </button>

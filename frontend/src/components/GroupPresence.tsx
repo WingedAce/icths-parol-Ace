@@ -22,12 +22,12 @@ function GroupPresence({ groupId }: GroupPresenceProps) {
   return (
     <span
       title="Students who have this design open right now. Developers are not counted."
-      className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-white/70"
+      className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs text-fg-soft bg-elevated hover:bg-line-strong"
     >
       <span
         aria-hidden="true"
         className={`h-2 w-2 rounded-full ${
-          count > 0 ? "bg-emerald-400" : "bg-white/30"
+          count > 0 ? "bg-pine-soft" : "bg-fg-muted"
         }`}
       />
       {label}

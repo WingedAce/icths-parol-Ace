@@ -25,18 +25,18 @@ function SaveButton() {
   let tone: string;
   if (saving) {
     label = "Saving…";
-    tone = "text-white/50";
+    tone = "text-fg-muted";
   } else if (problem) {
     label = "Not saved yet · kept on this device, retrying";
-    tone = "text-amber-300/80";
+    tone = "text-warn";
   } else if (syncStatus === "loading") {
     label = "Connecting…";
-    tone = "text-white/40";
+    tone = "text-fg-muted";
   } else {
     label = lastSavedAt
       ? `All changes saved · ${clock(lastSavedAt)}`
       : "All changes saved";
-    tone = "text-white/40";
+    tone = "text-fg-muted";
   }
 
   async function handleSave() {
@@ -56,7 +56,7 @@ function SaveButton() {
         type="button"
         onClick={handleSave}
         disabled={saving || syncStatus === "loading"}
-        className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-white/60"
+        className="cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-40 disabled:hover:border-line disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong"
       >
         Save now
       </button>

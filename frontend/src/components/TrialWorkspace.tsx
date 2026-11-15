@@ -221,7 +221,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
   }, [ready, draft, groupNode.id]);
 
   if (!ready) {
-    return <p className="text-sm text-white/30">Opening trial…</p>;
+    return <p className="text-sm text-fg-muted">Opening trial…</p>;
   }
 
   const { previewRound, sub, liveSync } = draft;
@@ -514,18 +514,18 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
   return (
     <div>
       {/* Banner */}
-      <div className="mb-6 rounded-2xl border border-amber-200/20 bg-amber-200/[0.04] px-5 py-4">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-amber-200/70">
+      <div className="mb-6 rounded-xl border border-warn/20 bg-warn/4 px-5 py-4">
+        <p className="text-xs text-warn">
           Trial
         </p>
-        <p className="mt-1 text-sm leading-relaxed text-white/55">
+        <p className="mt-1 text-sm leading-relaxed text-fg-soft">
           This is a safe copy. Change the zone map, the pins or the keyframes
           here and nothing in Round 1, 2 or 3 changes. If you like the result,
           add it to a round below; if not, take it out.
         </p>
         <p
           className={`mt-3 text-xs ${
-            hasAnyChange ? "text-amber-200/80" : "text-white/30"
+            hasAnyChange ? "text-warn" : "text-fg-muted"
           }`}
         >
           {summary}
@@ -533,8 +533,8 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       </div>
 
       {/* Sync with the real rounds */}
-      <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-3">
-        <label className="flex cursor-pointer items-center gap-3 text-[11px] uppercase tracking-wider text-white/60">
+      <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-xl bg-surface px-5 py-3">
+        <label className="flex cursor-pointer items-center gap-3 text-xs text-fg-soft">
           <button
             type="button"
             role="switch"
@@ -543,12 +543,12 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             onClick={() => setLiveSync(!liveSync)}
             className={`relative h-5 w-9 shrink-0 cursor-pointer rounded-full border transition ${
               liveSync
-                ? "border-amber-200/60 bg-amber-200/30"
-                : "border-white/20 bg-white/[0.06]"
+                ? "border-warn/60 bg-warn/30"
+                : "bg-elevated"
             }`}
           >
             <span
-              className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-all ${
+              className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-fg transition-all ${
                 liveSync ? "left-[18px]" : "left-0.5"
               }`}
             />
@@ -562,12 +562,12 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             setNotice("");
             syncNow();
           }}
-          className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/15 disabled:hover:text-white/70"
+          className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line-strong disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong"
         >
           Sync now
         </button>
 
-        <p className="text-xs text-white/35">
+        <p className="text-xs text-fg-muted">
           {liveSync
             ? "The trial follows changes made in the real rounds."
             : realMoved
@@ -579,7 +579,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       {/* Trial actions */}
       <div className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-white/40">
+          <span className="text-xs text-fg-muted">
             Add trial changes to
           </span>
           {ROUNDS.map((r) => {
@@ -592,7 +592,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
                   setNotice("");
                   setDialog({ kind: "apply", round: r });
                 }}
-                className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/70 transition hover:border-white/40 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/15 disabled:hover:text-white/70"
+                className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line-strong disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong"
               >
                 Round {r}
                 {roundChanged(r) ? " •" : ""}
@@ -607,7 +607,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             setNotice("");
             setDialog({ kind: "discard" });
           }}
-          className="cursor-pointer rounded-full border border-red-400/20 px-4 py-1.5 text-[11px] uppercase tracking-wider text-red-300/70 transition hover:border-red-400/40 hover:text-red-300 disabled:cursor-default disabled:opacity-30 disabled:hover:border-red-400/20 disabled:hover:text-red-300/70"
+          className="cursor-pointer rounded-lg border border-holly/20 px-4 py-1.5 text-xs text-holly-soft transition hover:border-holly/40 hover:text-holly-soft disabled:cursor-default disabled:opacity-30 disabled:hover:border-holly/20 disabled:hover:text-holly-soft"
         >
           Take out trial changes
         </button>
@@ -617,13 +617,13 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             setNotice("");
             setDialog({ kind: "reset" });
           }}
-          className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/40 hover:text-white"
+          className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
         >
           Reset trial
         </button>
       </div>
 
-      {notice && <p className="mb-6 text-xs text-emerald-300/80">{notice}</p>}
+      {notice && <p className="mb-6 text-xs text-pine-soft">{notice}</p>}
 
       {remapSummary && (
         <PinRemapNotice
@@ -638,7 +638,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       <div
         role="tablist"
         aria-label="Trial steps"
-        className="mb-10 flex gap-1 overflow-x-auto border-b border-white/10 sm:overflow-visible"
+        className="ws-tabs mb-8"
       >
         {SUB_TABS.map((tab) => (
           <button
@@ -646,11 +646,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             role="tab"
             aria-selected={sub === tab.id}
             onClick={() => setSub(tab.id)}
-            className={`relative -mb-px shrink-0 cursor-pointer whitespace-nowrap rounded-t-xl border border-b-0 px-5 py-3 text-xs uppercase tracking-[0.2em] transition sm:px-7 ${
-              sub === tab.id
-                ? "border-white/20 bg-gradient-to-b from-white/[0.09] to-[#050505] text-white shadow-[inset_0_2px_0_0_rgba(253,230,138,0.8)]"
-                : "border-transparent text-white/40 hover:bg-white/[0.04] hover:text-white"
-            }`}
+            className="ws-tab"
           >
             {tab.label}
           </button>
@@ -659,7 +655,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
 
       {sub === "zones" &&
         (!groupNode.imageDataUrl ? (
-          <p className="mx-auto max-w-xl text-center text-sm text-white/40">
+          <p className="mx-auto max-w-xl text-center text-sm text-fg-muted">
             There is no drawing yet. Upload one in Round 1 → Zone Map first,
             then the trial can use a copy of it.
           </p>
@@ -708,13 +704,13 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
       {(sub === "preview" || sub === "gallery") && (
         <div className={`mx-auto ${sub === "gallery" ? "max-w-5xl" : "max-w-3xl"}`}>
           <div className="mb-6 flex flex-wrap items-center gap-3">
-            <span className="text-[11px] uppercase tracking-wider text-white/40">
+            <span className="text-xs text-fg-muted">
               {sub === "gallery" ? "Gallery" : "Preview"}
             </span>
             <div
               role="tablist"
               aria-label="Round to preview"
-              className="inline-flex rounded-2xl border border-white/10 bg-white/[0.03] p-1"
+              className="inline-flex rounded-xl bg-surface p-1"
             >
               {ROUNDS.map((r) => (
                 <button
@@ -722,10 +718,10 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
                   role="tab"
                   aria-selected={previewRound === r}
                   onClick={() => setPreviewRound(r)}
-                  className={`cursor-pointer rounded-xl px-5 py-2 font-serif text-sm tracking-wide transition ${
+                  className={`cursor-pointer rounded-xl px-5 py-2 font-medium text-sm transition ${
                     previewRound === r
-                      ? "bg-white text-black"
-                      : "text-white/50 hover:bg-white/[0.06] hover:text-white"
+                      ? "bg-fg text-canvas"
+                      : "text-fg-muted hover:bg-elevated hover:text-fg"
                   }`}
                 >
                   Round {r}
@@ -753,7 +749,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
               />
             )
           ) : (
-            <p className="text-center text-sm text-white/40">
+            <p className="text-center text-sm text-fg-muted">
               Round {previewRound} has no song yet. Open Round {previewRound}{" "}
               and add its song on the Song tab, then come back to use it
               here.
@@ -798,7 +794,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             </p>
           )}
           {((designStale && designChanged) || roundStale(applyRound)) && (
-            <p className="text-white/50">
+            <p className="text-fg-muted">
               The real {designStale && designChanged ? "design" : ""}
               {designStale && designChanged && roundStale(applyRound) ? " and " : ""}
               {roundStale(applyRound) ? `Round ${applyRound}` : ""} was changed
@@ -806,7 +802,7 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
             </p>
           )}
           {applyConflicts > 0 && (
-            <p className="text-amber-200/80">
+            <p className="text-warn">
               Careful: {applyConflicts} {applyConflicts === 1 ? "item was" : "items were"}{" "}
               changed in both the trial and the real round. For those, the
               trial's version is used.

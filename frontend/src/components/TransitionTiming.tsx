@@ -24,14 +24,14 @@ const OPTIONS: { value: StepTiming; label: string }[] = [
 ];
 
 const toggleClass = (active: boolean, disabled?: boolean) =>
-  `rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
+  `rounded-full px-4 py-2 text-xs transition ${
     active
-      ? "border-white/40 bg-white/[0.08] text-white"
-      : "border-white/10 text-white/50 hover:text-white"
+      ? "text-fg bg-line-strong"
+      : "text-fg-muted hover:text-fg bg-elevated hover:bg-line-strong"
   } ${disabled ? "cursor-default opacity-60" : "cursor-pointer"}`;
 
 const stepButtonClass =
-  "h-8 w-8 cursor-pointer rounded-full border border-white/10 text-sm text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
+  "h-8 w-8 cursor-pointer rounded-full border text-sm text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line disabled:hover:text-fg-soft border-transparent bg-elevated hover:bg-line-strong";
 
 // Longest slider; the number box still goes all the way up to the maximum.
 const SLIDER_MAX = 64;
@@ -99,7 +99,7 @@ function TransitionTiming({
 
   return (
     <div>
-      <p className="mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30">
+      <p className="mb-3 text-xs text-fg-muted">
         Timing
       </p>
       <div className="flex flex-wrap gap-2">
@@ -116,7 +116,7 @@ function TransitionTiming({
       </div>
 
       {timing === "custom" && max >= 1 && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-white/60">
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-fg-soft">
           <span>In-betweens</span>
           <button
             onClick={() => setCount(count - 1)}
@@ -138,7 +138,7 @@ function TransitionTiming({
               if (event.target.value !== "" && Number.isFinite(n)) setCount(n);
             }}
             onBlur={() => setDraft(null)}
-            className="w-20 rounded-lg border border-white/10 bg-transparent px-2 py-1 text-center font-serif text-sm text-white outline-none focus:border-white/40"
+            className="w-20 rounded-lg border bg-transparent px-2 py-1 text-center font-medium text-sm text-fg outline-none focus:border-line-hover border-transparent bg-elevated"
           />
           <button
             onClick={() => setCount(count + 1)}
@@ -157,13 +157,13 @@ function TransitionTiming({
               value={Math.min(count, Math.min(max, SLIDER_MAX))}
               disabled={disabled}
               onChange={(event) => setCount(Number(event.target.value))}
-              className="min-w-24 flex-1 accent-white"
+              className="min-w-24 flex-1 accent-pine"
             />
           )}
         </div>
       )}
 
-      <p className="mt-3 text-xs text-white/30">{hint}</p>
+      <p className="mt-3 text-xs text-fg-muted">{hint}</p>
     </div>
   );
 }

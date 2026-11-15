@@ -67,14 +67,14 @@ const ON_BEAT = 0.001;
 const MIN_KEY_GAP = 0.025;
 
 const pillClass =
-  "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
-const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
+  "cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong";
+const labelClass = "mb-3 text-xs text-fg-muted";
 const linkClass =
-  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60";
+  "cursor-pointer text-xs text-fg-muted underline underline-offset-2 hover:text-fg-soft";
 const navClass = `${pillClass} inline-flex items-center gap-2`;
 // Small action buttons above the pin chips (Select all / Turn all off).
 const miniPillClass =
-  "cursor-pointer rounded-full border border-white/10 px-3 py-1 text-[11px] uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
+  "cursor-pointer rounded-full px-3 py-1 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong";
 
 // How far the timeline bar can be stretched. 1 = the whole song fits on screen;
 // 8 = the bar is eight screens wide and scrolls sideways.
@@ -236,16 +236,16 @@ function BpmPopover({
   return (
     <div
       data-bpm-popover=""
-      className={`absolute z-30 w-64 max-w-full rounded-xl border border-white/15 bg-[#0b0b0b] p-4 shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${
+      className={`absolute z-30 w-64 max-w-full rounded-xl bg-surface p-4 shadow-float ${
         anchor === "bar"
           ? "left-1/2 top-full mt-2 -translate-x-1/2"
           : "left-0 top-full mt-2"
       }`}
     >
-      <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+      <p className="text-xs text-fg-muted">
         {existing !== undefined ? "Tempo change at" : "Set BPM from"}
       </p>
-      <p className="mt-1 font-serif text-sm text-white">{title}</p>
+      <p className="mt-1 font-medium text-sm text-fg">{title}</p>
 
       <form
         onSubmit={(event) => {
@@ -269,7 +269,7 @@ function BpmPopover({
             setText(event.target.value);
             setError("");
           }}
-          className="w-24 rounded-full border border-white/10 bg-transparent px-3 py-1 text-center text-xs text-white/80 outline-none focus:border-white/30"
+          className="w-24 rounded-lg border bg-transparent px-3 py-1 text-center text-xs text-fg outline-none focus:border-line-hover border-transparent bg-elevated"
         />
         <button type="submit" className={miniPillClass}>
           {existing !== undefined ? "Save" : "Set"}
@@ -279,7 +279,7 @@ function BpmPopover({
         </button>
       </form>
 
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      {error && <p className="mt-2 text-xs text-holly-soft">{error}</p>}
 
       {existing !== undefined && (
         <button
@@ -674,7 +674,7 @@ function SequenceEditor({
 
   if (!analysis) {
     return (
-      <p className="text-center text-sm text-white/30">
+      <p className="text-center text-sm text-fg-muted">
         Upload a song on the Song tab to start building the light sequence.
       </p>
     );
@@ -684,7 +684,7 @@ function SequenceEditor({
 
   if (beats.length === 0) {
     return (
-      <p className="text-center text-sm text-white/30">
+      <p className="text-center text-sm text-fg-muted">
         No beats were detected in this song, so there is nothing to snap
         keyframes to.
       </p>
@@ -1312,10 +1312,10 @@ function SequenceEditor({
 
       {/* Readout */}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-serif text-3xl text-white">
+        <p className="font-semibold tracking-tight text-3xl text-fg">
           {isManual ? formatTimeFine(time) : formatTime(time)}
         </p>
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-fg-muted">
           Beat {beatIndex + 1} of {beats.length}
           {sectionIndex >= 0 && ` · Section ${sectionIndex + 1}`}
           {segments
@@ -1336,12 +1336,12 @@ function SequenceEditor({
       {/* Timeline strip: section lines, keyframe markers, playhead */}
       <div>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+          <p className="text-xs text-fg-muted">
             Timeline · {frames.length} keyframe{frames.length === 1 ? "" : "s"} ·{" "}
             {inbetweens.length} in-between{inbetweens.length === 1 ? "" : "s"}
           </p>
           {segmentLabel && (
-            <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+            <p className="text-xs text-fg-muted">
               {segmentLabel}
             </p>
           )}
@@ -1370,7 +1370,7 @@ function SequenceEditor({
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-white/30">
+            <span className="text-xs text-fg-muted">
               Zoom
             </span>
             <button
@@ -1383,7 +1383,7 @@ function SequenceEditor({
             >
               −
             </button>
-            <span className="w-10 text-center text-xs text-white/60">{zoom}×</span>
+            <span className="w-10 text-center text-xs text-fg-soft">{zoom}×</span>
             <button
               type="button"
               onClick={() => zoomTo(zoomIndex + 1)}
@@ -1411,7 +1411,7 @@ function SequenceEditor({
             const room = el.scrollWidth - el.clientWidth;
             setViewRatio(room > 0 ? el.scrollLeft / room : 0);
           }}
-          className="overflow-x-auto overflow-y-hidden rounded-xl border border-white/10 bg-white/[0.03] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="overflow-x-auto overflow-y-hidden rounded-xl bg-surface [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
         <div
           ref={barRef}
@@ -1436,7 +1436,7 @@ function SequenceEditor({
             index === 0 ? null : (
               <div
                 key={s.id}
-                className="absolute inset-y-0 w-px bg-white/10"
+                className="absolute inset-y-0 w-px bg-line"
                 style={{ left: `${(s.start / span) * 100}%` }}
               />
             ),
@@ -1464,7 +1464,7 @@ function SequenceEditor({
                   className="group absolute top-1/2 flex h-4 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center"
                   style={{ left: `${(beat / span) * 100}%`, width: `${width}%` }}
                 >
-                  <span className="h-1 w-1 rounded-full bg-white/15 transition group-hover:scale-[2] group-hover:bg-white/80" />
+                  <span className="h-1 w-1 rounded-full bg-line-strong transition group-hover:scale-[2] group-hover:bg-fg-soft" />
                 </button>
               );
             })}
@@ -1472,7 +1472,7 @@ function SequenceEditor({
           {inbetweens.map((frame) => (
             <div
               key={frame.id}
-              className="pointer-events-none absolute top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/25"
+              className="pointer-events-none absolute top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fg-muted"
               style={{ left: `${(frame.time / span) * 100}%` }}
             />
           ))}
@@ -1537,10 +1537,10 @@ function SequenceEditor({
                   canDrag ? "touch-none" : ""
                 } ${
                   isSelected
-                    ? "bg-sky-400 ring-2 ring-sky-300/60"
+                    ? "bg-silver ring-2 ring-silver/60"
                     : frame.id === keyframeHere?.id
-                      ? "bg-white"
-                      : "bg-white/40 hover:bg-white/80"
+                      ? "bg-fg"
+                      : "bg-fg-muted hover:bg-fg-soft"
                 }`}
                 style={{ left: `${(shownTime / span) * 100}%` }}
               />
@@ -1551,7 +1551,7 @@ function SequenceEditor({
           {changes.map((change) => (
             <div
               key={`change-line-${change.beatTime}`}
-              className="pointer-events-none absolute inset-y-0 w-px bg-white/25"
+              className="pointer-events-none absolute inset-y-0 w-px bg-fg-muted"
               style={{ left: `${(change.beatTime / span) * 100}%` }}
             />
           ))}
@@ -1568,7 +1568,7 @@ function SequenceEditor({
                 event.stopPropagation();
                 setPopover({ anchor: "bar", beatTime: change.beatTime });
               }}
-              className="absolute top-0 z-20 -translate-x-1/2 cursor-pointer rounded-b-md border border-t-0 border-white/20 bg-black/70 px-1 text-[9px] leading-4 text-white/70 transition hover:border-white/40 hover:text-white"
+              className="absolute top-0 z-20 -translate-x-1/2 cursor-pointer rounded-b-md border border-t-0 border-line-strong bg-canvas/90 px-1 text-[9px] leading-4 text-fg-soft transition hover:border-line-hover hover:text-fg"
               style={{ left: `${(change.beatTime / span) * 100}%` }}
             >
               {fmtBpm(change.bpm)}
@@ -1576,7 +1576,7 @@ function SequenceEditor({
           ))}
 
           <div
-            className="pointer-events-none absolute inset-y-0 w-0.5 bg-white"
+            className="pointer-events-none absolute inset-y-0 w-0.5 bg-fg"
             style={{ left: `${(time / span) * 100}%` }}
           />
         </div>
@@ -1601,9 +1601,9 @@ function SequenceEditor({
               }}
               aria-label="Scroll the timeline left and right"
               title="Drag to scroll the zoomed timeline"
-              className="w-full accent-white/40"
+              className="w-full accent-pine"
             />
-            <p className="mt-1 text-[10px] text-white/30">
+            <p className="mt-1 text-xs text-fg-muted">
               Zoomed {zoom}× · drag this slider (or scroll sideways) to move
               along the song
             </p>
@@ -1619,7 +1619,7 @@ function SequenceEditor({
             step={0.01}
             value={time}
             onChange={(event) => seek(Number(event.target.value))}
-            className="mt-4 w-full accent-white"
+            className="mt-4 w-full accent-pine"
           />
         ) : (
           /* Beat slider: moving it always lands exactly on a beat */
@@ -1630,7 +1630,7 @@ function SequenceEditor({
             step={1}
             value={beatIndex}
             onChange={(event) => seek(beats[Number(event.target.value)])}
-            className="mt-4 w-full accent-white"
+            className="mt-4 w-full accent-pine"
           />
         )}
       </div>
@@ -1639,7 +1639,7 @@ function SequenceEditor({
       <div className="flex flex-wrap gap-2">
         <button
           onClick={togglePlay}
-          className="cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90"
+          className="cursor-pointer rounded-lg bg-fg px-6 py-2 text-xs text-canvas transition hover:bg-fg/90"
         >
           {isPlaying ? "Pause" : "Play"}
         </button>
@@ -1647,21 +1647,21 @@ function SequenceEditor({
           onClick={toggleLoop}
           aria-pressed={loopOn}
           title="Keep playing the light show and the song over and over until you press Pause"
-          className={`cursor-pointer rounded-full border px-5 py-2 text-xs uppercase tracking-[0.15em] transition ${
+          className={`cursor-pointer rounded-full px-5 py-2 text-xs transition ${
             loopOn
-              ? "border-amber-200/70 bg-amber-200/15 text-amber-100"
-              : "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+              ? "border-warn/70 bg-warn/15 text-fg-soft"
+              : "text-fg-soft hover:text-fg bg-elevated hover:bg-line-strong"
           }`}
         >
           {loopOn ? "Loop: on" : "Loop"}
         </button>
         <div
-          className="flex items-center gap-1 rounded-full border border-white/15 px-2 py-1"
+          className="flex items-center gap-1 rounded-full px-2 py-1 bg-elevated hover:bg-line-strong"
           role="group"
           aria-label="Playback speed"
           title="Slow the song and the lights down to see where the keyframes land"
         >
-          <span className="px-2 text-[10px] uppercase tracking-[0.2em] text-white/30">
+          <span className="px-2 text-xs text-fg-muted">
             Speed
           </span>
           {SPEEDS.map((value) => (
@@ -1670,10 +1670,10 @@ function SequenceEditor({
               type="button"
               onClick={() => changeSpeed(value)}
               aria-pressed={speed === value}
-              className={`cursor-pointer rounded-full px-2.5 py-1 text-xs transition ${
+              className={`cursor-pointer rounded-lg px-2.5 py-1 text-xs transition ${
                 speed === value
-                  ? "bg-white/15 text-white"
-                  : "text-white/50 hover:text-white"
+                  ? "bg-line-strong text-fg"
+                  : "text-fg-muted hover:text-fg"
               }`}
             >
               {value}×
@@ -1721,13 +1721,13 @@ function SequenceEditor({
             }}
             placeholder="Go to beat"
             aria-label="Go to beat number"
-            className="w-28 rounded-full border border-white/10 bg-transparent px-3 py-2 text-center text-xs text-white/80 outline-none placeholder:text-white/30 focus:border-white/30"
+            className="w-28 rounded-lg border bg-transparent px-3 py-2 text-center text-xs text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated"
           />
           <button type="submit" className={miniPillClass}>
             Go
           </button>
         </form>
-        {beatError && <p className="w-full text-xs text-red-400">{beatError}</p>}
+        {beatError && <p className="w-full text-xs text-holly-soft">{beatError}</p>}
         {isManual && (
           <>
             <button
@@ -1754,7 +1754,7 @@ function SequenceEditor({
           <div
             role="group"
             aria-label="Timing mode"
-            className="inline-flex rounded-full border border-white/10 p-0.5"
+            className="inline-flex rounded-full border p-0.5 border-transparent bg-elevated"
           >
             {(
               [
@@ -1778,10 +1778,10 @@ function SequenceEditor({
                   title={option.hint}
                   aria-pressed={active}
                   onClick={() => onTimingChange({ timingMode: option.value })}
-                  className={`cursor-pointer rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.15em] transition ${
+                  className={`cursor-pointer rounded-full px-3 py-1 text-xs transition ${
                     active
-                      ? "border-white/40 bg-white/[0.08] text-white"
-                      : "border-transparent text-white/50 hover:text-white"
+                      ? "text-fg bg-line-strong"
+                      : "border-transparent text-fg-muted hover:text-fg"
                   }`}
                 >
                   {option.label}
@@ -1816,7 +1816,7 @@ function SequenceEditor({
         </div>
 
         {isManual && (
-          <p className="mt-2 text-[11px] text-white/25">
+          <p className="mt-2 text-xs text-fg-muted">
             Click the bar or nudge to pick an exact time.
           </p>
         )}
@@ -1829,12 +1829,12 @@ function SequenceEditor({
           onClick={toggleSelectMode}
           disabled={isPlaying || frames.length === 0}
           aria-pressed={selectMode}
-          className="flex cursor-pointer items-center gap-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:text-white disabled:cursor-default disabled:opacity-30"
+          className="flex cursor-pointer items-center gap-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30"
         >
           Select keyframe
           <span
             className={`flex h-4 w-4 items-center justify-center rounded border ${
-              selectMode ? "border-sky-400 bg-sky-400" : "border-white/30"
+              selectMode ? "border-silver bg-silver" : "bg-line-strong"
             }`}
           >
             {selectMode && (
@@ -1859,17 +1859,17 @@ function SequenceEditor({
             type="button"
             onClick={deleteSelectedKeyframes}
             disabled={selectedIds.length === 0}
-            className={`${miniPillClass} hover:!border-red-400/60 hover:!text-red-300`}
+            className={`${miniPillClass} hover:!border-holly/60 hover:!text-holly-soft`}
           >
             Delete keyframes ({selectedIds.length})
           </button>
         )}
         {selectMode && (
-          <span className="text-[11px] text-white/30">
+          <span className="text-xs text-fg-muted">
             Tap keyframes on the timeline to pick them.
           </span>
         )}
-        {keyNote && <span className="text-[11px] text-white/40">{keyNote}</span>}
+        {keyNote && <span className="text-xs text-fg-muted">{keyNote}</span>}
       </div>
 
       {/* Keyframe at the playhead */}
@@ -1888,7 +1888,7 @@ function SequenceEditor({
           <button
             onClick={addKeyframe}
             disabled={isPlaying}
-            className="mb-4 cursor-pointer rounded-xl bg-white px-6 py-3 font-serif text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30"
+            className="mb-4 cursor-pointer rounded-xl bg-fg px-6 py-3 font-medium text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30"
           >
             {inbetweenHere
               ? "Make this beat a keyframe"
@@ -1899,7 +1899,7 @@ function SequenceEditor({
         )}
 
         {pins.length === 0 ? (
-          <p className="text-sm text-white/30">
+          <p className="text-sm text-fg-muted">
             No pins assigned yet. Assign pins on the Zone Map tab first.
           </p>
         ) : (
@@ -1982,13 +1982,13 @@ function SequenceEditor({
                       : undefined
                   }
                   disabled={!keyframeHere || isPlaying}
-                  className={`rounded-full border px-3 py-1 font-serif text-xs transition ${
+                  className={`rounded-full px-3 py-1 font-medium text-xs transition ${
                     isOn
-                      ? "border-white/40 bg-white/[0.08] text-white"
-                      : "border-white/10 text-white/50"
+                      ? "text-fg bg-line-strong"
+                      : "text-fg-muted bg-elevated"
                   } ${
                     keyframeHere && !isPlaying
-                      ? "cursor-pointer hover:text-white"
+                      ? "cursor-pointer hover:text-fg"
                       : "cursor-default opacity-60"
                   }`}
                 >
@@ -2011,9 +2011,9 @@ function SequenceEditor({
                 return (
                   <div
                     key={g.id}
-                    className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+                    className="flex flex-wrap items-center gap-2 rounded-xl bg-surface px-3 py-2"
                   >
-                    <span className="mr-1 text-[11px] text-white/45">
+                    <span className="mr-1 text-xs text-fg-muted">
                       Tricolor {[...g.pins].sort((a, b) => a - b).map(formatPin).join("+")} color
                     </span>
                     {PIN_COLORS.map((c) => (
@@ -2027,7 +2027,7 @@ function SequenceEditor({
                         onClick={() => setHereTricolor(g.id, c.hex)}
                         className={`h-6 w-6 rounded-full border-2 transition ${
                           current.toLowerCase() === c.hex.toLowerCase()
-                            ? "border-white ring-2 ring-white/30"
+                            ? "border-fg ring-2 ring-line-hover"
                             : "border-transparent"
                         } ${
                           keyframeHere && !isPlaying
@@ -2045,13 +2045,13 @@ function SequenceEditor({
                         setHereTricolor(g.id, event.target.value)
                       }
                       aria-label="Custom color"
-                      className="h-6 w-8 cursor-pointer rounded border border-white/10 bg-transparent disabled:cursor-default disabled:opacity-50"
+                      className="h-6 w-8 cursor-pointer rounded border bg-transparent disabled:cursor-default disabled:opacity-50 border-transparent"
                     />
                   </div>
                 );
               })}
               {!keyframeHere && (
-                <p className="text-xs text-white/30">
+                <p className="text-xs text-fg-muted">
                   Each keyframe has its own tricolor colors. Add a keyframe
                   to change them.
                 </p>
@@ -2062,7 +2062,7 @@ function SequenceEditor({
         )}
 
         {!keyframeHere && pins.length > 0 && (
-          <p className="mt-3 text-xs text-white/30">
+          <p className="mt-3 text-xs text-fg-muted">
             These are the pins on at this beat. Add a keyframe here to change
             them.
           </p>
@@ -2092,9 +2092,9 @@ function SequenceEditor({
                     return (
                       <label
                         key={unit.key}
-                        className="flex items-center gap-3 text-xs text-white/60"
+                        className="flex items-center gap-3 text-xs text-fg-soft"
                       >
-                        <span className="w-24 font-serif">
+                        <span className="w-24 font-medium">
                           {unit.group
                             ? `Tricolor ${unit.pins.map(formatPin).join("+")}`
                             : `Pin ${formatPin(unit.pins[0])}`}
@@ -2117,9 +2117,9 @@ function SequenceEditor({
                                   Number(event.target.value),
                                 )
                           }
-                          className="flex-1 accent-white"
+                          className="flex-1 accent-pine"
                         />
-                        <span className="w-10 text-right text-white/40">
+                        <span className="w-10 text-right text-fg-muted">
                           {level}%
                         </span>
                       </label>
@@ -2138,7 +2138,7 @@ function SequenceEditor({
                 <div className="flex flex-col gap-4">
                   {PRESET_GROUPS.map((group) => (
                     <div key={group.label}>
-                      <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/25">
+                      <p className="mb-2 text-xs text-fg-muted">
                         {group.label}
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -2151,10 +2151,10 @@ function SequenceEditor({
                               key={option.value}
                               onClick={() => setTransition(option.value)}
                               disabled={isPlaying}
-                              className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
+                              className={`rounded-full px-4 py-2 text-xs transition ${
                                 isActive
-                                  ? "border-white/40 bg-white/[0.08] text-white"
-                                  : "border-white/10 text-white/50 hover:text-white"
+                                  ? "text-fg bg-line-strong"
+                                  : "text-fg-muted hover:text-fg bg-elevated hover:bg-line-strong"
                               } ${isPlaying ? "cursor-default opacity-60" : "cursor-pointer"}`}
                             >
                               {option.label}
@@ -2165,7 +2165,7 @@ function SequenceEditor({
                     </div>
                   ))}
                 </div>
-                <p className="mt-3 text-xs text-white/30">
+                <p className="mt-3 text-xs text-fg-muted">
                   {
                     PRESETS.find(
                       (o) => o.value === (keyframeHere.transition ?? "hold"),
@@ -2205,7 +2205,7 @@ function SequenceEditor({
                 )}
               </>
             ) : (
-              <p className="text-xs text-white/30">
+              <p className="text-xs text-fg-muted">
                 This is the last keyframe. Add a later one to choose how this
                 one transitions.
               </p>
@@ -2231,7 +2231,7 @@ function SequenceEditor({
           {frames.length > 0 && (
             <button
               onClick={startOver}
-              className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-xs uppercase tracking-wider text-white/60 transition hover:border-white/40 hover:text-white"
+              className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
             >
               Reset keyframes
             </button>
@@ -2243,7 +2243,7 @@ function SequenceEditor({
       <div>
         <p className={labelClass}>Save as video</p>
         {!isVideoExportSupported() ? (
-          <p className="text-xs text-white/30">
+          <p className="text-xs text-fg-muted">
             This browser can't record video. Use a recent Chrome, Edge or
             Firefox.
           </p>
@@ -2253,7 +2253,7 @@ function SequenceEditor({
               <button
                 onClick={startVideoExport}
                 disabled={videoExport.state === "working" || frames.length === 0}
-                className="cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white"
+                className="cursor-pointer rounded-lg bg-fg px-6 py-2 text-xs text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-fg"
               >
                 {videoExport.state === "working"
                   ? `Recording ${Math.round(videoExport.progress * 100)}%`
@@ -2266,9 +2266,9 @@ function SequenceEditor({
               )}
             </div>
             {videoExport.state === "working" && (
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
+              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-elevated">
                 <div
-                  className="h-full bg-white transition-[width]"
+                  className="h-full bg-fg transition-[width]"
                   style={{ width: `${videoExport.progress * 100}%` }}
                 />
               </div>
@@ -2276,13 +2276,13 @@ function SequenceEditor({
             {videoExport.message && videoExport.state !== "working" && (
               <p
                 className={`mt-3 text-xs ${
-                  videoExport.state === "error" ? "text-red-400" : "text-white/50"
+                  videoExport.state === "error" ? "text-holly-soft" : "text-fg-muted"
                 }`}
               >
                 {videoExport.message}
               </p>
             )}
-            <p className="mt-2 text-[11px] text-white/25">
+            <p className="mt-2 text-xs text-fg-muted">
               Records the preview with the song, in real time, so it takes as
               long as the song. Keep this tab open and in front until it
               finishes. {frames.length === 0 && "Add a keyframe first."}
@@ -2312,7 +2312,7 @@ function SequenceEditor({
             }}
           />
         </label>
-        <p className="mt-2 text-[11px] text-white/25">
+        <p className="mt-2 text-xs text-fg-muted">
           The song is saved in this browser when you upload it on the Song
           tab, and plays here automatically. If you uploaded it before that
           was added, load the file once here. Without the file, Play runs the

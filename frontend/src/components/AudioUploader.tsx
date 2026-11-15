@@ -259,18 +259,18 @@ function AudioUploader({
     const { duration, bpm, sections } = node.audioAnalysis;
 
     return (
-      <div className="mx-auto max-w-xl rounded-3xl border border-white/15 bg-white/[0.02] px-8 py-10">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+      <div className="mx-auto max-w-xl rounded-xl bg-surface px-8 py-10">
+        <p className="text-xs text-fg-muted">
           Song
         </p>
 
-        <h3 className="mt-2 font-serif text-2xl font-light">
+        <h3 className="mt-2 font-semibold tracking-tight text-2xl">
           {node.audioFileName ?? "Untitled track"}
         </h3>
 
         {node.audioAnalysis.sourceDuration !== undefined &&
           node.audioAnalysis.sourceDuration > duration && (
-            <p className="mt-1 text-xs text-white/40">
+            <p className="mt-1 text-xs text-fg-muted">
               Using {formatDuration(node.audioAnalysis.clipStart ?? 0)} –{" "}
               {formatDuration(
                 (node.audioAnalysis.clipStart ?? 0) + duration,
@@ -282,14 +282,14 @@ function AudioUploader({
         <div className="mt-6 grid grid-cols-3 gap-4 text-center">
           <div>
             <p className="text-2xl font-light">{formatDuration(duration)}</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-white/30">
+            <p className="mt-1 text-xs text-fg-muted">
               Duration
             </p>
           </div>
 
           <div>
             <p className="text-2xl font-light">{bpm}</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-white/30">
+            <p className="mt-1 text-xs text-fg-muted">
               BPM
             </p>
             <div className="mt-2 flex flex-wrap justify-center gap-1">
@@ -300,7 +300,7 @@ function AudioUploader({
                     changeTempo(scaleAllTempo(node.audioAnalysis!, factor))
                   }
                   title={`If the detected tempo should be ${label} what's shown`}
-                  className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+                  className="cursor-pointer rounded-full px-2 py-0.5 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
                 >
                   {label}
                 </button>
@@ -325,12 +325,12 @@ function AudioUploader({
                 placeholder="Type BPM"
                 value={manualBpmInput}
                 onChange={(event) => setManualBpmInput(event.target.value)}
-                className="w-20 rounded-full border border-white/10 bg-transparent px-2 py-0.5 text-center text-[10px] text-white/70 outline-none focus:border-white/30"
+                className="w-20 rounded-lg border bg-transparent px-2 py-0.5 text-center text-xs text-fg-soft outline-none focus:border-line-hover border-transparent bg-elevated"
               />
               <button
                 type="submit"
                 title="Replace the detected beats with an even grid at this BPM — use this if detection failed outright, not just by a wrong ratio"
-                className="cursor-pointer rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+                className="cursor-pointer rounded-full px-2 py-0.5 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
               >
                 Set
               </button>
@@ -340,7 +340,7 @@ function AudioUploader({
               <button
                 onClick={() => changeTempo(node.audioAnalysisOriginal!)}
                 title="Undo every correction and go back to what was originally detected"
-                className="mt-2 cursor-pointer text-[10px] text-white/30 underline underline-offset-2 transition hover:text-white/60"
+                className="mt-2 cursor-pointer text-xs text-fg-muted underline underline-offset-2 transition hover:text-fg-soft"
               >
                 Reset to detected
               </button>
@@ -349,17 +349,17 @@ function AudioUploader({
 
           <div>
             <p className="text-2xl font-light">{sections.length}</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-white/30">
+            <p className="mt-1 text-xs text-fg-muted">
               Sections
             </p>
           </div>
         </div>
 
-        <div className="mt-8 border-t border-white/10 pt-4">
-          <p className="mb-2 text-[10px] uppercase tracking-[0.25em] text-white/30">
+        <div className="mt-8 border-t border-line pt-4">
+          <p className="mb-2 text-xs text-fg-muted">
             Sections
           </p>
-          <ul className="space-y-1 text-left text-sm text-white/60">
+          <ul className="space-y-1 text-left text-sm text-fg-soft">
             {sections.map((section) => (
               <li key={section.id} className="flex items-center justify-between gap-3">
                 <span>
@@ -380,7 +380,7 @@ function AudioUploader({
                         )
                       }
                       title={`Correct this section's tempo by ${label}`}
-                      className="cursor-pointer rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+                      className="cursor-pointer rounded-full px-1.5 py-0.5 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
                     >
                       {label}
                     </button>
@@ -417,12 +417,12 @@ function AudioUploader({
                           [section.id]: event.target.value,
                         }))
                       }
-                      className="w-14 rounded-full border border-white/10 bg-transparent px-1.5 py-0.5 text-center text-[10px] text-white/70 outline-none focus:border-white/30"
+                      className="w-14 rounded-lg border bg-transparent px-1.5 py-0.5 text-center text-xs text-fg-soft outline-none focus:border-line-hover border-transparent bg-elevated"
                     />
                     <button
                       type="submit"
                       title="Replace this section's beats with an even grid at this BPM"
-                      className="cursor-pointer rounded-full border border-white/10 px-1.5 py-0.5 text-[10px] text-white/40 transition hover:border-white/25 hover:text-white"
+                      className="cursor-pointer rounded-full px-1.5 py-0.5 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
                     >
                       Set
                     </button>
@@ -445,7 +445,7 @@ function AudioUploader({
               }
             }}
             disabled={frameCount === 0}
-            className="mt-8 w-full cursor-pointer rounded-full border border-white/15 px-4 py-2 text-xs text-white/60 transition hover:border-white/40 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/15 disabled:hover:text-white/60"
+            className="mt-8 w-full cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line-strong disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong"
           >
             Reset keyframes{frameCount > 0 ? ` (${frameCount})` : ""}
           </button>
@@ -458,7 +458,7 @@ function AudioUploader({
             setSectionBpmInputs({});
             onClear();
           }}
-          className="mt-3 w-full cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
+          className="mt-3 w-full cursor-pointer rounded-full px-4 py-2 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
         >
           Remove & upload a different song
         </button>
@@ -471,16 +471,16 @@ function AudioUploader({
     const clipEnd = Math.min(clipStart + MAX_CLIP_SECONDS, pendingDuration);
 
     return (
-      <div className="mx-auto max-w-xl rounded-3xl border border-white/15 bg-white/[0.02] px-8 py-10">
-        <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+      <div className="mx-auto max-w-xl rounded-xl bg-surface px-8 py-10">
+        <p className="text-xs text-fg-muted">
           Pick a {formatDuration(MAX_CLIP_SECONDS)} window
         </p>
 
-        <h3 className="mt-2 font-serif text-xl font-light">
+        <h3 className="mt-2 font-medium text-xl">
           {pendingFile.name}
         </h3>
 
-        <p className="mt-2 text-xs text-white/40">
+        <p className="mt-2 text-xs text-fg-muted">
           This song is {formatDuration(pendingDuration)} long — only{" "}
           {formatDuration(MAX_CLIP_SECONDS)} can be analyzed. Drag the
           slider to choose which part of the song to use, then preview it
@@ -508,23 +508,23 @@ function AudioUploader({
                 previewRef.current.pause();
               }
             }}
-            className="w-full cursor-pointer accent-white"
+            className="w-full cursor-pointer accent-pine"
           />
 
-          <div className="mt-2 flex justify-between text-xs text-white/40">
+          <div className="mt-2 flex justify-between text-xs text-fg-muted">
             <span>0:00</span>
             <span>{formatDuration(pendingDuration)}</span>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3">
-          <span className="text-sm text-white/70">
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-surface px-5 py-3">
+          <span className="text-sm text-fg-soft">
             Using {formatDuration(clipStart)} – {formatDuration(clipEnd)}
           </span>
 
           <button
             onClick={togglePreview}
-            className="cursor-pointer rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/60 transition hover:border-white/30 hover:text-white"
+            className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
           >
             {isPreviewPlaying ? "Pause" : "Preview"}
           </button>
@@ -538,7 +538,7 @@ function AudioUploader({
               setPendingFile(null);
               setPendingUrl(null);
             }}
-            className="flex-1 cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
+            className="flex-1 cursor-pointer rounded-full px-4 py-2 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
           >
             Choose a different song
           </button>
@@ -548,13 +548,13 @@ function AudioUploader({
               previewRef.current?.pause();
               doUpload(pendingFile, clipStart);
             }}
-            className="flex-1 cursor-pointer rounded-full border border-white/40 bg-white/[0.08] px-4 py-2 text-xs text-white transition hover:bg-white/[0.14]"
+            className="flex-1 cursor-pointer rounded-lg border px-4 py-2 text-xs text-fg transition hover:bg-line-strong border-transparent bg-line-strong"
           >
             Use this part
           </button>
         </div>
 
-        {error && <p className="mt-4 text-xs text-red-400">{error}</p>}
+        {error && <p className="mt-4 text-xs text-holly-soft">{error}</p>}
       </div>
     );
   }
@@ -571,34 +571,34 @@ function AudioUploader({
         setIsDragging(false);
         handleFile(event.dataTransfer.files?.[0]);
       }}
-      className={`mx-auto flex max-w-xl flex-col items-center justify-center rounded-3xl border-2 border-dashed px-10 py-16 text-center transition ${
+      className={`mx-auto flex max-w-xl flex-col items-center justify-center rounded-xl border border-dashed px-10 py-16 text-center transition ${
         isDragging
-          ? "border-white/40 bg-white/[0.05]"
-          : "border-white/15 bg-white/[0.02]"
+          ? "bg-line-strong"
+          : "bg-elevated"
       }`}
     >
       {isUploading ? (
-        <p className="text-white/60">Analyzing audio — this can take a moment…</p>
+        <p className="text-fg-soft">Analyzing audio — this can take a moment…</p>
       ) : (
         <>
-          <p className="text-white/70">
+          <p className="text-fg-soft">
             Drop your song's MP3 here, or{" "}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="cursor-pointer text-white underline underline-offset-2 hover:text-white/80"
+              className="cursor-pointer text-fg underline underline-offset-2 hover:text-fg"
             >
               browse
             </button>
           </p>
 
-          <p className="mt-2 text-xs text-white/25">
+          <p className="mt-2 text-xs text-fg-muted">
             MP3 only — analyzed for BPM, sections, and energy
           </p>
         </>
       )}
 
       {error && (
-        <p className="mt-4 text-xs text-red-400">{error}</p>
+        <p className="mt-4 text-xs text-holly-soft">{error}</p>
       )}
 
       <input

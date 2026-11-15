@@ -6,6 +6,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ParolPreview from "../components/ParolPreview";
 import RenameParolDialog from "../components/RenameParolDialog";
 import { useProjects } from "../context/ProjectContext";
+import Brand from "../components/Brand";
+import WinterBackdrop from "../components/WinterBackdrop";
 import type { ProjectNode } from "../types";
 import { grantSessionPass } from "../utils/accessLock";
 import { displayName } from "../utils/parolName";
@@ -46,7 +48,7 @@ function DesignThumbnail({ node }: { node: ProjectNode }) {
     !!node.imageDataUrl && (node.zones?.length ?? 0) > 0 && mappings.length > 0;
 
   return (
-    <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl bg-[#0b0b0b] p-2">
+    <div className="dev-thumb flex h-56 items-center justify-center overflow-hidden rounded-xl bg-surface p-2">
       {canColor ? (
         <div
           className="h-full max-w-full"
@@ -65,12 +67,12 @@ function DesignThumbnail({ node }: { node: ProjectNode }) {
             className="h-full w-full object-fill"
             style={{ filter: "invert(1) brightness(0.45)" }}
           />
-          <p className="absolute inset-x-0 bottom-1 text-center text-[10px] uppercase tracking-wider text-white/50">
+          <p className="absolute inset-x-0 bottom-1 text-center text-xs text-fg-muted">
             No pins assigned yet
           </p>
         </div>
       ) : (
-        <p className="text-xs text-white/30">Drawing not loaded</p>
+        <p className="text-xs text-fg-muted">Drawing not loaded</p>
       )}
     </div>
   );
@@ -265,36 +267,35 @@ function DeveloperPage() {
   const nameOf = (d: Design) => `${parolLabel(d.node)} (${d.where})`;
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white">
+    <main className="dev-window winter-app isolate min-h-screen bg-canvas text-fg">
+      <WinterBackdrop variant="quiet" />
       <div className="mx-auto max-w-5xl px-6 pb-4 pt-10">
         <button
           onClick={() => navigate("/")}
-          className="mb-8 cursor-pointer text-xs uppercase tracking-[0.3em] text-white/40 transition hover:text-white"
+          className="dev-back mb-8 cursor-pointer text-xs text-fg-muted transition hover:text-fg"
         >
           ← Back
         </button>
 
-        <p className="mb-3 text-[10px] uppercase tracking-[0.45em] text-white/30">
-          Lighting Design System
-        </p>
-        <h1 className="font-serif text-4xl font-light tracking-[-0.03em] sm:text-5xl">
+        <Brand className="dev-brand mb-4" />
+        <h1 className="dev-title font-semibold tracking-tight text-4xl tracking-[-0.03em] sm:text-5xl">
           Developer Window
         </h1>
 
-        <p className="mb-8 mt-10 font-serif text-xl text-white/90 sm:text-2xl">
+        <p className="dev-count mb-8 mt-10 font-medium text-xl text-fg sm:text-2xl">
           Current designs registered :{" "}
-          <span className="font-bold text-white">{designs.length}</span>
+          <span className="dev-count-num font-bold text-fg">{designs.length}</span>
         </p>
 
         {designs.length > 0 && !selecting && (
-          <p className="-mt-4 mb-6 text-xs text-white/35">
+          <p className="dev-hint -mt-4 mb-6 text-xs text-fg-muted">
             Click a design to open it. You will be asked for your Developer
             Window email and password first.
           </p>
         )}
 
         {designs.length === 0 ? (
-          <p className="py-24 text-center text-sm text-white/30">
+          <p className="py-24 text-center text-sm text-fg-muted">
             No designs registered yet.
           </p>
         ) : (
@@ -336,29 +337,29 @@ function DeveloperPage() {
                           }
                         : undefined
                     }
-                    className={`relative rounded-2xl border p-2 transition ${
+                    className={`dev-card relative rounded-xl border p-2 transition ${
                       pickable || !selecting ? "cursor-pointer" : ""
                     } ${
-                      !selecting && !locked ? "hover:border-white/30" : ""
+                      !selecting && !locked ? "bg-elevated" : ""
                     } ${
                       selecting && !pickable && !locked ? "opacity-50" : ""
                     } ${
                       // Locked designs always have red edges.
                       locked
-                        ? `border-2 border-[#ff3b41] shadow-[0_0_18px_rgba(255,59,65,0.35)] ${
-                            isSelected ? "bg-white/[0.08] ring-2 ring-white/70" : ""
+                        ? `border border-holly ${
+                            isSelected ? "bg-elevated ring-2 ring-line-hover" : ""
                           } ${selecting && !pickable ? "opacity-50" : ""}`
                         : isSelected
                           ? mode !== "delete"
-                            ? "border-white bg-white/[0.08] ring-2 ring-white/50"
-                            : "border-[#ff5a5f] bg-[#ff5a5f]/10 ring-2 ring-[#ff5a5f]/40"
+                            ? "border-fg bg-elevated ring-2 ring-line-hover"
+                            : "border-holly bg-holly/10 ring-2 ring-holly/40"
                           : selecting
-                            ? "border-white/15 hover:border-white/40"
-                            : "border-white/10"
+                            ? "border-line-strong hover:border-line-hover"
+                            : "border-line"
                     }`}
                   >
                     {locked && (
-                      <span className="absolute left-3 top-3 z-10 flex items-center gap-1 rounded-full bg-[#ff3b41] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                      <span className="dev-lock-badge absolute left-3 top-3 z-10 flex items-center gap-1 rounded-lg bg-holly px-2.5 py-1 text-xs font-bold text-fg">
                         <LockIcon /> Locked
                       </span>
                     )}
@@ -366,12 +367,12 @@ function DeveloperPage() {
                     {pickable && (
                       <span
                         aria-hidden="true"
-                        className={`absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${
+                        className={`dev-check absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border text-xs font-bold ${
                           isSelected
                             ? mode !== "delete"
-                              ? "border-white bg-white text-black"
-                              : "border-[#ff5a5f] bg-[#ff5a5f] text-white"
-                            : "border-white/40 bg-black/60 text-transparent"
+                              ? "border-fg bg-fg text-canvas"
+                              : "border-holly bg-holly text-fg"
+                            : "bg-black/60 text-transparent bg-line-strong"
                         }`}
                       >
                         ✓
@@ -381,10 +382,10 @@ function DeveloperPage() {
                     <DesignThumbnail node={design.node} />
 
                     <div className="px-1 pb-1 pt-3 text-center">
-                      <p className="font-serif text-base text-white/90">
+                      <p className="dev-card-title font-medium text-base text-fg">
                         {parolLabel(design.node)}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-white/35">
+                      <p className="dev-card-sub mt-0.5 text-xs text-fg-muted">
                         {design.node.parolName?.trim()
                           ? `${design.node.name} · ${design.where}`
                           : design.where}
@@ -396,7 +397,7 @@ function DeveloperPage() {
                             setRenaming(design);
                           }}
                           onKeyDown={(event) => event.stopPropagation()}
-                          className="mt-2 cursor-pointer rounded-full border border-white/15 px-3 py-1 text-[10px] uppercase tracking-wider text-white/50 transition hover:border-white/40 hover:text-white"
+                          className="mt-2 cursor-pointer rounded-full px-3 py-1 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong dev-btn"
                         >
                           Rename
                         </button>
@@ -411,10 +412,10 @@ function DeveloperPage() {
       </div>
 
       {/* Stays at the bottom of the screen, like the buttons in the layout */}
-      <div className="sticky bottom-0 mt-8 border-t border-white/10 bg-[#050505]/90 px-6 py-4 backdrop-blur">
+      <div className="dev-bar sticky bottom-0 mt-8 border-t border-line bg-[#050505]/90 px-6 py-4 ">
         {lastDeletion && (
-          <div className="mx-auto mb-4 flex max-w-5xl flex-wrap items-center justify-center gap-3 rounded-2xl border border-white/15 bg-white/[0.04] px-5 py-3">
-            <p className="text-sm text-white/70">
+          <div className="dev-note mx-auto mb-4 flex max-w-5xl flex-wrap items-center justify-center gap-3 rounded-xl border bg-elevated px-5 py-3 border-transparent">
+            <p className="text-sm text-fg-soft">
               Deleted {lastDeletion.label}.
               {deletionCount > 1 &&
                 ` ${deletionCount - 1} earlier ${
@@ -424,7 +425,7 @@ function DeveloperPage() {
             <button
               onClick={() => void handleUndo()}
               disabled={undoing}
-              className="cursor-pointer rounded-full bg-white px-5 py-2 font-serif text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-40"
+              className="dev-btn-gold cursor-pointer rounded-lg bg-fg px-5 py-2 font-medium text-sm font-semibold text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-40"
             >
               {undoing ? "Restoring…" : "Undo delete"}
             </button>
@@ -435,8 +436,8 @@ function DeveloperPage() {
             role="status"
             className={`mx-auto mb-3 max-w-5xl text-center text-xs ${
               undoNote.startsWith("Restored")
-                ? "text-white/60"
-                : "text-[#ff8a8e]"
+                ? "text-fg-soft"
+                : "text-holly-soft"
             }`}
           >
             {undoNote}
@@ -447,14 +448,14 @@ function DeveloperPage() {
             <>
               <button
                 onClick={stopSelecting}
-                className="cursor-pointer rounded-full border border-white/20 px-6 py-3 font-serif text-base text-white/80 transition hover:border-white/50 hover:text-white sm:px-8"
+                className="cursor-pointer rounded-full px-6 py-3 font-medium text-base text-fg transition hover:text-fg sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 Cancel
               </button>
               <button
                 onClick={() => setPending({ kind: "selected" })}
                 disabled={chosen.length === 0}
-                className="cursor-pointer rounded-full bg-[#ff5a5f] px-6 py-3 font-serif text-base font-semibold text-white transition hover:bg-[#f0484d] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-[#ff5a5f] sm:px-8"
+                className="dev-btn-cran cursor-pointer rounded-lg bg-holly px-6 py-3 font-medium text-base font-semibold text-fg transition hover:bg-holly/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-holly sm:px-8"
               >
                 Delete selected ({chosen.length})
               </button>
@@ -463,14 +464,14 @@ function DeveloperPage() {
             <>
               <button
                 onClick={stopSelecting}
-                className="cursor-pointer rounded-full border border-white/20 px-6 py-3 font-serif text-base text-white/80 transition hover:border-white/50 hover:text-white sm:px-8"
+                className="cursor-pointer rounded-full px-6 py-3 font-medium text-base text-fg transition hover:text-fg sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 Cancel
               </button>
               <button
                 onClick={() => setPending({ kind: "reset" })}
                 disabled={chosenToReset.length === 0}
-                className="cursor-pointer rounded-full bg-white px-6 py-3 font-serif text-base font-semibold text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white sm:px-8"
+                className="dev-btn-gold cursor-pointer rounded-lg bg-fg px-6 py-3 font-medium text-base font-semibold text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-fg sm:px-8"
               >
                 Reset color lock ({chosenToReset.length})
               </button>
@@ -479,21 +480,21 @@ function DeveloperPage() {
             <>
               <button
                 onClick={stopSelecting}
-                className="cursor-pointer rounded-full border border-white/20 px-5 py-3 font-serif text-base text-white/80 transition hover:border-white/50 hover:text-white sm:px-8"
+                className="cursor-pointer rounded-full px-5 py-3 font-medium text-base text-fg transition hover:text-fg sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 Cancel
               </button>
               <button
                 onClick={() => applyLock(chosenToUnlock, false)}
                 disabled={chosenToUnlock.length === 0}
-                className="cursor-pointer rounded-full border border-white/25 px-5 py-3 font-serif text-base font-semibold text-white transition hover:border-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent sm:px-8"
+                className="cursor-pointer rounded-full px-5 py-3 font-medium text-base font-semibold text-fg transition hover:bg-elevated disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 Unlock ({chosenToUnlock.length})
               </button>
               <button
                 onClick={() => applyLock(chosenToLock, true)}
                 disabled={chosenToLock.length === 0}
-                className="cursor-pointer rounded-full bg-[#ff3b41] px-5 py-3 font-serif text-base font-semibold text-white transition hover:bg-[#e8282e] disabled:cursor-default disabled:opacity-30 disabled:hover:bg-[#ff3b41] sm:px-8"
+                className="dev-btn-cran cursor-pointer rounded-lg bg-holly px-5 py-3 font-medium text-base font-semibold text-fg transition hover:bg-holly/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-holly sm:px-8"
               >
                 Lock ({chosenToLock.length})
               </button>
@@ -503,28 +504,28 @@ function DeveloperPage() {
               <button
                 onClick={() => startMode("lock")}
                 disabled={designs.length === 0}
-                className="flex cursor-pointer items-center gap-2 rounded-full border border-white/25 px-6 py-3 font-serif text-base font-semibold text-white transition hover:border-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-30 sm:px-8"
+                className="flex cursor-pointer items-center gap-2 rounded-full px-6 py-3 font-medium text-base font-semibold text-fg transition hover:bg-elevated disabled:cursor-default disabled:opacity-30 sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 <LockIcon /> Lock Design
               </button>
               <button
                 onClick={() => startMode("reset")}
                 disabled={resettable.length === 0}
-                className="cursor-pointer rounded-full border border-white/25 px-6 py-3 font-serif text-base font-semibold text-white transition hover:border-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-30 sm:px-8"
+                className="cursor-pointer rounded-full px-6 py-3 font-medium text-base font-semibold text-fg transition hover:bg-elevated disabled:cursor-default disabled:opacity-30 sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 Reset Color Lock
               </button>
               <button
                 onClick={() => setPending({ kind: "all" })}
                 disabled={unlockedDesigns.length === 0}
-                className="cursor-pointer rounded-full border border-[#ff5a5f]/50 px-6 py-3 font-serif text-base font-semibold text-[#ff8a8e] transition hover:bg-[#ff5a5f]/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent sm:px-8"
+                className="dev-btn-cran-outline cursor-pointer rounded-lg border border-holly/50 px-6 py-3 font-medium text-base font-semibold text-holly-soft transition hover:bg-holly/10 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent sm:px-8"
               >
                 Delete all
               </button>
               <button
                 onClick={() => startMode("delete")}
                 disabled={unlockedDesigns.length === 0}
-                className="cursor-pointer rounded-full border border-white/25 px-6 py-3 font-serif text-base font-semibold text-white transition hover:border-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-30 sm:px-8"
+                className="cursor-pointer rounded-full px-6 py-3 font-medium text-base font-semibold text-fg transition hover:bg-elevated disabled:cursor-default disabled:opacity-30 sm:px-8 bg-elevated hover:bg-line-strong dev-btn"
               >
                 Select to delete
               </button>
@@ -532,25 +533,25 @@ function DeveloperPage() {
           )}
         </div>
         {mode === "delete" && (
-          <p className="mt-3 text-center text-[11px] text-white/35">
+          <p className="dev-hint mt-3 text-center text-xs text-fg-muted">
             Tap the designs you want to delete. Locked designs can't be
             deleted until you unlock them.
           </p>
         )}
         {mode === "reset" && (
-          <p className="mt-3 text-center text-[11px] text-white/35">
+          <p className="dev-hint mt-3 text-center text-xs text-fg-muted">
             Tap the groups that forgot their color combo, then press Reset. Dimmed
             designs have no color lock yet. The design is kept; the group makes
             a new combo the next time it opens.
           </p>
         )}
         {resetError && (
-          <p role="alert" className="mt-3 text-center text-[11px] text-[#ff8a8e]">
+          <p role="alert" className="mt-3 text-center text-xs text-holly-soft">
             {resetError}
           </p>
         )}
         {mode === "lock" && (
-          <p className="mt-3 text-center text-[11px] text-white/35">
+          <p className="dev-hint mt-3 text-center text-xs text-fg-muted">
             Tap the designs you want to lock, then press Lock. To unlock, tap the locked designs and press Unlock.
           </p>
         )}
@@ -596,7 +597,7 @@ function DeveloperPage() {
             {unlockedDesigns.length === 1 ? "design" : "designs"}.
           </p>
           {lockedCount > 0 && (
-            <p className="text-[#ff8a8e]">
+            <p className="text-holly-soft">
               {lockedCount} locked {lockedCount === 1 ? "design is" : "designs are"}{" "}
               kept. Unlock {lockedCount === 1 ? "it" : "them"} first to delete{" "}
               {lockedCount === 1 ? "it" : "them"}.

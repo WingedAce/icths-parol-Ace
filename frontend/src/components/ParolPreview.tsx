@@ -56,7 +56,7 @@ function ParolPreview({
 
   if (!node.imageDataUrl || zones.length === 0 || pinMappings.length === 0) {
     return (
-      <p className="text-center text-sm text-white/30">
+      <p className="text-center text-sm text-fg-muted">
         Detect zones and assign pins on the Zone Map tab to see the parol
         light up here.
       </p>
@@ -113,7 +113,7 @@ function ParolPreview({
   return (
     <div>
     <div
-      className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b]"
+      className="relative w-full overflow-hidden rounded-xl bg-surface"
       style={{ aspectRatio: `${imageWidth} / ${imageHeight}` }}
     >
       <img
@@ -192,11 +192,11 @@ function ParolPreview({
       </svg>
 
       {allowPinLabels && (
-        <div className="absolute bottom-2 left-2 rounded-full border border-white/10 bg-black/70 p-0.5 backdrop-blur">
+        <div className="absolute bottom-2 left-2 rounded-lg border bg-canvas/90 p-0.5 border-transparent ">
           <button
             onClick={() => setShowLabels((v) => !v)}
             aria-pressed={showLabels}
-            className="cursor-pointer rounded-full px-3 py-1 text-[11px] uppercase tracking-wider text-white/70 hover:text-white"
+            className="cursor-pointer rounded-lg px-3 py-1 text-xs text-fg-soft hover:text-fg"
           >
             {showLabels ? "Hide pins" : "Show pins"}
           </button>
@@ -209,9 +209,9 @@ function ParolPreview({
         {groups.map((g) => (
           <div
             key={g.id}
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-surface px-3 py-2"
           >
-            <span className="mr-1 text-[11px] text-white/45">
+            <span className="mr-1 text-xs text-fg-muted">
               Tricolor {g.pins.map(formatPin).join("+")}
             </span>
             {PIN_COLORS.map((c) => (
@@ -228,7 +228,7 @@ function ParolPreview({
                 }
                 className={`h-6 w-6 cursor-pointer rounded-full border-2 transition hover:scale-110 ${
                   g.color?.toLowerCase() === c.hex.toLowerCase()
-                    ? "border-white ring-2 ring-white/30"
+                    ? "border-fg ring-2 ring-line-hover"
                     : "border-transparent"
                 }`}
                 style={{ backgroundColor: c.hex }}
@@ -244,7 +244,7 @@ function ParolPreview({
                 )
               }
               aria-label="Custom color"
-              className="h-6 w-8 cursor-pointer rounded border border-white/10 bg-transparent"
+              className="h-6 w-8 cursor-pointer rounded border bg-transparent border-transparent"
             />
           </div>
         ))}

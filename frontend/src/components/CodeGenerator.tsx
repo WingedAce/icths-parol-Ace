@@ -315,17 +315,17 @@ function CodeGenerator({
 
   const loopToggle = (
     <div className="flex max-w-md flex-col items-center gap-1 text-center">
-      <label className="flex cursor-pointer items-center gap-3 text-xs text-white/70">
+      <label className="flex cursor-pointer items-center gap-3 text-xs text-fg-soft">
         <input
           type="checkbox"
           checked={loopShow}
           onChange={(event) => handleLoopChange(event.target.checked)}
-          className="h-4 w-4 cursor-pointer accent-amber-200"
+          className="h-4 w-4 cursor-pointer accent-pine"
         />
         Play on a loop until the Arduino is disconnected from power
       </label>
       {loopShow && (
-        <p className="text-[11px] text-white/35">
+        <p className="text-xs text-fg-muted">
           The show starts over every time it reaches the end of the song
           {audioAnalysis ? ` (${formatClock(audioAnalysis.duration)})` : ""}.
           Set your song to repeat as well and start both together so they stay
@@ -360,20 +360,20 @@ function CodeGenerator({
     <div className="mx-auto flex max-w-3xl flex-col items-center gap-6">
       {!code ? (
         <div className="flex max-w-xl flex-col items-center gap-4 text-center">
-          <p className="font-serif text-white/70">
+          <p className="font-medium text-fg-soft">
             You are done with the process, tap the button below to generate
             your code
           </p>
 
           {pinMappings.length === 0 && (
-            <p className="text-xs text-white/25">
+            <p className="text-xs text-fg-muted">
               No pins assigned yet — assign pins in the Zone Map first so the
               generated code has something to control.
             </p>
           )}
 
           {problems.length > 0 && (
-            <div className="flex flex-col gap-1 text-xs text-red-300/70">
+            <div className="flex flex-col gap-1 text-xs text-holly-soft">
               {problems.map((p) => (
                 <p key={p}>{p}</p>
               ))}
@@ -381,10 +381,10 @@ function CodeGenerator({
           )}
 
           {parolWarning && (
-            <p className="text-xs text-amber-300/80">⚠ {parolWarning}</p>
+            <p className="text-xs text-warn">⚠ {parolWarning}</p>
           )}
 
-          <p className="max-w-md text-center text-xs text-white/40">
+          <p className="max-w-md text-center text-xs text-fg-muted">
             Heads up: the lights start {AUTO_START_DELAY_MS / 1000} seconds
             after you press the RESET button on the Arduino.
           </p>
@@ -394,7 +394,7 @@ function CodeGenerator({
           <button
             onClick={handleGenerate}
             disabled={!hasPins}
-            className="cursor-pointer rounded-xl bg-white px-6 py-3 font-serif text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-50"
+            className="cursor-pointer rounded-xl bg-fg px-6 py-3 font-medium text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-50"
           >
             Generate Arduino code
           </button>
@@ -402,14 +402,14 @@ function CodeGenerator({
       ) : (
         <div className="flex w-full flex-col gap-4">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+            <p className="text-xs text-fg-muted">
               {sketchName}
             </p>
 
             <div className="flex gap-2">
               <button
                 onClick={handleCopy}
-                className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/25 hover:text-white"
+                className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
               >
                 {copyState === "copied"
                   ? "Copied!"
@@ -419,7 +419,7 @@ function CodeGenerator({
               </button>
               <button
                 onClick={handleDownload}
-                className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/25 hover:text-white"
+                className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
               >
                 Download .ino
               </button>
@@ -428,15 +428,15 @@ function CodeGenerator({
 
           <div className="flex justify-center">{loopToggle}</div>
 
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
-            <pre className="codebox-scroll max-h-[28rem] overflow-y-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed text-white/80">
+          <div className="overflow-hidden rounded-xl bg-surface">
+            <pre className="codebox-scroll max-h-[28rem] overflow-y-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed text-fg">
               <code>{code}</code>
             </pre>
           </div>
 
           {build && (
             <div className="flex flex-col items-center gap-2 text-center">
-              <p className="text-[11px] text-white/40">
+              <p className="text-xs text-fg-muted">
                 {audioAnalysis
                   ? `${
                       audioAnalysis.tempoSegments
@@ -451,18 +451,18 @@ function CodeGenerator({
                 of the Mega's flash (it has about {Math.floor((MAX_SHOW_ROWS * 4) / 1024)} KB free for a show)
               </p>
               {build.events.length === 0 && (
-                <p className="text-xs text-amber-300/80">
+                <p className="text-xs text-warn">
                   No lights are scheduled yet, so this sketch will NOT turn
                   anything on. Upload the song and turn pins on in the
                   keyframes first.
                 </p>
               )}
               {[...(parolWarning ? [parolWarning] : []), ...build.warnings].map((w) => (
-                <p key={w} className="text-xs text-amber-300/80">
+                <p key={w} className="text-xs text-warn">
                   ⚠ {w}
                 </p>
               ))}
-              <p className="text-[11px] text-white/25">
+              <p className="text-xs text-fg-muted">
                 {`Heads up: the lights start ${AUTO_START_DELAY_MS / 1000} seconds after you press the RESET button on the Arduino. Press play on the song when they start.`}
                 {(audioAnalysis?.clipStart ?? 0) > 0 &&
                   ` Play the song from ${formatClock(audioAnalysis?.clipStart ?? 0)}, the part you picked on the Song tab.`}
@@ -472,23 +472,23 @@ function CodeGenerator({
         </div>
       )}
 
-      <div className="mt-12 flex w-full flex-col items-center gap-4 border-t border-white/10 pt-10">
-        <p className="text-[11px] uppercase tracking-[0.35em] text-white/40">
+      <div className="mt-12 flex w-full flex-col items-center gap-4 border-t border-line pt-10">
+        <p className="text-xs text-fg-muted">
           Behind the Website
         </p>
         <button
           onClick={() => setShowCredits(true)}
-          className="group cursor-pointer rounded-2xl border border-white/30 bg-white/[0.06] px-12 py-4 font-serif text-lg uppercase tracking-[0.3em] text-white shadow-[0_0_30px_rgba(255,255,255,0.08)] transition hover:border-white/60 hover:bg-white/[0.12] hover:shadow-[0_0_40px_rgba(255,255,255,0.18)] sm:px-16 sm:text-xl"
+          className="credits-btn group cursor-pointer rounded-xl border px-12 py-4 font-medium text-lg text-fg transition hover:bg-line-strong hover: sm:px-16 sm:text-xl border-transparent bg-line-strong"
         >
-          <span className="mr-3 text-amber-200/90 transition group-hover:text-amber-100">
+          <span className="mr-3 text-warn transition group-hover:text-fg-soft">
             ✦
           </span>
           Credits
-          <span className="ml-3 text-amber-200/90 transition group-hover:text-amber-100">
+          <span className="ml-3 text-warn transition group-hover:text-fg-soft">
             ✦
           </span>
         </button>
-        <p className="text-[11px] tracking-[0.2em] text-white/40">
+        <p className="text-xs text-fg-muted">
           Tap to meet the students
         </p>
       </div>

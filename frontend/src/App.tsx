@@ -3,7 +3,16 @@ import { useNavigate } from "react-router";
 
 import ColorLockGate from "./components/ColorLockGate";
 import { useProjects } from "./context/ProjectContext";
+import FrozenTitle from "./components/FrozenTitle";
+import WinterBackdrop from "./components/WinterBackdrop";
 import SchoolCredit from "./components/SchoolCredit";
+import logo from "./assets/logo.png";
+import {
+  BRAND_CATEGORY,
+  BRAND_NAME,
+  BRAND_SUBTAGLINE,
+  BRAND_TAGLINE,
+} from "./components/Brand";
 
 function App() {
   const navigate = useNavigate();
@@ -104,73 +113,71 @@ function App() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
-      <div className="w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-6 py-16 text-fg">
+      <WinterBackdrop paused={pendingLock !== null} />
+      <div className="relative z-10 w-full max-w-md">
+        <header className="mb-12 text-center">
+          <img
+            src={logo}
+            alt="I-PAROL SYNAPSE logo"
+            draggable={false}
+            className="mx-auto mb-4 h-14 w-auto select-none"
+          />
 
-        <div className="mb-12 text-center">
-          <p className="mb-5 text-[10px] uppercase tracking-[0.45em] text-white/30">
-            Lighting Design System
-          </p>
-
-          <h1 className="font-serif text-5xl font-light tracking-[-0.04em]">
-            Parol Editor
+          <p className="text-sm text-fg-muted">{BRAND_CATEGORY}</p>
+          <h1 className="mt-4 text-5xl font-semibold tracking-[-0.035em] sm:-mx-8 sm:text-6xl">
+            <FrozenTitle text={BRAND_NAME} />
           </h1>
-        </div>
+          <p className="mt-5 text-xl leading-snug text-fg-soft">
+            {BRAND_TAGLINE}
+          </p>
+        </header>
 
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col gap-4"
-        >
-          <div>
-            <label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-white/30">
-              Batch
-            </label>
-
-            <input
-              autoFocus
-              value={batch}
-              onChange={(event) =>
-                setBatch(event.target.value)
-              }
-              placeholder="e.g. 2026"
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-white/30">
-              Section
-            </label>
-
-            <input
-              value={section}
-              onChange={(event) =>
-                setSection(event.target.value)
-              }
-              placeholder="Enter your section"
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-white/30">
-              Group Number
-            </label>
-
-            <input
-              value={groupNumber}
-              onChange={(event) =>
-                setGroupNumber(event.target.value)
-              }
-              placeholder="Enter your group number"
-              className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
-            />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="divide-y divide-line overflow-hidden rounded-2xl bg-surface">
+            <div className="flex items-center gap-4 px-5 transition focus-within:bg-elevated">
+              <label htmlFor="landing-batch" className="w-24 shrink-0 text-sm text-fg-muted">
+                Batch
+              </label>
+              <input
+                id="landing-batch"
+                autoFocus
+                value={batch}
+                onChange={(event) => setBatch(event.target.value)}
+                placeholder="e.g. 2026"
+                className="h-14 min-w-0 flex-1 bg-transparent text-[17px] text-fg outline-none placeholder:text-fg-muted/50 focus-visible:outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-4 px-5 transition focus-within:bg-elevated">
+              <label htmlFor="landing-section" className="w-24 shrink-0 text-sm text-fg-muted">
+                Section
+              </label>
+              <input
+                id="landing-section"
+                value={section}
+                onChange={(event) => setSection(event.target.value)}
+                placeholder="Your section"
+                className="h-14 min-w-0 flex-1 bg-transparent text-[17px] text-fg outline-none placeholder:text-fg-muted/50 focus-visible:outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-4 px-5 transition focus-within:bg-elevated">
+              <label htmlFor="landing-group" className="w-24 shrink-0 text-sm text-fg-muted">
+                Group
+              </label>
+              <input
+                id="landing-group"
+                value={groupNumber}
+                onChange={(event) => setGroupNumber(event.target.value)}
+                placeholder="Group number"
+                className="h-14 min-w-0 flex-1 bg-transparent text-[17px] text-fg outline-none placeholder:text-fg-muted/50 focus-visible:outline-none"
+              />
+            </div>
           </div>
 
           {lockedMessage && (
             <p
               role="alert"
-              className="rounded-xl border border-[#ff3b41]/60 bg-[#ff3b41]/10 px-4 py-3 text-xs leading-relaxed text-[#ff8a8e]"
+              className="rounded-2xl bg-holly/10 px-5 py-4 text-sm leading-relaxed text-holly-soft"
             >
               🔒 {lockedMessage}
             </p>
@@ -179,20 +186,22 @@ function App() {
           <button
             type="submit"
             disabled={connecting}
-            className="mt-4 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:cursor-wait disabled:opacity-40 disabled:hover:bg-white"
+            className="mt-2 h-12 w-full rounded-full bg-fg px-6 text-[15px] font-medium text-canvas transition hover:bg-fg/90 disabled:opacity-40 disabled:hover:bg-fg"
           >
             {connecting ? "Connecting…" : "Continue"}
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={() => navigate("/developer")}
-          className="mt-3 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
-        >
-          Developer Window
-        </button>
-
+        {/* Easter egg: the sub-tagline quietly opens the Developer Window. */}
+        <div className="mt-10 flex justify-center">
+          <button
+            type="button"
+            onClick={() => navigate("/developer")}
+            className="text-xs text-fg-muted/80 transition hover:text-fg-soft"
+          >
+            {BRAND_SUBTAGLINE}
+          </button>
+        </div>
       </div>
 
       <SchoolCredit />

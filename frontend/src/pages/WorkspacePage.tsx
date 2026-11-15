@@ -16,6 +16,8 @@ import AudioUploader from "../components/AudioUploader";
 import SequenceEditor from "../components/SequenceEditor";
 import GroupPresence from "../components/GroupPresence";
 
+import Brand from "../components/Brand";
+import WinterBackdrop from "../components/WinterBackdrop";
 import SaveButton from "../components/SaveButton";
 
 import KeyframeGallery from "../components/KeyframeGallery";
@@ -214,7 +216,7 @@ function WorkspacePage() {
 
   if (!workspace) {
     return (
-      <main className="min-h-screen bg-[#050505] p-10 text-white">
+      <main className="min-h-screen bg-canvas p-10 text-fg">
         Workspace not found.
       </main>
     );
@@ -234,7 +236,7 @@ function WorkspacePage() {
 
     if (!node) {
       return (
-        <main className="min-h-screen bg-[#050505] p-10 text-white">
+        <main className="min-h-screen bg-canvas p-10 text-fg">
           Page not found.
         </main>
       );
@@ -596,46 +598,21 @@ async function handleFile(
 }
 
   return (
-    <main className="min-h-screen bg-[#050505] px-6 py-10 text-white md:px-12 lg:px-20">
-      <div className="mx-auto max-w-7xl">
-        <button
-          onClick={() => navigate(-1)}
-          className="mb-8 cursor-pointer text-xs uppercase tracking-[0.3em] text-white/30 transition hover:text-white"
-        >
-          ← Back
-        </button>
-
-        <SongSlotGuard
-          active={
-            currentNode?.type === "group" &&
-            needsSongSlot(groupTab) &&
-            !animationChild &&
-            !currentNode.locked
-          }
-          onEnsure={() => ensureSongSlot(round)}
-        />
-
-        <div className="text-[10px] uppercase tracking-[0.35em] text-white/30">
-          Parol Editor / {currentWorkspace.name}
-
-          {nodeChain.map((node) => (
-            <span key={node.id}>
-              {" / "}
-              {displayName(node)}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-5 flex items-end justify-between">
-          <div>
-            <h1 className="font-serif text-6xl font-light">
-              {title}
-            </h1>
-            {titleOriginal && (
-              <p className="mt-2 text-[11px] uppercase tracking-[0.3em] text-white/30">
-                {titleOriginal}
-              </p>
-            )}
+    <main className="winter-app isolate min-h-screen bg-canvas text-fg">
+      <WinterBackdrop variant="quiet" />
+      <header className="ws-header sticky top-0 z-30 border-b border-line/70 bg-canvas/85 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-6 md:px-12 lg:px-20">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              className="-ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-fg-muted transition hover:bg-elevated hover:text-fg"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <Brand />
           </div>
 
           <div className="flex items-center gap-2">
@@ -647,45 +624,76 @@ async function handleFile(
               <>
                 <button
                   onClick={handleRenameWorkspace}
-                  className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
+                  className="rounded-full bg-elevated px-4 py-1.5 text-sm text-fg-soft transition hover:bg-line-strong hover:text-fg"
                 >
                   Rename
                 </button>
 
                 <button
                   onClick={handleDeleteWorkspace}
-                  className="cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs text-white/40 transition hover:border-white/25 hover:text-white"
+                  className="rounded-full bg-elevated px-4 py-1.5 text-sm text-holly-soft transition hover:bg-line-strong"
                 >
                   Delete
                 </button>
               </>
             )}
-
-            {childType && currentNode?.type !== "group" && (
-              <span className="px-2 py-2 text-xs text-white/20">
-                {currentItems.length}{" "}
-                {typeLabels[childType].toLowerCase()}
-                {currentItems.length !== 1 ? "s" : ""}
-              </span>
-            )}
           </div>
         </div>
+      </header>
 
-        <div className="mt-10 h-px w-full bg-white/10" />
+      <div className="mx-auto max-w-7xl px-6 pb-28 pt-12 md:px-12 lg:px-20">
+        <SongSlotGuard
+          active={
+            currentNode?.type === "group" &&
+            needsSongSlot(groupTab) &&
+            !animationChild &&
+            !currentNode.locked
+          }
+          onEnsure={() => ensureSongSlot(round)}
+        />
+
+        <p className="text-sm text-fg-muted">
+          {currentWorkspace.name}
+          {nodeChain.map((node) => (
+            <span key={node.id}>
+              {" / "}
+              {displayName(node)}
+            </span>
+          ))}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-[-0.035em] sm:text-6xl">
+              {title}
+            </h1>
+            {titleOriginal && (
+              <p className="mt-3 text-sm text-fg-muted">{titleOriginal}</p>
+            )}
+          </div>
+
+          {childType && currentNode?.type !== "group" && (
+            <span className="pb-2 text-sm text-fg-muted">
+              {currentItems.length} {typeLabels[childType].toLowerCase()}
+              {currentItems.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+
 
         {nodeChain.some((node) => node.locked) ? (
-          <section className="mx-auto mt-16 max-w-md rounded-3xl border-2 border-[#ff3b41] bg-[#ff3b41]/[0.06] px-8 py-12 text-center shadow-[0_0_30px_rgba(255,59,65,0.25)]">
+          <section className="mx-auto mt-16 max-w-md rounded-xl border border-holly/60 bg-surface px-8 py-12 text-center">
             <p className="text-4xl">🔒</p>
-            <h2 className="mt-4 font-serif text-3xl font-light">
+            <h2 className="mt-4 font-semibold tracking-tight text-3xl">
               This design is locked
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-white/50">
+            <p className="mt-3 text-sm leading-relaxed text-fg-muted">
               It can't be opened or changed right now. Ask your teacher to
               unlock it in the Developer Window.
             </p>
             <button
               onClick={() => navigate("/")}
-              className="mt-8 cursor-pointer rounded-xl bg-white px-6 py-3 text-sm text-black transition hover:bg-white/90"
+              className="mt-8 cursor-pointer rounded-xl bg-fg px-6 py-3 text-sm text-canvas transition hover:bg-fg/90"
             >
               Back to start
             </button>
@@ -698,7 +706,7 @@ async function handleFile(
                 <div
                   role="tablist"
                   aria-label="Round"
-                  className="inline-flex rounded-2xl border border-white/10 bg-white/[0.03] p-1"
+                  className="inline-flex rounded-lg bg-surface p-1"
                 >
                   {ROUNDS.map((r) => (
                     <button
@@ -706,10 +714,10 @@ async function handleFile(
                       role="tab"
                       aria-selected={!trialOpen && round === r}
                       onClick={() => selectRound(r)}
-                      className={`cursor-pointer rounded-xl px-6 py-2.5 font-serif text-sm tracking-wide transition sm:px-9 ${
+                      className={`rounded-md px-5 py-2 text-sm font-medium transition sm:px-8 ${
                         !trialOpen && round === r
-                          ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.15)]"
-                          : "text-white/50 hover:bg-white/[0.06] hover:text-white"
+                          ? "bg-elevated text-fg"
+                          : "text-fg-muted hover:text-fg"
                       }`}
                     >
                       Round {r}
@@ -718,17 +726,17 @@ async function handleFile(
 
                   <span
                     aria-hidden="true"
-                    className="mx-1 my-2 w-px bg-white/10"
+                    className="mx-1 my-2 w-px bg-line"
                   />
 
                   <button
                     role="tab"
                     aria-selected={trialOpen}
                     onClick={() => setTrialOpen(true)}
-                    className={`cursor-pointer rounded-xl px-6 py-2.5 font-serif text-sm tracking-wide transition sm:px-9 ${
+                    className={`rounded-md px-5 py-2 text-sm font-medium transition sm:px-8 ${
                       trialOpen
-                        ? "bg-amber-100 text-black shadow-[0_0_20px_rgba(253,230,138,0.25)]"
-                        : "text-amber-100/60 hover:bg-white/[0.06] hover:text-amber-100"
+                        ? "bg-pine text-fg"
+                        : "text-fg-muted hover:text-fg"
                     }`}
                   >
                     Trial
@@ -736,7 +744,7 @@ async function handleFile(
                 </div>
 
                 {!trialOpen && round > 1 && (
-                  <p className="text-xs text-white/30">
+                  <p className="text-xs text-fg-muted">
                     Zone Map and Pins are set up once in Round 1 and shared by
                     every round. This round has its own song, keyframes and
                     code.
@@ -749,7 +757,7 @@ async function handleFile(
               <div
                 role="tablist"
                 aria-label="Steps"
-                className="flex gap-1 overflow-x-auto border-b border-white/10 sm:overflow-visible"
+                className="ws-tabs"
               >
                 {GROUP_TABS.filter((tab) => round === 1 || !tab.round1Only).map(
                   (tab) => (
@@ -758,11 +766,7 @@ async function handleFile(
                       role="tab"
                       aria-selected={groupTab === tab.id}
                       onClick={() => selectTab(tab.id)}
-                      className={`relative -mb-px shrink-0 cursor-pointer whitespace-nowrap rounded-t-xl border border-b-0 px-5 py-3 text-xs uppercase tracking-[0.2em] transition sm:px-7 ${
-                        groupTab === tab.id
-                          ? "border-white/20 bg-gradient-to-b from-white/[0.09] to-[#050505] text-white shadow-[inset_0_2px_0_0_rgba(253,230,138,0.8)]"
-                          : "border-transparent text-white/40 hover:bg-white/[0.04] hover:text-white"
-                      }`}
+                      className="ws-tab"
                     >
                       {tab.label}
                     </button>
@@ -807,10 +811,10 @@ async function handleFile(
                         event.dataTransfer.files?.[0],
                       );
                     }}
-                    className={`mx-auto flex max-w-xl flex-col items-center justify-center rounded-3xl border-2 border-dashed px-10 py-16 text-center transition ${
+                    className={`mx-auto flex max-w-xl flex-col items-center justify-center rounded-xl border border-dashed px-10 py-16 text-center transition ${
                       isDragging
-                        ? "border-white/40 bg-white/[0.05]"
-                        : "border-white/15 bg-white/[0.02]"
+                        ? "bg-line-strong"
+                        : "bg-elevated"
                     }`}
                   >
                     <img
@@ -819,19 +823,19 @@ async function handleFile(
                       className="mb-6 h-20 w-20 object-contain opacity-90"
                     />
 
-                    <p className="text-white/70">
+                    <p className="text-fg-soft">
                       Drop your image here, or{" "}
                       <button
                         onClick={() =>
                           fileInputRef.current?.click()
                         }
-                        className="cursor-pointer text-white underline underline-offset-2 hover:text-white/80"
+                        className="cursor-pointer text-fg underline underline-offset-2 hover:text-fg"
                       >
                         browse
                       </button>
                     </p>
 
-                    <p className="mt-2 text-xs text-white/25">
+                    <p className="mt-2 text-xs text-fg-muted">
                       PNG only — export at your drawing's original resolution,
                       don't upscale it
                     </p>
@@ -853,13 +857,13 @@ async function handleFile(
                   <div className="mx-auto mb-6 flex max-w-6xl flex-wrap items-center justify-end gap-2">
                     <button
                       onClick={() => replaceInputRef.current?.click()}
-                      className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-[11px] uppercase tracking-wider text-white/60 transition hover:border-white/25 hover:text-white"
+                      className="cursor-pointer rounded-full px-4 py-1.5 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
                     >
                       Upload another image
                     </button>
                     <button
                       onClick={handleRemoveImage}
-                      className="cursor-pointer rounded-full border border-red-400/20 px-4 py-1.5 text-[11px] uppercase tracking-wider text-red-300/70 transition hover:border-red-400/40 hover:text-red-300"
+                      className="cursor-pointer rounded-lg border border-holly/20 px-4 py-1.5 text-xs text-holly-soft transition hover:border-holly/40 hover:text-holly-soft"
                     >
                       Remove image
                     </button>
@@ -1031,11 +1035,11 @@ async function handleFile(
           </section>
         ) : currentNode?.type === "animation" ? (
           <section className="mt-12">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+            <p className="text-xs text-fg-muted">
               Animation Editor
             </p>
 
-            <h2 className="mt-3 font-serif text-4xl font-light">
+            <h2 className="mt-3 font-semibold tracking-tight text-4xl">
               {currentNode.name}
             </h2>
 
@@ -1082,7 +1086,7 @@ async function handleFile(
               />
             </div>
 
-            <p className="mt-8 text-white/25">
+            <p className="mt-8 text-fg-muted">
               Tapping zones on/off per song section will be built next.
             </p>
           </section>
@@ -1103,27 +1107,27 @@ async function handleFile(
                     }
                     openNode(item.id);
                   }}
-                  className={`absolute inset-0 w-full rounded-2xl border p-7 text-left transition duration-500 ${
+                  className={`absolute inset-0 w-full rounded-xl border p-7 text-left transition duration-200 ${
                     item.locked
-                      ? "cursor-not-allowed border-2 border-[#ff3b41] bg-[#ff3b41]/[0.05] shadow-[0_0_18px_rgba(255,59,65,0.3)]"
-                      : "cursor-pointer border-white/10 bg-white/[0.03] hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06]"
+                      ? "cursor-not-allowed border border-holly/60 bg-surface "
+                      : "cursor-pointer bg-elevated hover:bg-elevated"
                   }`}
                 >
                   <div className="flex h-full flex-col justify-end">
                     <p
-                      className={`text-[10px] uppercase tracking-[0.3em] ${
-                        item.locked ? "text-[#ff8a8e]" : "text-white/30"
+                      className={`text-xs ${
+                        item.locked ? "text-holly-soft" : "text-fg-muted"
                       }`}
                     >
                       {item.locked ? "🔒 Locked · " : ""}
                       {typeLabels[item.type]}
                     </p>
 
-                    <h2 className="mt-2 font-serif text-3xl font-light">
+                    <h2 className="mt-2 font-semibold tracking-tight text-3xl">
                       {displayName(item)}
                     </h2>
                     {originalNameIfRenamed(item) && (
-                      <p className="mt-1 text-[11px] uppercase tracking-[0.25em] text-white/30">
+                      <p className="mt-1 text-xs text-fg-muted">
                         {originalNameIfRenamed(item)}
                       </p>
                     )}
@@ -1138,7 +1142,7 @@ async function handleFile(
                         item.name,
                       )
                     }
-                    className="cursor-pointer rounded-full bg-black/70 px-3 py-2 text-xs text-white/50 backdrop-blur hover:text-white"
+                    className="cursor-pointer rounded-lg bg-canvas/90 px-3 py-2 text-xs text-fg-muted hover:text-fg"
                   >
                     Rename
                   </button>
@@ -1150,7 +1154,7 @@ async function handleFile(
                         item.name,
                       )
                     }
-                    className="cursor-pointer rounded-full bg-black/70 px-3 py-2 text-xs text-white/50 backdrop-blur hover:text-white"
+                    className="cursor-pointer rounded-lg bg-canvas/90 px-3 py-2 text-xs text-fg-muted hover:text-fg"
                   >
                     Delete
                   </button>
@@ -1161,14 +1165,14 @@ async function handleFile(
             {childType && (
               <button
                 onClick={() => setIsNewOpen(true)}
-                className="aspect-[4/3] w-full cursor-pointer rounded-2xl border border-dashed border-white/10 bg-white/[0.015] transition duration-500 hover:-translate-y-1 hover:border-white/25 hover:bg-white/[0.04]"
+                className="aspect-[4/3] w-full cursor-pointer rounded-xl border border-dashed border-line bg-surface transition duration-200 hover:border-line-strong hover:bg-elevated"
               >
                 <span className="flex h-full flex-col items-center justify-center">
-                  <span className="text-5xl font-light text-white/30">
+                  <span className="text-5xl font-light text-fg-muted">
                     +
                   </span>
 
-                  <span className="mt-3 text-[10px] uppercase tracking-[0.3em] text-white/30">
+                  <span className="mt-3 text-xs text-fg-muted">
                     New
                   </span>
                 </span>
@@ -1179,9 +1183,9 @@ async function handleFile(
 
         {isNewOpen && childType && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0b0b] p-8">
+            <div className="w-full max-w-md rounded-xl bg-surface p-8">
               <div className="flex items-center justify-between">
-                <h2 className="font-serif text-3xl">
+                <h2 className="font-semibold tracking-tight text-3xl">
                   New {typeLabels[childType]}
                 </h2>
 
@@ -1190,7 +1194,7 @@ async function handleFile(
                     setIsNewOpen(false);
                     setNewName("");
                   }}
-                  className="cursor-pointer text-white/40 hover:text-white"
+                  className="cursor-pointer text-fg-muted hover:text-fg"
                 >
                   ✕
                 </button>
@@ -1210,12 +1214,12 @@ async function handleFile(
                 placeholder={`Enter ${typeLabels[
                   childType
                 ].toLowerCase()} name`}
-                className="mt-8 w-full rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none placeholder:text-white/20 focus:border-white/30"
+                className="mt-8 w-full rounded-lg border px-4 py-3 text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated"
               />
 
               <button
                 onClick={createItem}
-                className="mt-4 w-full cursor-pointer rounded-lg bg-white px-4 py-3 text-black transition hover:bg-white/90"
+                className="mt-4 w-full cursor-pointer rounded-lg bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90"
               >
                 Create
               </button>

@@ -13,6 +13,7 @@ import {
   grantSessionPass,
 } from "../utils/accessLock";
 import { PIN_COLORS } from "../utils/pins";
+import WinterBackdrop from "./WinterBackdrop";
 
 type Phase = "loading" | "pick" | "retry" | "locked" | "error";
 type Swatch = (typeof PIN_COLORS)[number];
@@ -167,25 +168,30 @@ export default function ColorLockGate({
       role="dialog"
       aria-modal="true"
       aria-label="Color combo lock"
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[#050505] px-6 py-10 text-white"
+      className="winter-app fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-canvas px-6 py-10 text-fg"
     >
-      <div className="w-full max-w-sm text-center">
-        <p className="mb-2 text-[10px] uppercase tracking-[0.45em] text-white/30">
+      <WinterBackdrop variant="calm" />
+      <div className="relative z-10 w-full max-w-sm text-center">
+        <div aria-hidden="true" className="mx-auto mb-6 flex h-0.5 w-8 overflow-hidden rounded-full">
+          <span className="h-full w-1/2 bg-pine" />
+          <span className="h-full w-1/2 bg-holly" />
+        </div>
+        <p className="mb-2 text-xs text-fg-muted">
           Color Combo Lock
         </p>
 
-        <p className="mb-5 text-xs text-white/50">{label}</p>
+        <p className="mb-5 text-xs text-fg-muted">{label}</p>
 
         {phase === "loading" && (
           <>
-            <p className="mt-8 text-sm text-white/50">
+            <p className="mt-8 text-sm text-fg-muted">
               Checking this group's color lock…
             </p>
 
             <button
               type="button"
               onClick={onCancel}
-              className="mt-8 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+              className="mt-8 w-full cursor-pointer rounded-full px-4 py-3 text-sm text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
             >
               Back
             </button>
@@ -194,11 +200,11 @@ export default function ColorLockGate({
 
         {phase === "pick" && (
           <>
-            <h2 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h2 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               {isSetup ? "Create your color lock" : "Enter your color lock"}
             </h2>
 
-            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
+            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-fg-muted">
               {isSetup
                 ? `Tap ${COLOR_COMBO_LENGTH} colors in the order you want. You can pick the same color more than once. This group will need this exact order every time it's opened, on any device. Take a screenshot of your colors before you press Enter.`
                 : `Tap your ${COLOR_COMBO_LENGTH} colors in the right order.`}
@@ -207,7 +213,7 @@ export default function ColorLockGate({
             {notice && (
               <p
                 role="status"
-                className="mx-auto mt-4 max-w-xs rounded-xl border border-[#ffb36b]/50 bg-[#ffb36b]/10 px-3 py-2 text-xs leading-relaxed text-[#ffc98f]"
+                className="mx-auto mt-4 max-w-xs rounded-xl border border-warn/50 bg-warn/10 px-3 py-2 text-xs leading-relaxed text-warn"
               >
                 {notice}
               </p>
@@ -230,12 +236,12 @@ export default function ColorLockGate({
                       className="flex w-12 flex-col items-center gap-1"
                     >
                       <span
-                        className="h-7 w-7 rounded-full border border-white/30"
+                        className="h-7 w-7 rounded-full border border-transparent bg-line-strong"
                         style={{
                           backgroundColor: name ? hexOf(name) : "transparent",
                         }}
                       />
-                      <span className="h-3 text-[8px] uppercase tracking-[0.12em] text-white/50">
+                      <span className="h-3 text-[8px] text-fg-muted">
                         {name ?? ""}
                       </span>
                     </div>
@@ -245,7 +251,7 @@ export default function ColorLockGate({
                 return (
                   <span
                     key={index}
-                    className="h-3.5 w-3.5 rounded-full border border-white/30"
+                    className="h-3.5 w-3.5 rounded-full border border-transparent bg-line-strong"
                     style={{
                       backgroundColor: name
                         ? "rgba(255,255,255,0.75)"
@@ -269,7 +275,7 @@ export default function ColorLockGate({
                   }`}
                 >
                   <span
-                    className="flex h-14 w-14 items-center justify-center rounded-full border border-white/20 transition group-hover:scale-105 group-active:scale-95"
+                    className="flex h-14 w-14 items-center justify-center rounded-full border transition group-hover:scale-105 group-active:scale-95 border-transparent bg-elevated"
                     style={{ backgroundColor: color.hex }}
                   >
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/35">
@@ -288,7 +294,7 @@ export default function ColorLockGate({
                     </span>
                   </span>
 
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                  <span className="text-xs text-fg-muted">
                     {color.name}
                   </span>
                 </button>
@@ -296,7 +302,7 @@ export default function ColorLockGate({
             </div>
 
             {isFull && isSetup && (
-              <p className="mx-auto mt-8 max-w-xs text-xs leading-relaxed text-white/50">
+              <p className="mx-auto mt-8 max-w-xs text-xs leading-relaxed text-fg-muted">
                 Screenshot your colors now, then press Enter.
               </p>
             )}
@@ -305,7 +311,7 @@ export default function ColorLockGate({
               type="button"
               onClick={handleEnter}
               disabled={busy || !isFull}
-              className={`${isFull && isSetup ? "mt-4" : "mt-10"} w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30`}
+              className={`${isFull && isSetup ? "mt-4" : "mt-10"} w-full cursor-pointer rounded-xl bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30`}
             >
               Enter
             </button>
@@ -315,7 +321,7 @@ export default function ColorLockGate({
                 type="button"
                 onClick={resetAttempt}
                 disabled={busy || picked.length === 0}
-                className="cursor-pointer rounded-xl border border-white/15 px-4 py-2 text-xs text-white/60 transition hover:border-white/40 hover:text-white disabled:cursor-default disabled:opacity-30"
+                className="cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 bg-elevated hover:bg-line-strong"
               >
                 Clear
               </button>
@@ -324,7 +330,7 @@ export default function ColorLockGate({
                 type="button"
                 onClick={onCancel}
                 disabled={busy}
-                className="cursor-pointer rounded-xl border border-white/15 px-4 py-2 text-xs text-white/60 transition hover:border-white/40 hover:text-white disabled:opacity-30"
+                className="cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:opacity-30 bg-elevated hover:bg-line-strong"
               >
                 Back
               </button>
@@ -334,11 +340,11 @@ export default function ColorLockGate({
 
         {phase === "retry" && (
           <>
-            <h2 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h2 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               Try again
             </h2>
 
-            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
+            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-fg-muted">
               That wasn't your color combo. You have {failsLeft} of{" "}
               {COLOR_MAX_FAILS} tries left before this group is locked for 24
               hours.
@@ -347,7 +353,7 @@ export default function ColorLockGate({
             <button
               type="button"
               onClick={resetAttempt}
-              className="mt-8 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90"
+              className="mt-8 w-full cursor-pointer rounded-xl bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90"
             >
               Try again
             </button>
@@ -355,7 +361,7 @@ export default function ColorLockGate({
             <button
               type="button"
               onClick={onCancel}
-              className="mt-3 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+              className="mt-3 w-full cursor-pointer rounded-full px-4 py-3 text-sm text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
             >
               Back
             </button>
@@ -364,11 +370,11 @@ export default function ColorLockGate({
 
         {phase === "locked" && (
           <>
-            <h2 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h2 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               Locked for a day
             </h2>
 
-            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
+            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-fg-muted">
               Too many wrong color combos.{" "}
               {lockedUntil
                 ? `You can try again after ${formatUnlockTime(lockedUntil)}.`
@@ -378,7 +384,7 @@ export default function ColorLockGate({
             <button
               type="button"
               onClick={onCancel}
-              className="mt-8 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+              className="mt-8 w-full cursor-pointer rounded-full px-4 py-3 text-sm text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
             >
               Back
             </button>
@@ -387,11 +393,11 @@ export default function ColorLockGate({
 
         {phase === "error" && (
           <>
-            <h2 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h2 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               Couldn't reach the server
             </h2>
 
-            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-white/50">
+            <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-fg-muted">
               Your color lock is kept online so it works on every device, so
               this needs an internet connection. Check your connection, then
               try again.
@@ -400,7 +406,7 @@ export default function ColorLockGate({
             <button
               type="button"
               onClick={errorKind === "load" ? reloadStatus : resetAttempt}
-              className="mt-8 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90"
+              className="mt-8 w-full cursor-pointer rounded-xl bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90"
             >
               Try again
             </button>
@@ -408,7 +414,7 @@ export default function ColorLockGate({
             <button
               type="button"
               onClick={onCancel}
-              className="mt-3 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+              className="mt-3 w-full cursor-pointer rounded-full px-4 py-3 text-sm text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
             >
               Back
             </button>

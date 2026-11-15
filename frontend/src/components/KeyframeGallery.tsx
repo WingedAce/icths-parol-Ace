@@ -40,14 +40,14 @@ import type {
 } from "../types";
 
 const pillClass =
-  "cursor-pointer rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white disabled:cursor-default disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:text-white/60";
+  "cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-30 disabled:hover:border-line disabled:hover:text-fg-soft bg-elevated hover:bg-line-strong";
 const linkClass =
-  "cursor-pointer text-xs text-white/30 underline underline-offset-2 hover:text-white/60 disabled:cursor-default disabled:opacity-40 disabled:no-underline disabled:hover:text-white/30";
+  "cursor-pointer text-xs text-fg-muted underline underline-offset-2 hover:text-fg-soft disabled:cursor-default disabled:opacity-40 disabled:no-underline disabled:hover:text-fg-muted";
 const primaryClass =
-  "cursor-pointer rounded-full bg-white px-6 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white";
-const labelClass = "mb-3 text-[10px] uppercase tracking-[0.3em] text-white/30";
+  "cursor-pointer rounded-lg bg-fg px-6 py-2 text-xs text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-fg";
+const labelClass = "mb-3 text-xs text-fg-muted";
 const emptyBoxClass =
-  "flex aspect-[4/3] items-center justify-center rounded-2xl border border-dashed border-white/10 px-6 text-center text-sm text-white/30";
+  "flex aspect-[4/3] items-center justify-center rounded-xl border border-dashed border-line px-6 text-center text-sm text-fg-muted";
 
 // How long the looping preview rests on the second keyframe before it
 // starts over, in seconds.
@@ -93,10 +93,10 @@ function sectionLabel(frame: Frame, analysis?: AudioAnalysis) {
 }
 
 const toggleClass = (active: boolean) =>
-  `cursor-pointer rounded-full border px-4 py-2 text-xs uppercase tracking-[0.15em] transition ${
+  `cursor-pointer rounded-full px-4 py-2 text-xs transition ${
     active
-      ? "border-white/40 bg-white/[0.08] text-white"
-      : "border-white/10 text-white/50 hover:text-white"
+      ? "text-fg bg-line-strong"
+      : "text-fg-muted hover:text-fg bg-elevated hover:bg-line-strong"
   }`;
 
 type PanelProps = {
@@ -127,13 +127,13 @@ function KeyframePanel({
         tricolorColors={frame.tricolors}
       />
       <div className="mt-3 flex items-baseline justify-between gap-3">
-        <p className="font-serif text-2xl text-white">Keyframe {number}</p>
-        <p className="text-xs text-white/40">
+        <p className="font-semibold tracking-tight text-2xl text-fg">Keyframe {number}</p>
+        <p className="text-xs text-fg-muted">
           {formatTime(frame.time)}
           {section && ` · ${section}`}
         </p>
       </div>
-      <p className="mt-1 text-xs text-white/30">
+      <p className="mt-1 text-xs text-fg-muted">
         {describePins(frame.litPins, frame.levels, analogPinSet(groupNode))}
       </p>
     </>
@@ -160,7 +160,7 @@ type PairNavProps = {
 // Bottom row of the pair view: back to the grid, and step between keyframes.
 function PairNav({ onBack, onPrevious, onNext }: PairNavProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6">
       <button onClick={onBack} className={linkClass}>
         Back to all keyframes
       </button>
@@ -254,7 +254,7 @@ function TransitionLoop({
         >
           {playing ? "Pause" : "Play"}
         </button>
-        <p className="text-xs text-white/40">{whatsShowing}</p>
+        <p className="text-xs text-fg-muted">{whatsShowing}</p>
       </div>
     </div>
   );
@@ -692,19 +692,19 @@ function PairView({
                 tricolorColors={displayColors}
               />
               <div className="mt-3 flex items-baseline justify-between gap-3">
-                <p className="font-serif text-2xl text-white">
+                <p className="font-semibold tracking-tight text-2xl text-fg">
                   {isBetween
                     ? `In-between ${activeIndex}`
                     : `Keyframe ${activeIndex === 0 ? fromNumber : toNumber}`}
                 </p>
-                <p className="text-xs text-white/40">
+                <p className="text-xs text-fg-muted">
                   {fineTimes
                     ? formatTimeFine(showing.time)
                     : formatTime(showing.time)}
                   {isBetween && ` · ${activeIndex} of ${betweenCount}`}
                 </p>
               </div>
-              <p className="mt-1 text-xs text-white/30">
+              <p className="mt-1 text-xs text-fg-muted">
                 {describePins(displayLit, displayLevels, analog)}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
@@ -753,10 +753,10 @@ function PairView({
                   className="w-28 shrink-0 cursor-pointer text-left"
                 >
                   <div
-                    className={`rounded-2xl ring-1 transition ${
+                    className={`rounded-xl ring-1 transition ${
                       index === activeIndex
-                        ? "ring-white/60"
-                        : "ring-transparent hover:ring-white/30"
+                        ? "ring-line-hover"
+                        : "ring-transparent hover:ring-line-hover"
                     }`}
                   >
                     <ParolPreview
@@ -768,8 +768,8 @@ function PairView({
                       }
                     />
                   </div>
-                  <p className="mt-2 text-xs text-white/50">{index}</p>
-                  <p className="text-[11px] text-white/25">
+                  <p className="mt-2 text-xs text-fg-muted">{index}</p>
+                  <p className="text-xs text-fg-muted">
                     {fineTimes ? formatTimeFine(step.time) : formatTime(step.time)}
                     {isManual &&
                       (isSavedAt(step.time) ? " · Saved" : " · Not saved")}
@@ -793,7 +793,7 @@ function PairView({
         </div>
 
         {/* How the in-betweens are made */}
-        <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.02] p-6 lg:order-1">
+        <div className="min-w-0 rounded-xl bg-surface p-6 lg:order-1">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex gap-2">
               <button
@@ -806,7 +806,7 @@ function PairView({
                 Manual
               </button>
             </div>
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-fg-muted">
               {betweenCount} in-between{betweenCount === 1 ? "" : "s"} ·{" "}
               {changedPins} pin{changedPins === 1 ? "" : "s"} differ
             </p>
@@ -849,10 +849,10 @@ function PairView({
                 ))}
               </div>
 
-              <p className="mt-3 text-xs text-white/30">
+              <p className="mt-3 text-xs text-fg-muted">
                 {PRESETS.find((o) => o.value === mode)?.hint}
               </p>
-              {note && <p className="mt-2 text-xs text-amber-200/60">{note}</p>}
+              {note && <p className="mt-2 text-xs text-warn">{note}</p>}
 
               <div className="mt-6 flex flex-wrap gap-4">
                 <button
@@ -887,7 +887,7 @@ function PairView({
             </div>
           ) : (
             <div className="mt-6">
-              <p className="text-sm text-white/60">
+              <p className="text-sm text-fg-soft">
                 {betweenCount === 0
                   ? `There are no in-betweens between keyframe ${fromNumber} and keyframe ${toNumber}. Set Custom timing above to make some.`
                   : `Between keyframe ${fromNumber} and keyframe ${toNumber} you can make ${betweenCount} in-between${
@@ -895,7 +895,7 @@ function PairView({
                     }. ${savedCount} saved.`}
               </p>
               {(from.manualSteps?.length ?? 0) > savedCount && (
-                <p className="mt-2 text-xs text-amber-200/60">
+                <p className="mt-2 text-xs text-warn">
                   {(from.manualSteps?.length ?? 0) - savedCount} saved
                   in-between
                   {(from.manualSteps?.length ?? 0) - savedCount === 1
@@ -911,14 +911,14 @@ function PairView({
 
               {betweenCount > 0 && (
                 <>
-                  <p className="mt-6 text-xs text-white/40">
+                  <p className="mt-6 text-xs text-fg-muted">
                     {canEdit
                       ? `In-between ${activeIndex}: tap a pin to turn it on or off, then save it.`
                       : "Pick an in-between above to make it."}
                   </p>
 
                   {usedPins.length === 0 ? (
-                    <p className="mt-3 text-xs text-white/30">
+                    <p className="mt-3 text-xs text-fg-muted">
                       Both keyframes have every pin off, so there are no pins to
                       turn on in between.
                     </p>
@@ -932,13 +932,13 @@ function PairView({
                               key={pin}
                               onClick={() => togglePin(pin)}
                               disabled={!canEdit}
-                              className={`rounded-full border px-3 py-1 font-serif text-xs transition ${
+                              className={`rounded-full px-3 py-1 font-medium text-xs transition ${
                                 isOn
-                                  ? "border-white/40 bg-white/[0.08] text-white"
-                                  : "border-white/10 text-white/50"
+                                  ? "text-fg bg-line-strong"
+                                  : "text-fg-muted bg-elevated"
                               } ${
                                 canEdit
-                                  ? "cursor-pointer hover:text-white"
+                                  ? "cursor-pointer hover:text-fg"
                                   : "cursor-default opacity-60"
                               }`}
                             >
@@ -948,7 +948,7 @@ function PairView({
                           );
                         })}
                       </div>
-                      <p className="mt-3 text-[11px] text-white/25">
+                      <p className="mt-3 text-xs text-fg-muted">
                         Only the pins used by keyframe {fromNumber} or keyframe{" "}
                         {toNumber} are shown.
                       </p>
@@ -967,9 +967,9 @@ function PairView({
                               return (
                                 <div
                                   key={g.id}
-                                  className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2"
+                                  className="flex flex-wrap items-center gap-2 rounded-xl bg-surface px-3 py-2"
                                 >
-                                  <span className="mr-1 text-[11px] text-white/45">
+                                  <span className="mr-1 text-xs text-fg-muted">
                                     Tricolor {label}
                                   </span>
                                   {PIN_COLORS.map((c) => {
@@ -987,7 +987,7 @@ function PairView({
                                         onClick={() => setColor(g.id, c.hex)}
                                         className={`h-6 w-6 rounded-full border-2 transition ${
                                           picked
-                                            ? "border-white ring-2 ring-white/30"
+                                            ? "border-fg ring-2 ring-line-hover"
                                             : "border-transparent"
                                         } ${
                                           canEdit
@@ -1006,7 +1006,7 @@ function PairView({
                                       setColor(g.id, event.target.value)
                                     }
                                     aria-label={`Custom color for tricolor ${label}`}
-                                    className="h-6 w-8 cursor-pointer rounded border border-white/10 bg-transparent disabled:cursor-default disabled:opacity-50"
+                                    className="h-6 w-8 cursor-pointer rounded border bg-transparent disabled:cursor-default disabled:opacity-50 border-transparent"
                                   />
                                 </div>
                               );
@@ -1033,9 +1033,9 @@ function PairView({
                                   return (
                                     <label
                                       key={pin}
-                                      className="flex items-center gap-3 text-xs text-white/60"
+                                      className="flex items-center gap-3 text-xs text-fg-soft"
                                     >
-                                      <span className="w-14 font-serif">
+                                      <span className="w-14 font-medium">
                                         Pin {pin}
                                       </span>
                                       <input
@@ -1047,9 +1047,9 @@ function PairView({
                                         onChange={(event) =>
                                           setLevel(pin, Number(event.target.value))
                                         }
-                                        className="flex-1 accent-white"
+                                        className="flex-1 accent-pine"
                                       />
-                                      <span className="w-10 text-right text-white/40">
+                                      <span className="w-10 text-right text-fg-muted">
                                         {level}%
                                       </span>
                                     </label>
@@ -1072,7 +1072,7 @@ function PairView({
                     {canEdit && (
                       <span
                         className={`text-xs ${
-                          canSave ? "text-amber-200/60" : "text-white/40"
+                          canSave ? "text-warn" : "text-fg-muted"
                         }`}
                       >
                         {canSave ? "Not saved yet" : "Saved"}
@@ -1118,8 +1118,8 @@ function PairView({
                     </button>
                   </div>
 
-                  <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-white/10 pt-5">
-                    <span className="text-xs text-white/30">
+                  <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-line pt-5">
+                    <span className="text-xs text-fg-muted">
                       Save all {betweenCount} in-between
                       {betweenCount === 1 ? "" : "s"} at once from
                     </span>
@@ -1170,7 +1170,7 @@ function KeyframeGallery({
 
   if (!hasParol) {
     return (
-      <p className="text-center text-sm text-white/30">
+      <p className="text-center text-sm text-fg-muted">
         Detect zones and assign pins on the Zone Map tab to see your keyframes
         here.
       </p>
@@ -1179,7 +1179,7 @@ function KeyframeGallery({
 
   if (keyframes.length === 0) {
     return (
-      <p className="text-center text-sm text-white/30">
+      <p className="text-center text-sm text-fg-muted">
         No keyframes yet. Add some on the Preview tab and they will show up
         here.
       </p>
@@ -1267,7 +1267,7 @@ function KeyframeGallery({
   // ---- Gallery: every keyframe, five to a row ----
   return (
     <div className="flex flex-col gap-6">
-      <p className="text-xs text-white/40">
+      <p className="text-xs text-fg-muted">
         {keyframes.length} keyframe{keyframes.length === 1 ? "" : "s"}. Click
         one to see it next to the keyframe that follows and edit the
         transition between them.
@@ -1280,18 +1280,18 @@ function KeyframeGallery({
             onClick={() => setSelectedId(frame.id)}
             className="group min-w-0 cursor-pointer text-left"
           >
-            <div className="relative rounded-2xl ring-1 ring-transparent transition group-hover:ring-white/40">
+            <div className="relative rounded-xl ring-1 ring-transparent transition group-hover:ring-line-hover">
               <ParolPreview
                 node={groupNode}
                 litPins={frame.litPins}
                 levels={frame.levels}
                 tricolorColors={frame.tricolors}
               />
-              <span className="pointer-events-none absolute left-3 top-2 font-serif text-lg text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">
+              <span className="pointer-events-none absolute left-3 top-2 font-medium text-lg text-fg [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">
                 {index + 1}
               </span>
             </div>
-            <p className="mt-2 text-xs text-white/40">
+            <p className="mt-2 text-xs text-fg-muted">
               {formatTime(frame.time)} · {pinsOnLabel(frame)}
             </p>
           </button>

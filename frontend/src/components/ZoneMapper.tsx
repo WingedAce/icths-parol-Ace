@@ -539,19 +539,19 @@ function ZoneMapper({
         <img
           src={node.imageDataUrl}
           alt="Uploaded parol drawing"
-          className="max-h-80 rounded-2xl border border-white/10 object-contain"
+          className="max-h-80 rounded-xl border object-contain border-transparent bg-elevated"
           style={{ filter: "invert(1) brightness(0.75)" }}
         />
 
         <button
           onClick={runSegmentation}
           disabled={isSegmenting}
-          className="cursor-pointer rounded-xl bg-white px-6 py-3 font-serif text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-50"
+          className="cursor-pointer rounded-xl bg-fg px-6 py-3 font-medium text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-50"
         >
           {isSegmenting ? "Detecting zones…" : "Detect zones from drawing"}
         </button>
 
-        {error && <p className="max-w-md text-sm text-red-400">{error}</p>}
+        {error && <p className="max-w-md text-sm text-holly-soft">{error}</p>}
       </div>
     );
   }
@@ -637,11 +637,11 @@ function ZoneMapper({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 lg:flex-row lg:items-start">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 lg:flex-row lg:items-start lg:gap-12">
       {/* Left: the parol drawing itself */}
-      <div className="flex w-full flex-col items-center gap-4 lg:max-w-xl lg:flex-1">
+      <div className="flex w-full flex-col items-center gap-4 lg:sticky lg:top-20 lg:min-w-0 lg:flex-1">
         <div
-          className="relative w-full touch-none select-none overflow-hidden rounded-2xl border border-white/10 bg-[#0b0b0b]"
+          className="relative w-full touch-none select-none overflow-hidden rounded-xl bg-surface"
           style={{
             aspectRatio: `${imageWidth} / ${imageHeight}`,
             cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default",
@@ -794,80 +794,80 @@ function ZoneMapper({
             </svg>
           </div>
 
-          <div className="absolute bottom-3 left-3 rounded-full border border-white/10 bg-black/70 p-1 backdrop-blur">
+          <div className="absolute bottom-3 left-3 rounded-lg border bg-canvas/90 p-1 border-transparent ">
             <button
               onClick={() => setShowPinNumbers((v) => !v)}
-              className="cursor-pointer rounded-full px-3 py-1 text-[11px] uppercase tracking-wider text-white/70 hover:text-white"
+              className="cursor-pointer rounded-lg px-3 py-1 text-xs text-fg-soft hover:text-fg"
             >
               {showPinNumbers ? "Hide Pins" : "Show Pins"}
             </button>
           </div>
 
-          <div className="absolute bottom-3 right-3 flex gap-1 rounded-full border border-white/10 bg-black/70 p-1 backdrop-blur">
+          <div className="absolute bottom-3 right-3 flex gap-1 rounded-lg border bg-canvas/90 p-1 border-transparent ">
             <button
               onClick={zoomOut}
               disabled={zoom <= MIN_ZOOM}
-              className="cursor-pointer rounded-full px-3 py-1 text-sm text-white/70 hover:text-white disabled:cursor-default disabled:opacity-30"
+              className="cursor-pointer rounded-lg px-3 py-1 text-sm text-fg-soft hover:text-fg disabled:cursor-default disabled:opacity-30"
             >
               −
             </button>
             <button
               onClick={resetZoom}
               disabled={zoom === 1}
-              className="cursor-pointer rounded-full px-2 py-1 text-[10px] uppercase tracking-wider text-white/50 hover:text-white disabled:cursor-default disabled:opacity-30"
+              className="cursor-pointer rounded-lg px-2 py-1 text-xs text-fg-muted hover:text-fg disabled:cursor-default disabled:opacity-30"
             >
               {Math.round(zoom * 100)}%
             </button>
             <button
               onClick={zoomIn}
               disabled={zoom >= MAX_ZOOM}
-              className="cursor-pointer rounded-full px-3 py-1 text-sm text-white/70 hover:text-white disabled:cursor-default disabled:opacity-30"
+              className="cursor-pointer rounded-lg px-3 py-1 text-sm text-fg-soft hover:text-fg disabled:cursor-default disabled:opacity-30"
             >
               +
             </button>
           </div>
         </div>
 
-        <p className="text-center text-[11px] text-white/25">
+        <p className="text-center text-xs text-fg-muted">
           Zoom in for dense areas, then drag to pan around before tapping a tiny zone.
         </p>
       </div>
 
       {/* Divider — vertical on desktop (side by side), horizontal on mobile
           (stacked), separating the drawing from the pin-assignment panel. */}
-      <div className="h-px w-full bg-white/10 lg:h-auto lg:w-px lg:self-stretch" />
+      <div className="h-px w-full bg-line lg:hidden" />
 
       {/* Right: zone selection and pin assignment. Pin type and LED color live in the Pins tab. */}
-      <div className="flex w-full flex-col gap-6 lg:flex-1">
+      <div className="flex w-full flex-col gap-6 lg:w-[380px] lg:shrink-0 xl:w-[420px]">
         <div>
           {/* Pin controls */}
           <div className="flex min-w-0 flex-col gap-5">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-white/30">
+              <p className="text-xs text-fg-muted">
                 Selection
               </p>
-              <p className="mt-2 font-serif text-2xl font-light">
+              <p className="mt-2 font-semibold tracking-tight text-2xl">
                 {selected.size} zone{selected.size === 1 ? "" : "s"} selected
               </p>
-              <p className="mt-1 text-[11px] text-white/30">
+              <p className="mt-1 text-xs text-fg-muted">
                 Total pins assigned: {groupedPins.length}
               </p>
             </div>
 
             {/* LED budget: how many LEDs the parol has so far */}
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+            <div className="rounded-xl bg-surface p-3">
               <div className="mb-2 flex items-baseline justify-between gap-2">
-                <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+                <p className="text-xs text-fg-muted">
                   LEDs in the parol
                 </p>
-                <p className="font-serif text-sm text-white/80">
+                <p className="font-medium text-sm text-fg">
                   <b
                     className={
                       budgetState === "over"
-                        ? "text-red-400"
+                        ? "text-holly-soft"
                         : budgetState === "near"
-                          ? "text-amber-300"
-                          : "text-white"
+                          ? "text-warn"
+                          : "text-fg"
                     }
                   >
                     {currentTotal}
@@ -877,7 +877,7 @@ function ZoneMapper({
               </div>
 
               <div
-                className="relative h-2 w-full overflow-hidden rounded-full bg-white/10"
+                className="relative h-2 w-full overflow-hidden rounded-full bg-elevated"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={LED_PAROL_LIMIT}
@@ -886,17 +886,17 @@ function ZoneMapper({
               >
                 {/* What this selection would add, shown lighter underneath */}
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-white/25"
+                  className="absolute inset-y-0 left-0 rounded-full bg-fg-muted"
                   style={{
                     width: `${Math.min(100, (projectedTotal / LED_PAROL_LIMIT) * 100)}%`,
                   }}
                 />
                 <div
                   className={`absolute inset-y-0 left-0 rounded-full transition-all ${budgetState === "over"
-                    ? "bg-red-400"
+                    ? "bg-holly"
                     : budgetState === "near"
-                      ? "bg-amber-300"
-                      : "bg-white/70"
+                      ? "bg-warn"
+                      : "bg-fg-soft"
                     }`}
                   style={{
                     width: `${Math.min(100, (currentTotal / LED_PAROL_LIMIT) * 100)}%`,
@@ -905,11 +905,11 @@ function ZoneMapper({
               </div>
 
               <p
-                className={`mt-2 text-[11px] ${budgetState === "over"
-                  ? "text-red-400"
+                className={`mt-2 text-xs ${budgetState === "over"
+                  ? "text-holly-soft"
                   : budgetState === "near"
-                    ? "text-amber-300/80"
-                    : "text-white/35"
+                    ? "text-warn"
+                    : "text-fg-muted"
                   }`}
               >
                 {selected.size > 0 && projectedTotal !== currentTotal
@@ -925,13 +925,13 @@ function ZoneMapper({
 
             {/* LED count for every selected zone */}
             {selected.size > 0 && (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="rounded-xl bg-surface p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+                  <p className="text-xs text-fg-muted">
                     LEDs in each zone
                   </p>
                   {selected.size > 1 && (
-                    <label className="flex items-center gap-2 text-[11px] text-white/40">
+                    <label className="flex items-center gap-2 text-xs text-fg-muted">
                       Set all
                       <input
                         type="number"
@@ -941,12 +941,12 @@ function ZoneMapper({
                         onChange={(e) => {
                           if (e.target.value !== "") setAllLeds(Number(e.target.value));
                         }}
-                        className="w-14 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-center text-white outline-none focus:border-white/30"
+                        className="w-14 rounded-lg border px-2 py-1 text-center text-fg outline-none focus:border-line-hover border-transparent bg-elevated"
                       />
                     </label>
                   )}
                 </div>
-                <p className="mb-2 text-[11px] text-white/30">
+                <p className="mb-2 text-xs text-fg-muted">
                   Each number matches the marker on the drawing. Point at a
                   row to light up its zone.
                 </p>
@@ -962,19 +962,19 @@ function ZoneMapper({
                         onMouseEnter={() => setHoverZone(zoneId)}
                         onMouseLeave={() => setHoverZone(null)}
                         className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${isHot
-                          ? "bg-white/[0.12] ring-1 ring-white/30"
-                          : "bg-white/[0.03]"
+                          ? "bg-line-strong ring-1 ring-line-hover"
+                          : "bg-surface"
                           }`}
                       >
                         <div
                           className="flex min-w-0 items-center gap-2.5"
                           title={`Zone ${zoneId}`}
                         >
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#e8e4d8] text-[10px] font-semibold text-black">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-silver text-xs font-semibold text-canvas">
                             {n}
                           </span>
                           {zone && <ZoneThumb zone={zone} />}
-                          <span className="truncate text-xs text-white/50">
+                          <span className="truncate text-xs text-fg-muted">
                             {currentPin !== undefined
                               ? `On pin ${formatPin(currentPin)}`
                               : "No pin yet"}
@@ -985,7 +985,7 @@ function ZoneMapper({
                             onClick={() => setZoneLeds(zoneId, draftOf(zoneId) - 1)}
                             disabled={draftOf(zoneId) <= 1}
                             aria-label={`Fewer LEDs in zone ${n}`}
-                            className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                            className="h-7 w-7 cursor-pointer rounded-full border text-fg-soft hover:text-fg disabled:cursor-default disabled:opacity-30 border-transparent bg-elevated hover:bg-line-strong"
                           >
                             −
                           </button>
@@ -996,13 +996,13 @@ function ZoneMapper({
                             value={draftOf(zoneId)}
                             onChange={(e) => setZoneLeds(zoneId, Number(e.target.value))}
                             aria-label={`LEDs in zone ${n}`}
-                            className="w-12 rounded-lg border border-white/10 bg-white/[0.03] py-1 text-center text-white outline-none focus:border-white/30"
+                            className="w-12 rounded-lg border py-1 text-center text-fg outline-none focus:border-line-hover border-transparent bg-elevated"
                           />
                           <button
                             onClick={() => setZoneLeds(zoneId, draftOf(zoneId) + 1)}
                             disabled={draftOf(zoneId) >= LED_MAX_PER_PIN}
                             aria-label={`More LEDs in zone ${n}`}
-                            className="h-7 w-7 cursor-pointer rounded-full border border-white/10 text-white/60 hover:text-white disabled:cursor-default disabled:opacity-30"
+                            className="h-7 w-7 cursor-pointer rounded-full border text-fg-soft hover:text-fg disabled:cursor-default disabled:opacity-30 border-transparent bg-elevated hover:bg-line-strong"
                           >
                             +
                           </button>
@@ -1014,11 +1014,11 @@ function ZoneMapper({
 
                 {pendingLoad !== null && (
                   <p
-                    className={`mt-2 text-[11px] ${pendingLoad > LED_MAX_PER_PIN
-                      ? "text-red-400"
+                    className={`mt-2 text-xs ${pendingLoad > LED_MAX_PER_PIN
+                      ? "text-holly-soft"
                       : pendingLoad > LED_WARN_LIMIT
-                        ? "text-amber-300/80"
-                        : "text-white/40"
+                        ? "text-warn"
+                        : "text-fg-muted"
                       }`}
                   >
                     Pin {formatPin(typedPin as number)} would drive {pendingLoad} LED
@@ -1034,7 +1034,7 @@ function ZoneMapper({
             )}
 
             <div>
-              <label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-white/30">
+              <label className="mb-2 block text-xs text-fg-muted">
                 Pin Header
               </label>
               <div className="mb-4 flex gap-2">
@@ -1050,9 +1050,9 @@ function ZoneMapper({
                       key={option.id}
                       onClick={() => changePinHeader(option.id)}
                       aria-pressed={active}
-                      className={`cursor-pointer rounded-full border px-4 py-1.5 font-serif text-sm transition ${active
-                        ? "border-white/40 bg-white/[0.08] text-white"
-                        : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white"
+                      className={`cursor-pointer rounded-full px-4 py-1.5 font-medium text-sm transition ${active
+                        ? "text-fg bg-line-strong"
+                        : "bg-elevated text-fg-muted hover:text-fg hover:bg-line-strong"
                         }`}
                     >
                       {option.label}
@@ -1061,15 +1061,15 @@ function ZoneMapper({
                 })}
               </div>
 
-              <label className="mb-2 block text-[10px] uppercase tracking-[0.3em] text-white/30">
+              <label className="mb-2 block text-xs text-fg-muted">
                 Pin Number
               </label>
-              <p className="mb-2 text-[10px] tracking-[0.15em] text-white/40">
+              <p className="mb-2 text-xs text-fg-muted">
                 Analog pins A0–A{ANALOG_PIN_COUNT - 1} are the same as pins{" "}
                 {ANALOG_PIN_OFFSET}–{ANALOG_PIN_OFFSET + ANALOG_PIN_COUNT - 1}.
               </p>
               <div className="relative">
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-serif text-white/50">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-medium text-fg-muted">
                   {useAnalog ? "A" : "D"}
                 </span>
                 <input
@@ -1077,27 +1077,27 @@ function ZoneMapper({
                   onChange={(event) => handlePinInputChange(event.target.value)}
                   inputMode="numeric"
                   placeholder={useAnalog ? "e.g. 1" : "e.g. 7"}
-                  className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-3 pl-9 pr-4 text-white outline-none placeholder:text-white/20 focus:border-white/30"
+                  className="w-full rounded-lg border py-3 pl-9 pr-4 text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated"
                 />
               </div>
             </div>
 
             {/* Sliding pin selector */}
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+            <div className="rounded-xl bg-surface p-3">
               <div className="mb-3 flex items-center justify-between">
                 <button
                   onClick={() => setPinPage((page) => Math.max(0, page - 1))}
                   disabled={pinPage === 0}
                   aria-label="Previous pins"
-                  className="cursor-pointer rounded-full border border-white/10 px-3 py-1 text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-default disabled:opacity-20"
+                  className="cursor-pointer rounded-full px-3 py-1 text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-20 bg-elevated hover:bg-line-strong"
                 >
                   ←
                 </button>
                 <div className="text-center">
-                  <p className="text-[10px] uppercase tracking-[0.25em] text-white/30">
+                  <p className="text-xs text-fg-muted">
                     Pin Selector
                   </p>
-                  <p className="mt-1 font-serif text-sm text-white/80">
+                  <p className="mt-1 font-medium text-sm text-fg">
                     {currentPinPage.title}
                   </p>
                 </div>
@@ -1107,7 +1107,7 @@ function ZoneMapper({
                   }
                   disabled={pinPage >= pinPages.length - 1}
                   aria-label="Next pins"
-                  className="cursor-pointer rounded-full border border-white/10 px-3 py-1 text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-default disabled:opacity-20"
+                  className="cursor-pointer rounded-full px-3 py-1 text-fg-soft transition hover:text-fg disabled:cursor-default disabled:opacity-20 bg-elevated hover:bg-line-strong"
                 >
                   →
                 </button>
@@ -1121,11 +1121,11 @@ function ZoneMapper({
                     <button
                       key={pin}
                       onClick={() => showPinInInput(pin)}
-                      className={`cursor-pointer rounded-lg border px-2 py-2 text-xs transition ${isActive
-                        ? "border-white/40 bg-white/[0.12] text-white"
+                      className={`cursor-pointer rounded-full px-2 py-2 text-xs transition ${isActive
+                        ? "bg-line-strong text-fg bg-line-strong"
                         : isAssigned
-                          ? "border-white/20 bg-white/[0.06] text-white/70"
-                          : "border-white/10 bg-white/[0.02] text-white/40 hover:border-white/25 hover:text-white"
+                          ? "bg-elevated text-fg-soft"
+                          : "bg-elevated text-fg-muted hover:text-fg hover:bg-line-strong"
                         }`}
                     >
                       {formatPin(pin)}
@@ -1135,7 +1135,7 @@ function ZoneMapper({
                 })}
               </div>
 
-              <p className="mt-3 text-center text-[10px] text-white/30">
+              <p className="mt-3 text-center text-xs text-fg-muted">
                 ~ can dim an LED (PWM pin)
               </p>
 
@@ -1146,8 +1146,8 @@ function ZoneMapper({
                       key={page.title}
                       onClick={() => setPinPage(index)}
                       className={`h-1.5 rounded-full transition-all ${index === pinPage
-                        ? "w-5 bg-white/70"
-                        : "w-1.5 bg-white/20 hover:bg-white/40"
+                        ? "w-5 bg-fg-soft"
+                        : "w-1.5 bg-line-strong hover:bg-fg-muted"
                         }`}
                       aria-label={`Go to pin page ${index + 1}`}
                     />
@@ -1161,7 +1161,7 @@ function ZoneMapper({
               <button
                 onClick={assignPin}
                 disabled={selected.size === 0}
-                className="flex-1 cursor-pointer rounded-xl bg-white px-4 py-3 font-serif text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-40"
+                className="flex-1 cursor-pointer rounded-xl bg-fg px-4 py-3 font-medium text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-40"
               >
                 Assign pin
               </button>
@@ -1173,7 +1173,7 @@ function ZoneMapper({
                   !pinMappings.some((mapping) => selected.has(mapping.zoneId))
                 }
                 title="Remove pin assignments from selected zones"
-                className="cursor-pointer rounded-xl border border-red-400/20 px-4 py-3 font-serif text-sm text-red-300/80 transition hover:border-red-400/40 hover:bg-red-400/10 hover:text-red-200 disabled:cursor-default disabled:opacity-30"
+                className="cursor-pointer rounded-xl border border-holly/20 px-4 py-3 font-medium text-sm text-holly-soft transition hover:border-holly/40 hover:bg-holly/10 hover:text-red-200 disabled:cursor-default disabled:opacity-30"
               >
                 Unassign pin
               </button>
@@ -1181,19 +1181,19 @@ function ZoneMapper({
               <button
                 onClick={clearSelection}
                 disabled={selected.size === 0}
-                className="cursor-pointer rounded-xl border border-white/10 px-4 py-3 font-serif text-sm text-white/50 hover:text-white disabled:cursor-default disabled:opacity-40"
+                className="cursor-pointer rounded-full px-4 py-3 font-medium text-sm text-fg-muted hover:text-fg disabled:cursor-default disabled:opacity-40 bg-elevated hover:bg-line-strong"
               >
                 Deselect
               </button>
 
             </div>
 
-            {warning && <p className="text-xs text-red-400">{warning}</p>}
-            {notice && <p className="text-xs text-amber-300/80">⚠ {notice}</p>}
+            {warning && <p className="text-xs text-holly-soft">{warning}</p>}
+            {notice && <p className="text-xs text-warn">⚠ {notice}</p>}
 
             {groupedPins.length > 0 && (
               <div>
-                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/30">
+                <p className="mb-2 text-xs text-fg-muted">
                   Pin groups
                 </p>
                 <div className="flex max-w-full flex-wrap gap-2">
@@ -1205,7 +1205,7 @@ function ZoneMapper({
                     return (
                       <div
                         key={pin}
-                        className={`flex items-center gap-1 rounded-full border bg-white/[0.03] ${ticked ? "border-white/50" : "border-white/10"
+                        className={`flex items-center gap-1 rounded-full bg-surface ${ticked ? "bg-line-strong" : "bg-elevated"
                           }`}
                       >
                         <input
@@ -1223,13 +1223,13 @@ function ZoneMapper({
                         />
                         <button
                           onClick={() => selectPinGroup(pin)}
-                          className="cursor-pointer rounded-full px-3 py-1 font-serif text-xs text-white/50 hover:text-white"
+                          className="cursor-pointer rounded-lg px-3 py-1 font-medium text-xs text-fg-muted hover:text-fg"
                         >
-                          Pin <b className="text-white">{formatPin(pin)}</b> —{" "}
+                          Pin <b className="text-fg">{formatPin(pin)}</b> —{" "}
                           {count} zone{count === 1 ? "" : "s"} · {leds} LED
                           {leds === 1 ? "" : "s"}
                           {leds > LED_WARN_LIMIT && (
-                            <span className="text-amber-300"> ⚠</span>
+                            <span className="text-warn"> ⚠</span>
                           )}
                           {merged && " · tricolor"}
                           {pinTypeOf(pin) === "analog" &&
@@ -1238,7 +1238,7 @@ function ZoneMapper({
                         <button
                           onClick={() => deletePin(pin)}
                           title={`Delete pin ${formatPin(pin)}`}
-                          className="mr-1 cursor-pointer rounded-full px-2 py-1 text-xs text-red-300/50 hover:bg-red-400/10 hover:text-red-300"
+                          className="mr-1 cursor-pointer rounded-lg px-2 py-1 text-xs text-holly-soft hover:bg-holly/10 hover:text-holly-soft"
                         >
                           Delete
                         </button>
@@ -1251,11 +1251,11 @@ function ZoneMapper({
                   <button
                     onClick={mergeTricolor}
                     disabled={mergeSel.length !== 3}
-                    className="cursor-pointer rounded-xl border border-white/20 px-4 py-2 font-serif text-sm text-white/80 transition hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-35"
+                    className="cursor-pointer rounded-full px-4 py-2 font-medium text-sm text-fg transition hover:bg-elevated disabled:cursor-default disabled:opacity-35 bg-elevated hover:bg-line-strong"
                   >
                     Merge into tricolor LED
                   </button>
-                  <p className="text-[11px] text-white/35">
+                  <p className="text-xs text-fg-muted">
                     {mergeSel.length}/3 pins ticked — merging needs exactly 3.
                     One tricolor LED is one LED; merging doesn't change the count.
                   </p>
@@ -1265,7 +1265,7 @@ function ZoneMapper({
 
             {tricolorGroups.length > 0 && (
               <div>
-                <p className="mb-2 text-[10px] uppercase tracking-[0.3em] text-white/30">
+                <p className="mb-2 text-xs text-fg-muted">
                   Tricolor LEDs
                 </p>
                 <div className="flex flex-col gap-2">
@@ -1277,23 +1277,23 @@ function ZoneMapper({
                     return (
                       <div
                         key={g.id}
-                        className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"
+                        className="rounded-xl bg-surface px-3 py-2"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className="flex items-center gap-2 font-serif text-xs text-white/60">
+                          <p className="flex items-center gap-2 font-medium text-xs text-fg-soft">
                             <span
-                              className="h-3 w-3 rounded-full border border-white/20"
+                              className="h-3 w-3 rounded-full border border-transparent bg-elevated"
                               style={{ backgroundColor: g.color ?? DEFAULT_TRICOLOR }}
                             />
                             Pins{" "}
-                            <b className="text-white">
+                            <b className="text-fg">
                               {g.pins.map(formatPin).join(" + ")}
                             </b>{" "}
                             — {groupLeds} LED{groupLeds === 1 ? "" : "s"}
                           </p>
                           <button
                             onClick={() => unmerge(g.id)}
-                            className="cursor-pointer rounded-full px-2 py-1 text-xs text-red-300/50 hover:bg-red-400/10 hover:text-red-300"
+                            className="cursor-pointer rounded-lg px-2 py-1 text-xs text-holly-soft hover:bg-holly/10 hover:text-holly-soft"
                           >
                             Unmerge
                           </button>
@@ -1302,7 +1302,7 @@ function ZoneMapper({
                     );
                   })}
                 </div>
-                <p className="mt-2 text-[11px] text-white/30">
+                <p className="mt-2 text-xs text-fg-muted">
                   Change a tricolor LED's color in the previews (Sequence and
                   Keyframes tabs).
                 </p>
@@ -1311,16 +1311,16 @@ function ZoneMapper({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-white/5 pt-4">
+        <div className="flex flex-col gap-2 border-t border-line pt-4">
           <button
             onClick={resetAllPins}
-            className="cursor-pointer text-left text-xs text-white/30 underline underline-offset-2 hover:text-white/60"
+            className="cursor-pointer text-left text-xs text-fg-muted underline underline-offset-2 hover:text-fg-soft"
           >
             Reset all pin assignments
           </button>
           <button
             onClick={onClearZones}
-            className="cursor-pointer text-left text-xs text-white/30 underline underline-offset-2 hover:text-white/60"
+            className="cursor-pointer text-left text-xs text-fg-muted underline underline-offset-2 hover:text-fg-soft"
           >
             Re-scan drawing (forces a fresh detection from the server)
           </button>

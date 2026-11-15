@@ -7,6 +7,10 @@ import { ProjectProvider } from "./context/ProjectContext";
 import SchoolCredit from "./components/SchoolCredit";
 import { ensureSession } from "./lib/supabase";
 
+import "@fontsource-variable/inter";
+import "@fontsource-variable/fraunces";
+import "@fontsource/silkscreen/400.css";
+import "@fontsource/silkscreen/700.css";
 import "./index.css";
 
 ensureSession().finally(() => {

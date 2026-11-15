@@ -1,1 +1,1383 @@
 @import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * I-Parol design system
+ * One place for every colour, type size, radius, shadow and duration.
+ * Components use these tokens through Tailwind utilities
+ * (bg-surface, border-line, text-fg-muted, rounded-lg, ...) so the whole
+ * interface can be tuned from here.
+ * ------------------------------------------------------------------ */
+
+@theme {
+  /* Surfaces */
+  --color-canvas: #090909;
+  --color-surface: #151515;
+  --color-elevated: #202020;
+
+  /* Borders */
+  --color-line: #303030;
+  --color-line-strong: #3d3d3d;
+  --color-line-hover: #5a5a5a;
+
+  /* Text */
+  --color-fg: #f5f5f5;
+  --color-fg-soft: #c4c4c4;
+  --color-fg-muted: #999999;
+
+  /* Christmas accents: small touches only */
+  --color-pine: #2f5d46;
+  --color-pine-soft: #86b79b;
+  --color-holly: #b4373d;
+  --color-holly-soft: #e58a8f;
+  --color-silver: #c9cdd2;
+  --color-warn: #d9b77e;
+
+  /* Type */
+  --font-sans:
+    "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Display: Fraunces, a soft modern serif, for headings only */
+  --font-serif:
+    "Fraunces Variable", "Fraunces", "Iowan Old Style", "Palatino Linotype",
+    Georgia, serif;
+  --font-display: var(--font-serif);
+  /* Pixel face: ONLY for Santa's MERRY CHRISTMAS! greeting */
+  --font-pixel: "Silkscreen", "Courier New", monospace;
+
+  /* Radius: controls (lg) and panels / dialogs (xl) are the only two in use */
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
+  --radius-3xl: 22px;
+
+  /* Shadow: one, for floating layers only */
+  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+  /* Motion: every `transition` utility uses these */
+  --default-transition-duration: 180ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --control-height: 40px;
+    --control-height-sm: 32px;
+  }
+
+  html {
+    background: var(--color-canvas);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: transparent;
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    letter-spacing: -0.006em;
+    font-feature-settings: "cv11", "ss03", "calt";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    line-height: 1.12;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: rgba(47, 93, 70, 0.65);
+    color: var(--color-fg);
+  }
+
+  button,
+  [role="tab"],
+  select,
+  summary,
+  input[type="checkbox"],
+  input[type="range"],
+  input[type="file"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #6b6b6b;
+  }
+
+  /* Keyboard focus: one visible, consistent ring everywhere */
+  :focus-visible {
+    outline: 2px solid var(--color-silver);
+    outline-offset: 2px;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline-offset: 0;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  /* Press feedback on every enabled button */
+  button:not(:disabled),
+  [role="tab"] {
+    transition-property:
+      color, background-color, border-color, opacity, transform;
+  }
+  button:not(:disabled):active,
+  [role="tab"]:active {
+    transform: scale(0.97);
+  }
+
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"] {
+    accent-color: var(--color-pine);
+  }
+}
+
+/* Dialogs and scrims fade/slide in; nothing bounces */
+@keyframes parol-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes parol-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes parol-page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@layer components {
+  .fixed.inset-0.z-50 {
+    animation: parol-fade-in 160ms var(--ease-out-quint) both;
+  }
+
+  [role="dialog"] {
+    animation: parol-rise-in 220ms var(--ease-out-quint) both;
+    box-shadow: var(--shadow-float);
+  }
+
+  main {
+    animation: parol-page-in 220ms var(--ease-out-quint) both;
+  }
+
+  [role="status"],
+  [role="alert"] {
+    animation: parol-fade-in 200ms ease-out both;
+  }
+}
+
+/* Respect the system "reduce motion" setting */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  button:not(:disabled):active,
+  [role="tab"]:active {
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Winter backdrop (WinterBackdrop.tsx) and frozen brand (FrozenTitle.tsx)
+ * Compositor-friendly only: transform / opacity / mask-position.
+ * ------------------------------------------------------------------ */
+.wb-root {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wb-aurora-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---- Lighter variants for the screens after the landing page ----------
+   calm  = color lock / sign-in, quiet = workspace. They are pinned to the
+   viewport so long pages don't get a page-sized canvas. Calm sits inside its
+   dialog's own stacking context; quiet sits behind the page content, whose
+   <main> uses `isolate` so the backdrop can never cover it. */
+.wb-root.wb-calm,
+.wb-root.wb-quiet {
+  position: fixed;
+}
+.wb-root.wb-quiet {
+  z-index: -1;
+}
+.wb-calm .wb-aurora-wrap {
+  opacity: 0.75;
+}
+.wb-quiet .wb-aurora-wrap {
+  opacity: 0.5;
+}
+.wb-calm .wb-garland {
+  opacity: 0.55;
+}
+.wb-calm .wb-orn {
+  opacity: 0.6;
+}
+/* a low, half-size snow bank, lifted above the fixed school-credit bar so it
+   stays visible (.wb-x .wb-bank outranks the 640px rule that makes it bigger) */
+.wb-calm .wb-bank,
+.wb-quiet .wb-bank {
+  --u: 2px;
+  bottom: 2.05rem;
+}
+.wb-calm .wb-bank {
+  opacity: 0.4;
+}
+.wb-quiet .wb-bank {
+  opacity: 0.22;
+}
+
+/* Faint aurora: three soft icy light pools drifting very slowly */
+.wb-aurora {
+  position: absolute;
+  border-radius: 9999px;
+  will-change: transform;
+}
+.wb-aurora-a {
+  top: -22%;
+  left: -12%;
+  width: 70%;
+  height: 62%;
+  background: radial-gradient(closest-side, rgba(120, 190, 255, 0.16), transparent);
+  animation: wb-drift-a 38s ease-in-out infinite alternate;
+}
+.wb-aurora-b {
+  top: -26%;
+  right: -16%;
+  width: 66%;
+  height: 58%;
+  background: radial-gradient(closest-side, rgba(110, 215, 195, 0.1), transparent);
+  animation: wb-drift-b 46s ease-in-out infinite alternate;
+}
+.wb-aurora-c {
+  top: -10%;
+  left: 22%;
+  width: 56%;
+  height: 40%;
+  background: radial-gradient(closest-side, rgba(47, 93, 70, 0.3), transparent);
+  animation: wb-drift-c 52s ease-in-out infinite alternate;
+}
+
+/* Pixel light garland along the top edge */
+.wb-garland {
+  --u: 3px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--rows) * var(--u));
+}
+.wb-garland-layer {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat-x;
+  background-size: calc(var(--cols) * var(--u)) calc(var(--rows) * var(--u));
+  image-rendering: pixelated;
+}
+.wb-twinkle-a {
+  animation: wb-twinkle 4.6s ease-in-out infinite;
+}
+.wb-twinkle-b {
+  animation: wb-twinkle 4.6s ease-in-out -2.3s infinite;
+}
+
+/* Snow bank along the bottom edge */
+.wb-bank {
+  --u: 3px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--rows) * var(--u));
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: calc(var(--cols) * var(--u)) calc(var(--rows) * var(--u));
+  image-rendering: pixelated;
+  opacity: 0.9;
+}
+
+/* Santa's sleigh: positioned by the snow engine, which also streams the
+   sparkle trail from its tail. Two gallop frames swap in whole-pixel steps. */
+.wb-sleigh {
+  --u: 2px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--cols) * var(--u));
+  height: calc(var(--rows) * var(--u));
+  visibility: hidden;
+  opacity: 0.92;
+  pointer-events: none;
+  /* The flight code positions the sleigh's left edge with translate3d() and
+     mirrors it with scaleX(-1) for right-to-left passes. That only lands where
+     the maths expects if the flip happens about the left edge, not the default
+     centre (which shifted every leftward pass by one sleigh width). */
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.wb-sleigh-glow {
+  position: absolute;
+  left: -8%;
+  top: -35%;
+  width: 116%;
+  height: 175%;
+  background: radial-gradient(closest-side, rgba(240, 207, 117, 0.1), transparent);
+}
+/* The sleigh is a rig of separately animated pixel layers (SleighRig.ts).
+   Every layer is a full-size box sharing one coordinate space, so the
+   transform-origin of each joint is set inline on the element. */
+.wb-rig {
+  position: absolute;
+  inset: 0;
+}
+.wb-l {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+.wb-px {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.wb-deer {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  --dur: 0.6s; /* one stride; set per reindeer */
+  --ph: 0s; /* phase offset (negative delay); set per reindeer */
+  --lp: 0;
+}
+
+/* Flying gallop. Whole-body bob and pitch, then each limb on its own pivot.
+   Fore and hind legs run asymmetric 4-key cycles (reach, pass, push, fold) and
+   are offset against each other by --lp of a stride, so the cycle is a gallop
+   rather than a pendulum. Everything is transform-only. */
+.wb-bob {
+  animation: wb-bob var(--dur) ease-in-out var(--ph) infinite;
+}
+.wb-pitch {
+  animation: wb-pitch calc(var(--dur) * 4.6) ease-in-out var(--ph) infinite;
+}
+.wb-leg {
+  animation: wb-fore-thigh var(--dur) ease-in-out calc(var(--ph) - var(--dur) * var(--lp)) infinite;
+}
+.wb-leg.wb-hind {
+  animation-name: wb-hind-thigh;
+}
+.wb-shin {
+  animation: wb-fore-shin var(--dur) ease-in-out calc(var(--ph) - var(--dur) * var(--lp)) infinite;
+}
+.wb-hind > .wb-shin {
+  animation-name: wb-hind-shin;
+}
+.wb-neck {
+  animation: wb-neck var(--dur) ease-in-out calc(var(--ph) - var(--dur) * 0.16) infinite;
+}
+.wb-antlers {
+  animation: wb-antlers var(--dur) ease-in-out calc(var(--ph) - var(--dur) * 0.32) infinite;
+}
+.wb-scarf {
+  animation: wb-flutter calc(var(--dur) * 0.8) ease-in-out var(--ph) infinite;
+}
+.wb-tail {
+  animation: wb-tail calc(var(--dur) * var(--tail, 1.4)) ease-in-out var(--ph) infinite;
+}
+.wb-hull {
+  animation: wb-hull 3.1s ease-in-out infinite;
+}
+.wb-santa-scarf {
+  animation: wb-flutter 0.72s ease-in-out infinite;
+}
+
+/* Philippine flag: cloth cut into slices (SleighRig.ts). Each slice bobs and
+   shears on a phase that lags with distance from the pole, so a wave travels
+   down the cloth; --wave (set from the flight speed) sets its period. The whole
+   flag also leans back and shortens a little in gusts: wind resistance. */
+.wb-flag {
+  --wave: 1.1s;
+  position: absolute;
+  pointer-events: none;
+  transform-origin: 100% 50%;
+  animation: wb-gust 2.7s ease-in-out infinite;
+}
+.wb-fs {
+  position: absolute;
+  top: 0;
+  left: calc(var(--j) * var(--u) * 2);
+  width: calc(var(--u) * 2 + 1px);
+  height: 100%;
+  background-image: var(--flag);
+  background-size: calc(var(--u) * 14) 100%;
+  background-position: calc(var(--u) * -2 * var(--j)) 0;
+  background-repeat: no-repeat;
+  animation: wb-wave var(--wave) ease-in-out calc(var(--wave) * -1 + var(--k) * 0.08s) infinite;
+}
+.wb-fs::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 40, 0.3), rgba(255, 255, 255, 0.16));
+  animation: wb-fold var(--wave) ease-in-out calc(var(--wave) * -1 + var(--k) * 0.08s) infinite;
+}
+/* Rudolph's nose: a soft, slow pulse */
+.wb-nose {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgba(255, 90, 95, 0.6), rgba(255, 90, 95, 0));
+  animation: wb-nose 2.8s ease-in-out infinite;
+}
+
+/* Hanging pixel ornaments */
+.wb-orn {
+  --u: var(--um);
+  --len: var(--len-m);
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: calc(var(--cols) * var(--u));
+  animation: wb-sway var(--sway, 8s) steps(1, end) var(--delay, 0s) infinite;
+}
+.wb-orn.wb-far {
+  opacity: 0.75;
+}
+.wb-hide-mobile {
+  display: none;
+}
+.wb-string {
+  display: block;
+  width: var(--u);
+  height: var(--len);
+  background: rgba(159, 211, 245, 0.35);
+}
+.wb-sprite {
+  display: block;
+  width: calc(var(--cols) * var(--u));
+  height: auto;
+  image-rendering: pixelated;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: filter 240ms cubic-bezier(0.2, 0, 0, 1);
+}
+.wb-orn[data-near] .wb-sprite,
+.wb-orn .wb-sprite:hover {
+  filter: brightness(1.15) drop-shadow(0 0 8px rgba(160, 215, 255, 0.55));
+}
+
+.wb-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+@media (min-width: 640px) {
+  .wb-garland,
+  .wb-bank {
+    --u: 4px;
+  }
+  .wb-sleigh {
+    --u: 3px;
+  }
+  .wb-nose {
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+  }
+  .wb-orn {
+    --u: var(--ud);
+    --len: var(--len-d);
+  }
+  .wb-hide-mobile {
+    display: flex;
+  }
+}
+
+@keyframes wb-drift-a {
+  from { transform: translate3d(-4%, 0, 0) scale(1); }
+  to { transform: translate3d(10%, 6%, 0) scale(1.12); }
+}
+@keyframes wb-drift-b {
+  from { transform: translate3d(6%, 0, 0) scale(1.05); }
+  to { transform: translate3d(-12%, 8%, 0) scale(0.95); }
+}
+@keyframes wb-drift-c {
+  from { transform: translate3d(-8%, 0, 0); opacity: 0.7; }
+  to { transform: translate3d(8%, 5%, 0); opacity: 1; }
+}
+@keyframes wb-bob {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  42% { transform: translate3d(0, calc(var(--u) * -1), 0); }
+}
+@keyframes wb-pitch {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50% { transform: rotate(1.5deg); }
+}
+/* angles: negative = forward (the team faces right) */
+@keyframes wb-fore-thigh {
+  0%, 100% { transform: rotate(-40deg); }
+  38% { transform: rotate(-4deg); }
+  62% { transform: rotate(30deg); }
+  84% { transform: rotate(-14deg); }
+}
+@keyframes wb-fore-shin {
+  0%, 100% { transform: rotate(-4deg); }
+  38% { transform: rotate(14deg); }
+  62% { transform: rotate(24deg); }
+  84% { transform: rotate(78deg); }
+}
+@keyframes wb-hind-thigh {
+  0%, 100% { transform: rotate(-26deg); }
+  40% { transform: rotate(34deg); }
+  70% { transform: rotate(4deg); }
+}
+@keyframes wb-hind-shin {
+  0%, 100% { transform: rotate(14deg); }
+  40% { transform: rotate(-6deg); }
+  70% { transform: rotate(82deg); }
+}
+@keyframes wb-neck {
+  0%, 100% { transform: rotate(-3.5deg); }
+  50% { transform: rotate(4deg); }
+}
+@keyframes wb-antlers {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(4.5deg); }
+}
+@keyframes wb-tail {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(15deg); }
+}
+@keyframes wb-flutter {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(13deg); }
+}
+@keyframes wb-hull {
+  0%, 100% { transform: rotate(-0.6deg); }
+  50% { transform: rotate(0.6deg); }
+}
+@keyframes wb-wave {
+  0%, 100% {
+    transform: translateY(calc(var(--u) * var(--a) * 0.9)) skewY(calc(var(--a) * 9deg));
+  }
+  50% {
+    transform: translateY(calc(var(--u) * var(--a) * -0.9)) skewY(calc(var(--a) * -9deg));
+  }
+}
+@keyframes wb-fold {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+@keyframes wb-gust {
+  0%, 100% { transform: scaleX(1) rotate(0deg); }
+  50% { transform: scaleX(0.93) rotate(-2.5deg); }
+}
+@keyframes wb-nose {
+  0%, 100% { opacity: 0.5; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes wb-twinkle {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+/* Four-frame pixel sway: always whole-pixel steps, so edges stay crisp */
+@keyframes wb-sway {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(var(--u)); }
+  50% { transform: translateX(0); }
+  75% { transform: translateX(calc(var(--u) * -1)); }
+}
+
+/* ---- Frozen brand: translucent, layered ice -------------------------- */
+.frozen {
+  position: relative;
+  display: inline-grid;
+  /* ROOT CAUSE FIX: the title used to wrap onto two lines inside the 28rem
+     column. Every fern, shard, icicle and glint is placed in % of this box and
+     was authored for ONE line, so on two lines they floated off the letters and
+     icicles hung through "SYNAPSE". Keep it on one line and fit the type to the
+     available width (the one-line title is ~8.5em wide). */
+  white-space: nowrap;
+  font-size: min(1em, calc(min(100vw - 3rem, 32rem) / 8.7));
+  /* keep glyph outlines crisp: no synthetic styles, no kerning surprises */
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  animation: frozen-glow 2.2s ease-out 4s both;
+}
+.frozen-base,
+.fz-stack {
+  grid-area: 1 / 1;
+}
+
+/* Zero-size marker that sits on the text baseline. FrozenTitle.tsx reads its
+   position to know exactly where the bottom edge of the letters is. */
+.fz-probe {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+
+/* The ice is attached to the measured letters. Until that has happened (or if
+   it ever fails) show only the clean frozen text instead of misplaced ice. */
+.frozen:not([data-ready]) :is(.fz-fern, .fz-shard, .fz-icicle, .fz-drop, .fz-glint) {
+  visibility: hidden;
+}
+
+/* One soft frost front reveals every ice layer together */
+.fz-stack {
+  display: grid;
+  -webkit-mask-image: linear-gradient(100deg, #000 0%, #000 40%, transparent 60%, transparent 100%);
+  mask-image: linear-gradient(100deg, #000 0%, #000 40%, transparent 60%, transparent 100%);
+  -webkit-mask-size: 280% 100%;
+  mask-size: 280% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0;
+  mask-position: 100% 0;
+  animation:
+    frozen-reveal 3.8s cubic-bezier(0.4, 0, 0.2, 1) 0.9s forwards,
+    fz-breathe 10s ease-in-out 6s infinite;
+}
+.fz-stack > span {
+  grid-area: 1 / 1;
+}
+
+/* Thickness: cool blue light pooling inside, with a faint colour fringe */
+.fz-depth {
+  color: rgba(105, 170, 228, 0.2);
+  text-shadow: 0 2px 9px rgba(100, 165, 225, 0.35);
+}
+
+/* Body: clouded ice. Long horizontal inclusions, fine frosted speckle and a
+   few uneven crystal veins over a pale-to-blue depth gradient. */
+.fz-body {
+  color: transparent;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 2.4 -1.15'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='130'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011 0.045' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.5 -0.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    repeating-linear-gradient(72deg, rgba(255, 255, 255, 0.26) 0 1px, transparent 1px 13px),
+    repeating-linear-gradient(-38deg, rgba(120, 175, 225, 0.2) 0 1px, transparent 1px 19px),
+    repeating-linear-gradient(8deg, rgba(255, 255, 255, 0.12) 0 1px, transparent 1px 29px),
+    linear-gradient(180deg, rgba(247, 252, 255, 0.96) 0%, rgba(216, 237, 252, 0.9) 46%, rgba(152, 202, 240, 0.88) 100%);
+  background-size: 120px 120px, 260px 130px, auto, auto, auto, auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* Bevel: bright rim catching the light */
+.fz-edge {
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(238, 249, 255, 0.62);
+  paint-order: stroke fill;
+}
+
+/* Gloss: sky reflected on the upper half plus a slow travelling glint */
+.fz-gloss {
+  color: transparent;
+  background-image:
+    linear-gradient(105deg, transparent 0 44%, rgba(255, 255, 255, 0.7) 50%, transparent 56% 100%),
+    linear-gradient(172deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0) 38%);
+  background-size: 260% 100%, auto;
+  background-position: 130% 0, 0 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: frozen-glint 9s ease-in-out 5.5s infinite;
+}
+
+/* Frost ferns grow along the edges as the front passes. Every decoration below
+   is positioned (left/top) by FrozenTitle.tsx from the real letter edges, and
+   sized in em so it scales with the title. The anchor point of each shape is
+   the point that touches the letter. */
+.fz-fern {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  transform: translate(-50%, -91%) rotate(var(--rot, 0deg));
+  transform-origin: 50% 91%;
+  opacity: 0.8;
+}
+.fz-fern path {
+  fill: none;
+  stroke: rgba(236, 248, 255, 0.85);
+  stroke-width: 0.9;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: fz-grow 2.2s cubic-bezier(0.3, 0, 0.2, 1) var(--d, 2s) forwards;
+}
+
+/* Faceted shards standing on the letters */
+.fz-shard {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  transform: translate(-50%, -100%) rotate(var(--rot, 0deg));
+  transform-origin: 50% 100%;
+  opacity: 0;
+  animation: fz-shard-in 1.1s cubic-bezier(0.2, 0, 0, 1) var(--d, 3s) forwards;
+}
+.fz-shard-body { fill: rgba(200, 230, 250, 0.38); stroke: rgba(255, 255, 255, 0.8); stroke-width: 0.7; }
+.fz-shard-light { fill: rgba(255, 255, 255, 0.3); }
+.fz-shard-facet { fill: none; stroke: rgba(255, 255, 255, 0.5); stroke-width: 0.5; }
+
+/* Icicles under the baseline */
+.fz-icicle {
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
+  transform: translateX(-50%) scaleY(0);
+  transform-origin: 50% 0;
+  opacity: 0;
+  animation: fz-icicle-in 2.4s cubic-bezier(0.2, 0, 0.2, 1) var(--d, 3.4s) forwards;
+}
+.fz-icicle-body { fill: rgba(208, 235, 252, 0.72); stroke: rgba(255, 255, 255, 0.55); stroke-width: 0.5; }
+.fz-icicle-light { fill: rgba(255, 255, 255, 0.6); }
+
+/* Melt: now and then a droplet gathers on an icicle tip and falls */
+.fz-drop {
+  position: absolute;
+  width: 0.07em;
+  height: 0.1em;
+  margin-left: -0.035em;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background: radial-gradient(circle at 35% 30%, #fff 0 1px, rgba(190, 226, 250, 0.85) 2px);
+  pointer-events: none;
+  opacity: 0;
+  animation: fz-drip 11s cubic-bezier(0.4, 0, 0.6, 1) var(--d, 7s) infinite;
+}
+
+/* Tiny glints on the finished ice */
+.fz-glint {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  margin: -1px 0 0 -1px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 6px 2px rgba(190, 225, 255, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  animation: fz-twinkle 5.5s ease-in-out var(--d, 6s) infinite;
+}
+
+@keyframes frozen-reveal {
+  to {
+    -webkit-mask-position: 0% 0;
+    mask-position: 0% 0;
+  }
+}
+@keyframes frozen-glint {
+  from { background-position: 130% 0, 0 0; }
+  to { background-position: -40% 0, 0 0; }
+}
+@keyframes frozen-glow {
+  from { filter: drop-shadow(0 0 0 rgba(150, 210, 255, 0)); }
+  to { filter: drop-shadow(0 0 14px rgba(150, 210, 255, 0.26)); }
+}
+@keyframes fz-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.93; }
+}
+@keyframes fz-grow {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes fz-shard-in {
+  from { opacity: 0; transform: translate(-50%, -100%) rotate(var(--rot, 0deg)) scale(0.3); }
+  to { opacity: 0.95; transform: translate(-50%, -100%) rotate(var(--rot, 0deg)) scale(1); }
+}
+@keyframes fz-icicle-in {
+  from { opacity: 0; transform: translateX(-50%) scaleY(0); }
+  to { opacity: 0.95; transform: translateX(-50%) scaleY(1); }
+}
+@keyframes fz-drip {
+  0%, 52% { opacity: 0; transform: translateY(0) scale(0.2); }
+  66% { opacity: 0.95; transform: translateY(0) scale(1); }
+  70% { opacity: 0.95; transform: translateY(0.03em) scale(1); }
+  86% { opacity: 0.9; transform: translateY(0.37em) scale(1); }
+  92%, 100% { opacity: 0; transform: translateY(0.5em) scale(0.8); }
+}
+@keyframes fz-twinkle {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 0.9; transform: scale(1); }
+}
+
+/* Reduced motion: nothing moves; the finished frozen look is shown */
+@media (prefers-reduced-motion: reduce) {
+  .wb-aurora,
+  .wb-orn,
+  .wb-bob,
+  .wb-pitch,
+  .wb-leg,
+  .wb-shin,
+  .wb-neck,
+  .wb-antlers,
+  .wb-scarf,
+  .wb-tail,
+  .wb-hull,
+  .wb-santa-scarf,
+  .wb-flag,
+  .wb-fs,
+  .wb-fs::after,
+  .wb-nose,
+  .wb-twinkle-a,
+  .wb-twinkle-b {
+    animation: none !important;
+  }
+  /* a held mid-gallop pose instead of straight legs */
+  .wb-leg.wb-fore { transform: rotate(-24deg); }
+  .wb-leg.wb-fore.wb-far { transform: rotate(-6deg); }
+  .wb-leg.wb-hind { transform: rotate(16deg); }
+  .wb-leg.wb-hind.wb-far { transform: rotate(-12deg); }
+  .wb-fore > .wb-shin { transform: rotate(10deg); }
+  .wb-hind > .wb-shin { transform: rotate(30deg); }
+  .wb-fs::after { opacity: 0.5; }
+  .wb-nose {
+    opacity: 0.6;
+  }
+  .wb-twinkle-a,
+  .wb-twinkle-b {
+    opacity: 0.6;
+  }
+  .frozen {
+    animation: none !important;
+    filter: drop-shadow(0 0 14px rgba(150, 210, 255, 0.26));
+  }
+  .fz-stack,
+  .fz-gloss {
+    animation: none !important;
+    -webkit-mask-position: 0% 0;
+    mask-position: 0% 0;
+  }
+  .fz-fern path {
+    animation: none !important;
+    stroke-dashoffset: 0;
+  }
+  .fz-shard,
+  .fz-icicle {
+    animation: none !important;
+    opacity: 0.95;
+  }
+  .fz-icicle {
+    transform: translateX(-50%) scaleY(1);
+  }
+  .fz-drop,
+  .fz-glint {
+    animation: none !important;
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * App screens after the landing page (color lock, workspace, developer).
+ * Same palette, with the neutrals leaning very slightly towards ice-blue so
+ * cards, inputs and panels belong to the winter backdrop. Tailwind utilities
+ * read these variables, so scoping them here restyles everything inside.
+ * ------------------------------------------------------------------ */
+.winter-app {
+  --color-surface: #12161a;
+  --color-elevated: #1a2025;
+  --color-line: #28303a;
+  --color-line-strong: #353f4a;
+  --color-line-hover: #566472;
+}
+
+/* A hairline of cold light under the sticky workspace header */
+.ws-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(140, 195, 240, 0.3) 30%,
+    rgba(134, 183, 155, 0.22) 70%,
+    transparent
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Page texture: not flat black. A staggered dot lattice that fades out
+ * towards the edges, a faint cool lift at the top, a hint of pine at the
+ * bottom and fine grain. Fixed and static, so scrolling stays smooth.
+ * ------------------------------------------------------------------ */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+body::before {
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.4px),
+    radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1.4px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 32%, #000 0%, rgba(0, 0, 0, 0.4) 58%, transparent 100%);
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 32%, #000 0%, rgba(0, 0, 0, 0.4) 58%, transparent 100%);
+}
+body::after {
+  background-image:
+    radial-gradient(90% 55% at 50% -8%, rgba(170, 200, 232, 0.075), transparent 65%),
+    radial-gradient(70% 45% at 50% 118%, rgba(47, 93, 70, 0.13), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.075 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: auto, auto, 160px 160px;
+}
+
+/* Page shells let the texture show through; full-screen overlays stay solid */
+main.bg-canvas {
+  background-color: transparent;
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Typography: Fraunces for headings, Inter for everything else.
+ * Unlayered on purpose, so it wins over the per-heading tracking utilities
+ * (Fraunces wants far less negative tracking than a grotesque).
+ * ------------------------------------------------------------------ */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+h1 {
+  letter-spacing: -0.02em;
+}
+/* the frozen title is fitted to one line (see .frozen): keep it on the sans */
+.frozen {
+  font-family: var(--font-sans);
+  letter-spacing: -0.03em;
+}
+button,
+[role="tab"] {
+  letter-spacing: 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Workspace tabs: one pill system for every tab (Zone Map, Pins, Song,
+ * Preview, Gallery, Code and the Trial sub-tabs). The look is driven by
+ * aria-selected, so the pill can never disagree with the active tab.
+ * ------------------------------------------------------------------ */
+.ws-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  /* room for the pill's shadow, which overflow would otherwise clip */
+  padding: 0.375rem 0.25rem;
+  margin-inline: -0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.ws-tabs::-webkit-scrollbar {
+  display: none;
+}
+.ws-tab {
+  flex: none;
+  white-space: nowrap;
+  scroll-snap-align: center;
+  padding: 0.5rem 1.15rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  color: var(--color-fg-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  background: transparent;
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: 240ms;
+  transition-timing-function: var(--ease-out-quint);
+}
+.ws-tab:hover {
+  color: var(--color-fg);
+  background: rgba(190, 220, 245, 0.07);
+}
+.ws-tab:focus-visible {
+  outline: 2px solid rgba(170, 212, 247, 0.75);
+  outline-offset: 2px;
+}
+.ws-tab[aria-selected="true"] {
+  color: #eef7ff;
+  font-weight: 600;
+  border-color: rgba(170, 212, 247, 0.38);
+  background: linear-gradient(
+    180deg,
+    rgba(176, 214, 246, 0.22),
+    rgba(104, 150, 196, 0.13)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 4px 16px rgba(80, 140, 200, 0.16);
+}
+@media (min-width: 640px) {
+  .ws-tab {
+    padding-inline: 1.3rem;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Santa: pressable, and the MERRY CHRISTMAS! greeting (WinterBackdrop.tsx)
+ * ------------------------------------------------------------------ */
+/* held still for the greeting: every gallop/flag animation pauses in place */
+.wb-sleigh-paused,
+.wb-sleigh-paused *,
+.wb-sleigh-paused *::before,
+.wb-sleigh-paused *::after {
+  animation-play-state: paused !important;
+}
+.wb-santa-hit {
+  position: absolute;
+  inset: -6px;
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.wb-santa-hit:focus-visible {
+  outline: 2px solid var(--color-silver);
+  outline-offset: 2px;
+}
+.wb-greet-live {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.wb-greet {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  animation: wb-greet-in 300ms steps(5, end) both;
+}
+.wb-greet-below {
+  transform: translate(-50%, 0);
+}
+.wb-greet-out {
+  animation: wb-greet-out 220ms steps(4, end) both;
+}
+.wb-greet-text {
+  display: block;
+  position: relative;
+  padding: 0.6rem 0.8rem 0.55rem;
+  font-family: var(--font-pixel);
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: #f0cf75;
+  text-shadow: 2px 2px 0 #3a2a05;
+  background: #0d1a26;
+  /* blocky, stepped frame in the style of a game tooltip */
+  box-shadow:
+    0 -3px 0 0 #9fd3f5,
+    0 3px 0 0 #9fd3f5,
+    -3px 0 0 0 #9fd3f5,
+    3px 0 0 0 #9fd3f5,
+    6px 6px 0 0 rgba(0, 0, 0, 0.45);
+  image-rendering: pixelated;
+  animation: wb-greet-pulse 900ms steps(2, end) 300ms infinite alternate;
+}
+@media (min-width: 640px) {
+  .wb-greet-text {
+    font-size: 1rem;
+    padding: 0.7rem 1rem 0.65rem;
+  }
+}
+@keyframes wb-greet-in {
+  0% { opacity: 0; scale: 0.4; }
+  60% { opacity: 1; scale: 1.12; }
+  100% { opacity: 1; scale: 1; }
+}
+@keyframes wb-greet-out {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.85; }
+}
+@keyframes wb-greet-pulse {
+  from { scale: 1; }
+  to { scale: 1.05; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-greet,
+  .wb-greet-text,
+  .wb-greet-out {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Developer Window: Christmas control-centre colours.
+ * Deep green, cranberry, champagne gold and icy blue. Every rule below is
+ * scoped to a dev-* class that only DeveloperPage uses, so no other page,
+ * dialog or shared component is affected.
+ * ------------------------------------------------------------------ */
+.dev-window {
+  --dev-gold: #e9d3a0;
+  --dev-ice: #bfe2ff;
+  --dev-ice-deep: #8cc3f0;
+  --dev-cran: #a31f37;
+  --dev-cran-bright: #cf3d57;
+  background-color: #07140f;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 12% 0%, rgba(163, 31, 55, 0.28), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 92% 8%, rgba(31, 110, 78, 0.38), transparent 72%),
+    radial-gradient(ellipse 80% 40% at 50% 100%, rgba(140, 195, 240, 0.12), transparent 70%);
+}
+
+/* headings */
+.dev-title {
+  width: fit-content;
+  max-width: 100%;
+  background: linear-gradient(95deg, #fff3d2 0%, #e9d3a0 35%, #bfe2ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 18px rgba(233, 211, 160, 0.25));
+}
+.dev-brand {
+  color: var(--dev-gold);
+}
+.dev-brand > span {
+  background: var(--dev-cran-bright);
+  box-shadow: 0 0 8px rgba(207, 61, 87, 0.8);
+}
+.dev-back {
+  color: var(--dev-ice-deep);
+}
+.dev-back:hover {
+  color: #ffffff;
+}
+.dev-count {
+  font-family: var(--font-display);
+  color: var(--dev-gold);
+}
+.dev-count-num {
+  color: #fff3d2;
+  text-shadow: 0 0 14px rgba(233, 211, 160, 0.45);
+}
+.dev-hint {
+  color: rgba(191, 226, 255, 0.62);
+}
+
+/* design cards */
+.dev-card {
+  background-color: #0c231b;
+  background-image: linear-gradient(
+    160deg,
+    rgba(20, 78, 56, 0.55),
+    rgba(10, 34, 26, 0.78) 55%,
+    rgba(98, 18, 36, 0.38)
+  );
+  border-color: rgba(233, 211, 160, 0.28);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 244, 214, 0.08);
+}
+.dev-card[role="button"]:hover {
+  border-color: var(--dev-gold);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(233, 211, 160, 0.35),
+    0 0 22px rgba(233, 211, 160, 0.14);
+}
+.dev-card:focus-visible {
+  outline-color: var(--dev-ice);
+}
+/* locked designs keep red edges */
+.dev-card.border-holly {
+  border-color: rgba(207, 61, 87, 0.75);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35), 0 0 18px rgba(163, 31, 55, 0.28);
+}
+.dev-card.border-holly[role="button"]:hover {
+  border-color: var(--dev-cran-bright);
+}
+/* picked designs */
+.dev-card[aria-pressed="true"][role="button"] {
+  border-color: var(--dev-ice);
+  background-image: linear-gradient(160deg, rgba(30, 100, 98, 0.55), rgba(10, 34, 40, 0.8));
+  box-shadow: 0 0 0 2px rgba(140, 195, 240, 0.55), 0 0 26px rgba(140, 195, 240, 0.25);
+}
+.dev-card[aria-pressed="true"][role="button"].border-holly {
+  border-color: var(--dev-cran-bright);
+  background-image: linear-gradient(160deg, rgba(120, 24, 44, 0.5), rgba(34, 10, 16, 0.82));
+  box-shadow: 0 0 0 2px rgba(207, 61, 87, 0.5), 0 0 26px rgba(207, 61, 87, 0.25);
+}
+.dev-thumb {
+  background-color: #07130f;
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(140, 195, 240, 0.12), transparent 70%);
+  box-shadow: inset 0 0 0 1px rgba(191, 226, 255, 0.14);
+}
+.dev-card-title {
+  font-family: var(--font-display);
+  color: #f6ecd0;
+}
+.dev-card-sub {
+  color: rgba(191, 226, 255, 0.62);
+}
+.dev-lock-badge {
+  background-image: linear-gradient(135deg, #d6455e, #8f1730);
+  color: #fff4d6;
+  box-shadow: 0 2px 10px rgba(163, 31, 55, 0.55), inset 0 0 0 1px rgba(255, 226, 170, 0.45);
+}
+.dev-check {
+  background-color: rgba(8, 36, 27, 0.85);
+  border-color: rgba(233, 211, 160, 0.45);
+}
+.dev-card[aria-pressed="true"] .dev-check {
+  background-color: var(--dev-gold);
+  border-color: #fff3d2;
+  color: #07140f;
+}
+.dev-card[aria-pressed="true"].border-holly .dev-check {
+  background-color: var(--dev-cran-bright);
+  border-color: #ffd7dc;
+  color: #fff4d6;
+}
+
+/* bottom control bar */
+.dev-bar {
+  background-color: rgba(6, 24, 18, 0.92);
+  background-image: linear-gradient(180deg, rgba(233, 211, 160, 0.06), rgba(0, 0, 0, 0));
+  border-top-color: rgba(233, 211, 160, 0.4);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.35);
+}
+.dev-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  pointer-events: none;
+  opacity: 0.85;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #2d7a56,
+    #e9d3a0,
+    #cf3d57,
+    #8cc3f0,
+    transparent
+  );
+}
+.dev-note {
+  background-color: rgba(12, 48, 36, 0.85);
+  border-color: rgba(233, 211, 160, 0.35);
+}
+
+/* buttons */
+.dev-btn {
+  background-color: rgba(18, 70, 52, 0.75);
+  background-image: linear-gradient(180deg, rgba(233, 211, 160, 0.1), rgba(233, 211, 160, 0));
+  color: #f3e8c8;
+  box-shadow: inset 0 0 0 1px rgba(233, 211, 160, 0.32);
+}
+.dev-btn:not(:disabled):hover {
+  background-color: rgba(30, 100, 72, 0.9);
+  color: #fff8e4;
+  box-shadow: inset 0 0 0 1px var(--dev-gold), 0 0 16px rgba(233, 211, 160, 0.18);
+}
+.dev-btn-gold {
+  background-image: linear-gradient(180deg, #f6e6bd, #d3ae63);
+  color: #2a1c05;
+  box-shadow: 0 4px 16px rgba(201, 164, 92, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+.dev-btn-gold:not(:disabled):hover {
+  background-image: linear-gradient(180deg, #fff2cc, #e0bc72);
+}
+.dev-btn-cran {
+  background-image: linear-gradient(180deg, #cf3d57, #962039);
+  color: #fff4d6;
+  box-shadow: 0 4px 16px rgba(163, 31, 55, 0.4), inset 0 1px 0 rgba(255, 214, 220, 0.35);
+}
+.dev-btn-cran:not(:disabled):hover {
+  background-image: linear-gradient(180deg, #de4d68, #a82643);
+}
+.dev-btn-cran-outline {
+  border-color: rgba(229, 138, 143, 0.55);
+  background-color: rgba(120, 24, 44, 0.18);
+  color: #ffc9cf;
+}
+.dev-btn-cran-outline:not(:disabled):hover {
+  background-color: rgba(163, 31, 55, 0.38);
+  border-color: #e58a8f;
+  color: #ffffff;
+}
+
+/* The "Credits" button on the Code tab: lettering only. */
+.credits-btn {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: #f6e6bd;
+  text-shadow: 0 0 14px rgba(233, 211, 160, 0.35);
+}

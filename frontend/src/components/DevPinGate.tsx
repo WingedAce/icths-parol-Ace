@@ -22,7 +22,7 @@ const PIN_PATTERN = new RegExp(
 );
 
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-xl tracking-[0.5em] text-white outline-none placeholder:text-white/20 focus:border-white/30";
+  "w-full rounded-lg border px-4 py-3 text-center text-xl text-fg outline-none placeholder:text-fg-muted focus:border-line-hover border-transparent bg-elevated";
 
 function digitsOnly(value: string) {
   return value.replace(/\D/g, "").slice(0, DEV_PIN_MAX_LENGTH);
@@ -122,26 +122,26 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
     <button
       type="button"
       onClick={() => navigate("/")}
-      className="mt-3 w-full cursor-pointer rounded-xl border border-white/15 px-4 py-3 text-sm text-white/60 transition hover:border-white/40 hover:text-white"
+      className="mt-3 w-full cursor-pointer rounded-full px-4 py-3 text-sm text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
     >
       Back
     </button>
   );
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#050505] px-6 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-canvas px-6 text-fg">
       <div className="w-full max-w-sm text-center">
-        <p className="mb-4 text-[10px] uppercase tracking-[0.45em] text-white/30">
+        <p className="mb-4 text-xs text-fg-muted">
           Developer Window
         </p>
 
         {mode === "create" && (
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
-            <h1 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h1 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               Create a developer PIN
             </h1>
 
-            <p className="text-sm leading-relaxed text-white/50">
+            <p className="text-sm leading-relaxed text-fg-muted">
               Choose {DEV_PIN_MIN_LENGTH} to {DEV_PIN_MAX_LENGTH} digits. It's
               saved on this device and will be asked every time you open the
               Developer Window. Write it down: it can't be recovered.
@@ -175,7 +175,7 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
             {message && (
               <p
                 role="alert"
-                className="rounded-xl border border-[#ff3b41]/60 bg-[#ff3b41]/10 px-4 py-3 text-xs leading-relaxed text-[#ff8a8e]"
+                className="rounded-xl border border-holly/60 bg-holly/10 px-4 py-3 text-xs leading-relaxed text-holly-soft"
               >
                 {message}
               </p>
@@ -184,7 +184,7 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
             <button
               type="submit"
               disabled={busy}
-              className="mt-2 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:opacity-50"
+              className="mt-2 w-full cursor-pointer rounded-xl bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90 disabled:opacity-50"
             >
               Save PIN
             </button>
@@ -193,11 +193,11 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
 
         {mode === "enter" && (
           <form onSubmit={handleEnter} className="flex flex-col gap-4">
-            <h1 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h1 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               Enter developer PIN
             </h1>
 
-            <p className="text-sm leading-relaxed text-white/50">
+            <p className="text-sm leading-relaxed text-fg-muted">
               You get {DEV_MAX_FAILS} guesses. After that this prompt is
               disabled for 24 hours.
             </p>
@@ -217,7 +217,7 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
             {message && (
               <p
                 role="alert"
-                className="rounded-xl border border-[#ff3b41]/60 bg-[#ff3b41]/10 px-4 py-3 text-xs leading-relaxed text-[#ff8a8e]"
+                className="rounded-xl border border-holly/60 bg-holly/10 px-4 py-3 text-xs leading-relaxed text-holly-soft"
               >
                 {message}
               </p>
@@ -226,7 +226,7 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
             <button
               type="submit"
               disabled={busy || !pin}
-              className="mt-2 w-full cursor-pointer rounded-xl bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:opacity-50"
+              className="mt-2 w-full cursor-pointer rounded-xl bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90 disabled:opacity-50"
             >
               Unlock
             </button>
@@ -235,11 +235,11 @@ export default function DevPinGate({ children }: { children: ReactNode }) {
 
         {mode === "locked" && (
           <div className="flex flex-col">
-            <h1 className="font-serif text-3xl font-light tracking-[-0.03em]">
+            <h1 className="font-semibold tracking-tight text-3xl tracking-[-0.03em]">
               Developer access disabled
             </h1>
 
-            <p className="mt-4 text-sm leading-relaxed text-white/50">
+            <p className="mt-4 text-sm leading-relaxed text-fg-muted">
               Too many wrong PIN guesses.{" "}
               {lockedUntil
                 ? `The PIN prompt is disabled until ${formatUnlockTime(lockedUntil)}.`

@@ -47,33 +47,33 @@ function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
-        className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#0b0b0b] p-8"
+        className="max-h-full w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-8"
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 id="confirm-dialog-title" className="font-serif text-3xl">
+          <h2 id="confirm-dialog-title" className="font-semibold tracking-tight text-3xl">
             {title}
           </h2>
 
           <button
             onClick={onCancel}
             aria-label="Close"
-            className="cursor-pointer text-white/40 hover:text-white"
+            className="cursor-pointer text-fg-muted hover:text-fg"
           >
             ✕
           </button>
         </div>
 
-        <div className="mt-6 flex flex-col gap-3 text-sm leading-relaxed text-white/55">
+        <div className="mt-6 flex flex-col gap-3 text-sm leading-relaxed text-fg-soft">
           {children}
         </div>
 
-        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70 transition hover:border-white/20">
+        <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-lg bg-surface px-4 py-3 text-sm text-fg-soft transition hover:border-line-strong">
           <input
             type="checkbox"
             autoFocus
             checked={understood}
             onChange={(event) => setUnderstood(event.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-white"
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-pine"
           />
           <span>{checkboxLabel}</span>
         </label>
@@ -81,14 +81,14 @@ function ConfirmDialog({
         <div className="mt-6 flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 cursor-pointer rounded-lg border border-white/10 px-4 py-3 text-white/60 transition hover:border-white/25 hover:text-white"
+            className="flex-1 cursor-pointer rounded-full px-4 py-3 text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={!understood}
-            className="flex-1 cursor-pointer rounded-lg bg-white px-4 py-3 text-black transition hover:bg-white/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-white"
+            className="flex-1 cursor-pointer rounded-lg bg-fg px-4 py-3 text-canvas transition hover:bg-fg/90 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-fg"
           >
             {confirmLabel}
           </button>

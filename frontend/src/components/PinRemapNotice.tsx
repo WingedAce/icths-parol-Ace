@@ -27,18 +27,18 @@ function PinRemapNotice({
     .join(" · ");
 
   return (
-    <div className="mb-8 rounded-2xl border border-amber-200/25 bg-amber-200/[0.05] px-5 py-4">
-      <p className="text-[10px] uppercase tracking-[0.3em] text-amber-200/70">
+    <div className="mb-8 rounded-xl border border-warn/25 bg-warn/5 px-5 py-4">
+      <p className="text-xs text-warn">
         Zones got new pins
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-white/65">
+      <p className="mt-2 text-sm leading-relaxed text-fg-soft">
         {plural(summary.zoneCount, "zone")} that used to be on in your
         keyframes {summary.zoneCount === 1 ? "has" : "have"} a different pin
         now. Want the new {summary.moves.length === 1 && summary.moves[0].to.length === 1 ? "pin" : "pins"}{" "}
         turned on in the {plural(summary.keyframeCount, "keyframe")} where
         they used to be on?
       </p>
-      <ul className="mt-3 space-y-1 text-xs text-white/45">
+      <ul className="mt-3 space-y-1 text-xs text-fg-muted">
         {summary.moves.map((move) => (
           <li key={move.from}>
             Pin {formatPin(move.from)} →{" "}
@@ -47,17 +47,17 @@ function PinRemapNotice({
           </li>
         ))}
       </ul>
-      {perRound && <p className="mt-3 text-xs text-white/35">{perRound}</p>}
+      {perRound && <p className="mt-3 text-xs text-fg-muted">{perRound}</p>}
       <div className="mt-4 flex flex-wrap gap-3">
         <button
           onClick={onApply}
-          className="cursor-pointer rounded-full bg-white px-5 py-2 text-xs uppercase tracking-[0.15em] text-black transition hover:bg-white/90"
+          className="cursor-pointer rounded-lg bg-fg px-5 py-2 text-xs text-canvas transition hover:bg-fg/90"
         >
           Turn them on
         </button>
         <button
           onClick={onKeep}
-          className="cursor-pointer rounded-full border border-white/15 px-5 py-2 text-xs uppercase tracking-[0.15em] text-white/60 transition hover:border-white/35 hover:text-white"
+          className="cursor-pointer rounded-full px-5 py-2 text-xs text-fg-soft transition hover:text-fg bg-elevated hover:bg-line-strong"
         >
           No, leave the keyframes
         </button>

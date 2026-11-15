@@ -87,15 +87,15 @@ function ParolStar() {
 // Small star-and-lines divider placed between the credit groups.
 function StarDivider() {
   return (
-    <div aria-hidden="true" className="flex items-center gap-4 text-amber-200/70">
-      <span className="h-px w-16 bg-gradient-to-r from-transparent to-amber-200/40 sm:w-24" />
+    <div aria-hidden="true" className="flex items-center gap-4 text-warn">
+      <span className="h-px w-16 bg-gradient-to-r from-transparent to-warn/40 sm:w-24" />
       <svg viewBox="0 0 24 24" className="h-5 w-5">
         <polygon
           points={starPoints(12, 12, 11, 4.5, 4)}
           fill="currentColor"
         />
       </svg>
-      <span className="h-px w-16 bg-gradient-to-l from-transparent to-amber-200/40 sm:w-24" />
+      <span className="h-px w-16 bg-gradient-to-l from-transparent to-warn/40 sm:w-24" />
     </div>
   );
 }
@@ -115,7 +115,7 @@ const CANES = [
 
 function Snowflake({ size }: { size: number }) {
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} className="text-sky-100">
+    <svg viewBox="0 0 24 24" width={size} height={size} className="text-silver">
       <g stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none">
         {[0, 60, 120].map((deg) => (
           <g key={deg} transform={`rotate(${deg} 12 12)`}>
@@ -161,8 +161,8 @@ function Ornament({ flip }: { flip?: boolean }) {
       aria-hidden="true"
       className={`h-px w-14 ${
         flip
-          ? "bg-gradient-to-l from-transparent to-white/30"
-          : "bg-gradient-to-r from-transparent to-white/30"
+          ? "bg-gradient-to-l from-transparent to-fg-muted/40"
+          : "bg-gradient-to-r from-transparent to-fg-muted/40"
       }`}
     />
   );
@@ -196,7 +196,7 @@ function Credits({ onClose }: CreditsProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Credits"
-      className={`fixed inset-0 z-50 overflow-y-auto bg-[#050505] transition-opacity duration-500 ${
+      className={`fixed inset-0 z-50 overflow-y-auto bg-canvas transition-opacity duration-200 ${
         visible ? "opacity-100" : "opacity-0"
       }`}
     >
@@ -208,6 +208,10 @@ function Credits({ onClose }: CreditsProps) {
         .credits-spark { animation: credits-twinkle 3.5s ease-in-out infinite; }
         .credits-float { animation: credits-float 5s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .credits-spark, .credits-float { animation: none; } .credits-fall { display: none; } }
+        .credits-title { font-family: var(--font-display); font-weight: 600; font-size: clamp(2.2rem, 7vw, 3.6rem); letter-spacing: 0.1em; line-height: 1.1; background: linear-gradient(180deg, #fff7de 0%, #f1d58f 48%, #c99a4b 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 14px rgba(255, 205, 110, 0.35)); }
+        .credits-name { font-family: var(--font-display); font-weight: 500; letter-spacing: 0.015em; color: #f8f0dd; text-shadow: 0 0 18px rgba(255, 214, 140, 0.18); }
+        .credits-school-lead { font-family: var(--font-display); font-weight: 500; letter-spacing: 0.32em; margin-right: -0.32em; text-transform: uppercase; }
+        .credits-school-name { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.03em; color: #f3e6c4; }
       `}</style>
 
       {/* warm glow behind the star */}
@@ -221,7 +225,7 @@ function Credits({ onClose }: CreditsProps) {
         {SPARKS.map(([x, y, size, delay], i) => (
           <span
             key={i}
-            className="credits-spark absolute rounded-full bg-amber-100"
+            className="credits-spark absolute rounded-full bg-fg"
             style={{
               left: `${x}%`,
               top: `${y}%`,
@@ -272,7 +276,7 @@ function Credits({ onClose }: CreditsProps) {
 
         <div className="mb-12 mt-6 flex items-center gap-5 sm:mb-16">
           <Ornament />
-          <h2 className="font-serif text-2xl uppercase tracking-[0.4em] text-white sm:text-4xl">
+          <h2 className="credits-title font-semibold tracking-tight text-2xl text-fg sm:text-4xl">
             Credits
           </h2>
           <Ornament flip />
@@ -283,14 +287,14 @@ function Credits({ onClose }: CreditsProps) {
             <div key={group.title} className="flex flex-col items-center gap-12 sm:gap-14">
               {index > 0 && <StarDivider />}
               <section className="flex flex-col items-center">
-                <p className="mb-6 text-sm uppercase tracking-[0.35em] text-amber-200/70 sm:text-base">
+                <p className="mb-6 text-sm text-warn sm:text-base">
                   {group.title}
                 </p>
                 <div className="flex flex-col items-center gap-4 sm:gap-5">
                   {group.names.map(({ name }) => (
                     <p
                       key={name}
-                      className="font-serif text-[22.5px] text-white/90 sm:text-4xl"
+                      className="credits-name font-medium text-[22.5px] text-fg sm:text-4xl"
                     >
                       {name}
                     </p>
@@ -306,12 +310,12 @@ function Credits({ onClose }: CreditsProps) {
         <div className="mt-14 flex flex-col items-center gap-3 sm:mt-16">
           <span
             aria-hidden="true"
-            className="h-px w-24 bg-gradient-to-r from-transparent via-amber-200/50 to-transparent"
+            className="h-px w-24 bg-gradient-to-r from-transparent via-warn/50 to-transparent"
           />
-          <p className="font-sans text-[11px] uppercase tracking-[0.4em] text-amber-200/70 sm:text-xs">
+          <p className="credits-school-lead font-sans text-xs text-warn sm:text-xs">
             Developed in
           </p>
-          <p className="max-w-md font-sans text-sm font-semibold uppercase leading-relaxed tracking-[0.2em] text-white/90 sm:text-lg">
+          <p className="credits-school-name max-w-md font-sans text-sm font-semibold leading-relaxed text-fg sm:text-lg">
             Information and Communication Technology High School
           </p>
         </div>
@@ -320,7 +324,7 @@ function Credits({ onClose }: CreditsProps) {
         <div className="mt-auto pt-16">
           <button
             onClick={onClose}
-            className="flex cursor-pointer items-center gap-4 rounded-full border border-white/20 px-8 py-3 text-base uppercase tracking-[0.35em] text-white/80 transition hover:border-white/50 hover:text-white"
+            className="flex cursor-pointer items-center gap-4 rounded-full px-8 py-3 text-base text-fg transition hover:text-fg bg-elevated hover:bg-line-strong"
           >
             <Ornament />
             Back
