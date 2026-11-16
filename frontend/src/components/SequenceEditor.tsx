@@ -1311,11 +1311,14 @@ function SequenceEditor({
       <audio ref={audioRef} src={audioUrl ?? undefined} preload="auto" />
 
       {/* Readout */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-semibold tracking-tight text-3xl text-fg">
+      {/* On a phone the time and the status line are stacked and the status
+          never wraps, so the row keeps one height while the song plays and the
+          preview below does not jump. */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-2">
+        <p className="font-semibold tracking-tight text-3xl tabular-nums text-fg">
           {isManual ? formatTimeFine(time) : formatTime(time)}
         </p>
-        <p className="text-xs text-fg-muted">
+        <p className="min-h-4 whitespace-nowrap text-xs tabular-nums text-fg-muted sm:whitespace-normal">
           Beat {beatIndex + 1} of {beats.length}
           {sectionIndex >= 0 && ` · Section ${sectionIndex + 1}`}
           {segments
