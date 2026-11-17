@@ -932,14 +932,17 @@ async function handleFile(
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
+                  resetKeyframes: boolean,
                 ) => {
                   setNodeAudio(
                     animationChild.id,
                     fileName,
                     analysis,
                   );
-                  // A new song starts with no keyframes and no tempo changes.
-                  setNodeFrames(animationChild.id, []);
+                  // Keyframes are only cleared when the student explicitly chose
+                  // "Reset keyframes" in the Change Song dialog.
+                  if (resetKeyframes) setNodeFrames(animationChild.id, []);
+                  // Tempo changes belong to the old song's beats, so they start over.
                   setNodeTiming(animationChild.id, { bpmChanges: undefined });
                 }}
                 onFreshAnalysis={(analysis: AudioAnalysis) =>
@@ -1046,16 +1049,18 @@ async function handleFile(
             <div className="mt-8">
               <AudioUploader
                 node={currentNode}
+                frameCount={(currentNode.frames ?? []).length}
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
+                  resetKeyframes: boolean,
                 ) => {
                   setNodeAudio(
                     currentNode.id,
                     fileName,
                     analysis,
                   );
-                  setNodeFrames(currentNode.id, []);
+                  if (resetKeyframes) setNodeFrames(currentNode.id, []);
                   setNodeTiming(currentNode.id, { bpmChanges: undefined });
                 }}
                 onFreshAnalysis={(analysis: AudioAnalysis) =>

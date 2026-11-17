@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { AudioAnalysis, ProjectNode } from "../types";
+import SongChangeDialog from "./SongChangeDialog";
 import { deleteAudio, saveAudio } from "../lib/audioStore";
 import {
   scaleAllTempo,
@@ -53,8 +54,14 @@ function toAudioAnalysis(raw: AudioAnalysisResponse): AudioAnalysis {
 
 type AudioUploaderProps = {
   node: ProjectNode;
-  // A new song was uploaded and analyzed.
-  onAnalyzed: (fileName: string, analysis: AudioAnalysis) => void;
+  // A new song was uploaded and analyzed. resetKeyframes is true ONLY when the
+  // student explicitly chose "Reset keyframes" in the Change Song dialog;
+  // otherwise the round's keyframes must be left exactly as they are.
+  onAnalyzed: (
+    fileName: string,
+    analysis: AudioAnalysis,
+    resetKeyframes: boolean,
+  ) => void;
   // Called once, right after a FRESH backend analysis — never from a
   // correction — so the caller can snapshot it as the "detected"
   // baseline the student can always revert back to.
@@ -109,6 +116,14 @@ function AudioUploader({
   const [sectionBpmInputs, setSectionBpmInputs] = useState<
     Record<string, string>
   >({});
+
+  // Changing the song of a round that has keyframes: the dialog asks first,
+  // and `replacing` keeps the upload screen open while the OLD song stays in
+  // place, so a failed upload loses nothing. resetOnUpload remembers the
+  // choice made in the dialog until the new song has been analyzed.
+  const [askChange, setAskChange] = useState(false);
+  const [replacing, setReplacing] = useState(false);
+  const resetOnUpload = useRef(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLAudioElement>(null);
@@ -169,7 +184,9 @@ function AudioUploader({
 
       const analysis = toAudioAnalysis(raw);
       onFreshAnalysis(analysis);
-      onAnalyzed(file.name, analysis);
+      onAnalyzed(file.name, analysis, resetOnUpload.current);
+      resetOnUpload.current = false;
+      setReplacing(false);
     } catch (err) {
       setError(
         err instanceof Error
@@ -255,8 +272,12 @@ function AudioUploader({
     audio.play();
   }
 
-  if (node.audioAnalysis) {
+  if (node.audioAnalysis && !replacing) {
     const { duration, bpm, sections } = node.audioAnalysis;
+    // Keyframes a shorter song can no longer reach. They are never deleted.
+    const framesPastEnd = (node.frames ?? []).filter(
+      (frame) => frame.time > duration + 0.05,
+    ).length;
 
     return (
       <div className="mx-auto max-w-xl rounded-xl bg-surface px-8 py-10">
@@ -433,6 +454,16 @@ function AudioUploader({
           </ul>
         </div>
 
+        {framesPastEnd > 0 && (
+          <p className="mt-8 rounded-lg bg-elevated px-4 py-3 text-xs leading-relaxed text-warn">
+            {framesPastEnd} keyframe{framesPastEnd === 1 ? "" : "s"} sit
+            {framesPastEnd === 1 ? "s" : ""} after the end of this song (
+            {formatDuration(duration)}). {framesPastEnd === 1 ? "It is" : "They are"} kept,
+            but the Preview can't reach {framesPastEnd === 1 ? "it" : "them"}. The Gallery tab
+            still lists {framesPastEnd === 1 ? "it" : "them"}.
+          </p>
+        )}
+
         {onResetKeyframes && (
           <button
             onClick={() => {
@@ -453,6 +484,12 @@ function AudioUploader({
 
         <button
           onClick={() => {
+            // With keyframes saved, ask first and keep the current song until
+            // the new one has been analyzed. Nothing is removed yet.
+            if (frameCount > 0) {
+              setAskChange(true);
+              return;
+            }
             deleteAudio(node.id).catch(() => {});
             setManualBpmInput("");
             setSectionBpmInputs({});
@@ -462,6 +499,25 @@ function AudioUploader({
         >
           Remove & upload a different song
         </button>
+
+        {askChange && (
+          <SongChangeDialog
+            keyframeCount={frameCount}
+            onKeep={() => {
+              resetOnUpload.current = false;
+              setAskChange(false);
+              setError(null);
+              setReplacing(true);
+            }}
+            onReset={() => {
+              resetOnUpload.current = true;
+              setAskChange(false);
+              setError(null);
+              setReplacing(true);
+            }}
+            onCancel={() => setAskChange(false)}
+          />
+        )}
       </div>
     );
   }
@@ -594,6 +650,26 @@ function AudioUploader({
           <p className="mt-2 text-xs text-fg-muted">
             MP3 only — analyzed for BPM, sections, and energy
           </p>
+
+          {replacing && (
+            <>
+              <p className="mt-4 text-xs text-fg-muted">
+                {resetOnUpload.current
+                  ? "The keyframes of this round are cleared once the new song has been analyzed."
+                  : "Your keyframes are kept exactly as they are."}
+              </p>
+              <button
+                onClick={() => {
+                  resetOnUpload.current = false;
+                  setReplacing(false);
+                  setError(null);
+                }}
+                className="mt-3 cursor-pointer rounded-full px-4 py-2 text-xs text-fg-muted transition hover:text-fg bg-elevated hover:bg-line-strong"
+              >
+                Cancel and keep the current song
+              </button>
+            </>
+          )}
         </>
       )}
 

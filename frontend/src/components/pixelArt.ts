@@ -236,6 +236,68 @@ export function buildSprites(): Record<SpriteName, Sprite> {
   };
 }
 
+// ---- The little elf that peeks out of a clicked ornament. One 9x11 head-and-
+// shoulders sprite in four poses (looking ahead, looking one way, looking the
+// other way, blinking); CSS swaps between them. E/F are the hat greens, k/o
+// skin and ear shadow, b the eyes, q closed eyelids, n the cheeks, m the mouth.
+const ELF_PALETTE: Palette = {
+  E: "#1f9d6b",
+  F: "#14724b",
+  k: "#f6cba3",
+  o: "#e0a074",
+  b: "#2b1b16",
+  q: "#8a4b35",
+  n: "#f08a86",
+  m: "#a64b3a",
+};
+
+type ElfLook = "ahead" | "left" | "right" | "blink";
+
+const ELF_EYES: Record<ElfLook, string> = {
+  ahead: "ookbkbkoo",
+  left: "oobkbkkoo",
+  right: "ookkbkboo",
+  blink: "ookqkqkoo",
+};
+
+function elfRows(look: ElfLook): string[] {
+  return [
+    "....W....",
+    "...EEE...",
+    "..EEEEF..",
+    ".EEEEEFF.",
+    ".WWWWWWW.",
+    ".okkkkko.",
+    ELF_EYES[look],
+    "oonkkknoo",
+    "..kkmkk..",
+    "...kkk...",
+    "..RRGRR..",
+  ];
+}
+
+export type ElfArt = {
+  cols: number;
+  rows: number;
+  ahead: string;
+  left: string;
+  right: string;
+  blink: string;
+};
+
+export function buildElf(): ElfArt {
+  const make = (look: ElfLook) => makeSprite(elfRows(look), ELF_PALETTE);
+  const ahead = make("ahead");
+  return {
+    cols: ahead.cols,
+    rows: ahead.rows,
+    ahead: ahead.url,
+    left: make("left").url,
+    right: make("right").url,
+    blink: make("blink").url,
+  };
+}
+
 // ---- Light garland: a repeating scallop of wire with five bulbs. Two
 // "lit" layers alternate in CSS so the lights twinkle in a pleasant rhythm.
 export const GARLAND = { cols: 44, rows: 18 };

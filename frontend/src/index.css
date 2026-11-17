@@ -1381,3 +1381,96 @@ button,
   color: #f6e6bd;
   text-shadow: 0 0 14px rgba(233, 211, 160, 0.35);
 }
+
+/* ---- The elf that peeks out of a clicked ornament ----------------------
+   He sits behind the ornament's sprite (the sprite is lifted above him) and
+   slides out sideways, looks around, blinks, then slips back in. He never
+   takes clicks, so he cannot get in the way of anything. */
+.wb-orn .wb-sprite {
+  position: relative;
+  z-index: 1;
+}
+.wb-elf {
+  --ue: max(2px, calc(var(--u) - 1px));
+  --ew: calc(var(--ecols) * var(--ue));
+  --eh: calc(var(--erows) * var(--ue));
+  /* how far his centre travels so about 60% of him shows past the ornament's edge */
+  --reach: calc(var(--dir) * (var(--cols) * var(--u) / 2 - var(--ew) / 2 + var(--ew) * 0.6));
+  position: absolute;
+  left: 50%;
+  top: calc(var(--len) + var(--rows) * var(--u) / 2);
+  width: var(--ew);
+  height: var(--eh);
+  margin: calc(var(--eh) / -2) 0 0 calc(var(--ew) / -2);
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  animation: wb-elf-peek 2.6s both;
+}
+.wb-elf-f {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.wb-elf-ahead { animation: wb-elf-f-ahead 2.6s both; }
+.wb-elf-left { animation: wb-elf-f-left 2.6s both; }
+.wb-elf-right { animation: wb-elf-f-right 2.6s both; }
+.wb-elf-blink { animation: wb-elf-f-blink 2.6s both; }
+
+@keyframes wb-elf-peek {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scale(0.85);
+    animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  4% {
+    opacity: 1;
+  }
+  17% {
+    opacity: 1;
+    transform: translateX(var(--reach)) rotate(calc(var(--dir) * 5deg));
+    animation-timing-function: ease-in-out;
+  }
+  36% { transform: translateX(var(--reach)) rotate(calc(var(--dir) * -3deg)); }
+  54% { transform: translateX(var(--reach)) rotate(calc(var(--dir) * 4deg)); }
+  78% {
+    opacity: 1;
+    transform: translateX(var(--reach)) rotate(0deg);
+    animation-timing-function: ease-in;
+  }
+  98% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(0) scale(0.85);
+  }
+}
+/* which pose is showing: ahead, then one way, the other way, a blink, ahead */
+@keyframes wb-elf-f-ahead { 0%, 29.9% { opacity: 1; } 30%, 59.9% { opacity: 0; } 60%, 100% { opacity: 1; } }
+@keyframes wb-elf-f-left { 0%, 29.9% { opacity: 0; } 30%, 41.9% { opacity: 1; } 42%, 100% { opacity: 0; } }
+@keyframes wb-elf-f-right { 0%, 41.9% { opacity: 0; } 42%, 53.9% { opacity: 1; } 54%, 100% { opacity: 0; } }
+@keyframes wb-elf-f-blink { 0%, 53.9% { opacity: 0; } 54%, 59.9% { opacity: 1; } 60%, 100% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* no sliding, looking or blinking: he just fades in beside the ornament and out again */
+  .wb-elf {
+    transform: translateX(var(--reach));
+    animation: wb-elf-still 1.8s both;
+  }
+  .wb-elf-ahead { animation: none; opacity: 1; }
+  .wb-elf-left,
+  .wb-elf-right,
+  .wb-elf-blink { animation: none; opacity: 0; }
+}
+@keyframes wb-elf-still {
+  0% { opacity: 0; }
+  15%, 85% { opacity: 1; }
+  100% { opacity: 0; }
+}

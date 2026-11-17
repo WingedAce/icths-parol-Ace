@@ -7,6 +7,7 @@ import {
   buildSnowBank,
   buildRig,
   buildSprites,
+  buildElf,
   type SpriteName,
 } from "./pixelArt";
 import SleighRig from "./SleighRig";
@@ -148,6 +149,12 @@ export default function WinterBackdrop({
   const greetTimers = useRef<number[]>([]);
   const [greet, setGreet] = useState<{ left: number; top: number; below: boolean; leaving: boolean } | null>(null);
   const sprites = useMemo(() => buildSprites(), []);
+  const elf = useMemo(() => buildElf(), []);
+  // The elf that peeks out of a clicked ornament. Only one at a time: clicks
+  // while he is out are ignored, so he can never overlap or restart halfway.
+  const [elfAt, setElfAt] = useState<number | null>(null);
+  const elfBusyRef = useRef(false);
+  const elfTimerRef = useRef<number | null>(null);
   const rig = useMemo(() => buildRig(), []);
   const garland = useMemo(() => buildGarland(), []);
   const snowBank = useMemo(() => buildSnowBank(), []);
@@ -554,6 +561,29 @@ export default function WinterBackdrop({
     [],
   );
 
+  const peekElf = useCallback((index: number) => {
+    if (elfBusyRef.current) return;
+    elfBusyRef.current = true;
+    setElfAt(index);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elfTimerRef.current = window.setTimeout(
+      () => {
+        elfTimerRef.current = null;
+        elfBusyRef.current = false;
+        setElfAt(null);
+      },
+      reduce ? 1900 : 2700,
+    );
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (elfTimerRef.current !== null) window.clearTimeout(elfTimerRef.current);
+      elfBusyRef.current = false;
+    },
+    [],
+  );
+
   // Page content sits on top of the sky (on a phone the centred column covers
   // all of it), so a tap on Santa often lands on the content and never reaches
   // his button. Hit-test the tap against his box ourselves. Taps on buttons,
@@ -648,6 +678,7 @@ export default function WinterBackdrop({
                 "--sway": `${o.sway}s`,
                 "--delay": `${o.delay}s`,
                 "--cols": s.cols,
+                "--rows": s.rows,
               } as CSSProperties
             }
           >
@@ -658,8 +689,29 @@ export default function WinterBackdrop({
               alt=""
               draggable={false}
               onPointerEnter={(e) => sparkle(e.currentTarget, 4)}
-              onClick={(e) => sparkle(e.currentTarget, 14)}
+              onClick={(e) => {
+                sparkle(e.currentTarget, 14);
+                peekElf(i);
+              }}
             />
+            {elfAt === i && (
+              <span
+                className="wb-elf"
+                style={
+                  {
+                    // he peeks out towards the middle of the screen, where there is room
+                    "--dir": o.side === "left" ? 1 : -1,
+                    "--ecols": elf.cols,
+                    "--erows": elf.rows,
+                  } as CSSProperties
+                }
+              >
+                <img className="wb-elf-f wb-elf-ahead" src={elf.ahead} alt="" draggable={false} />
+                <img className="wb-elf-f wb-elf-left" src={elf.left} alt="" draggable={false} />
+                <img className="wb-elf-f wb-elf-right" src={elf.right} alt="" draggable={false} />
+                <img className="wb-elf-f wb-elf-blink" src={elf.blink} alt="" draggable={false} />
+              </span>
+            )}
           </div>
         );
       })}
