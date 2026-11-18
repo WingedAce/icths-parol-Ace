@@ -139,7 +139,7 @@ function generateSketch(
       lines.push(`  { ${r.wait}, ${r.pin}, ${r.value} },`);
     }
     tables.push(
-      `const Event SHOW${tables.length}[] PROGMEM = {\n${lines.join("\n")}\n};`,
+      `const Event SHOW${tables.length}[] FAR_DATA = {\n${lines.join("\n")}\n};`,
     );
   }
 
@@ -161,6 +161,11 @@ const uint16_t ROWS_PER_TABLE = ${ROWS_PER_TABLE};
 uint32_t tableAddress(uint8_t) { return 0; }`;
 
   return `#include <avr/pgmspace.h>
+
+// The show tables can total more than 64KB. In the normal PROGMEM area they push the
+// Arduino core's own pin tables above 64KB, where its 16-bit reads fail and
+// pinMode/digitalWrite/analogWrite stop working. .fini2 puts them after all the code.
+#define FAR_DATA __attribute__((section(".fini2"), used))
 
 const uint8_t LED_PINS[] = { ${pinList} };
 const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};
