@@ -129,10 +129,15 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a);
 export default function WinterBackdrop({
   variant = "full",
   paused = false,
+  lowQualityNoSnow = variant !== "quiet",
 }: {
   variant?: BackdropVariant;
   // true while something opaque covers this backdrop: stops the animation
   paused?: boolean;
+  // In Low Quality Mode, remove the falling snow and the snow pile. On by
+  // default, except for "quiet" (the Developer Window), which keeps its snow
+  // unless a page asks for it (the workspace does).
+  lowQualityNoSnow?: boolean;
 }) {
   // Low Quality Mode drops Santa, the ornaments and the ice crystals (and the
   // falling snow, see noSnow). Aurora, garland and snow bank stay as they are.
@@ -144,9 +149,7 @@ export default function WinterBackdrop({
         : PROFILES[variant],
     [variant, lowQuality],
   );
-  // Low Quality Mode also stops the falling snow, except on the "quiet"
-  // backdrop (workspace and Developer Window), which is left as it is.
-  const noSnow = lowQuality && variant !== "quiet";
+  const noSnow = lowQuality && lowQualityNoSnow;
   const pausedRef = useRef(paused);
   useEffect(() => {
     pausedRef.current = paused;

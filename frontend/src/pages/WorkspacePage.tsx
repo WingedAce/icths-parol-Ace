@@ -599,7 +599,7 @@ async function handleFile(
 
   return (
     <main className="winter-app isolate min-h-screen bg-canvas text-fg">
-      <WinterBackdrop variant="quiet" />
+      <WinterBackdrop variant="quiet" lowQualityNoSnow />
       <header className="ws-header sticky top-0 z-30 border-b border-line/70 bg-canvas/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-6 md:px-12 lg:px-20">
           <div className="flex min-w-0 items-center gap-3">
