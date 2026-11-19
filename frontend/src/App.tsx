@@ -7,6 +7,7 @@ import FrozenTitle from "./components/FrozenTitle";
 import WinterBackdrop from "./components/WinterBackdrop";
 import SchoolCredit from "./components/SchoolCredit";
 import logo from "./assets/logo.png";
+import { setLowQuality, useLowQuality } from "./utils/lowQuality";
 import {
   BRAND_CATEGORY,
   BRAND_NAME,
@@ -16,6 +17,7 @@ import {
 
 function App() {
   const navigate = useNavigate();
+  const lowQuality = useLowQuality();
 
   const { workspaces, addWorkspace, getChildren, addNode, syncStatus } =
     useProjects();
@@ -126,7 +128,12 @@ function App() {
 
           <p className="text-sm text-fg-muted">{BRAND_CATEGORY}</p>
           <h1 className="mt-4 text-5xl font-semibold tracking-[-0.035em] sm:-mx-8 sm:text-6xl">
-            <FrozenTitle text={BRAND_NAME} />
+            {lowQuality ? (
+              // Low Quality Mode: plain white title, no ice or drips
+              <span className="text-white">{BRAND_NAME}</span>
+            ) : (
+              <FrozenTitle text={BRAND_NAME} />
+            )}
           </h1>
           <p className="mt-5 text-xl leading-snug text-fg-soft">
             {BRAND_TAGLINE}
@@ -191,6 +198,34 @@ function App() {
             {connecting ? "Connecting…" : "Continue"}
           </button>
         </form>
+
+        <div className="mt-6 flex items-center justify-between gap-4 rounded-2xl bg-surface px-5 py-4">
+          <div className="min-w-0">
+            <p id="low-quality-label" className="text-sm text-fg">
+              Low Quality Mode
+            </p>
+            <p id="low-quality-desc" className="mt-1 text-xs leading-relaxed text-fg-muted">
+              Reduces visual effects for smoother performance on older or low-end devices.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={lowQuality}
+            aria-labelledby="low-quality-label"
+            aria-describedby="low-quality-desc"
+            onClick={() => setLowQuality(!lowQuality)}
+            className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors ${
+              lowQuality ? "bg-pine" : "bg-elevated"
+            }`}
+          >
+            <span
+              className={`absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-fg transition-transform ${
+                lowQuality ? "translate-x-5" : ""
+              }`}
+            />
+          </button>
+        </div>
 
         {/* Easter egg: the sub-tagline quietly opens the Developer Window. */}
         <div className="mt-10 flex justify-center">

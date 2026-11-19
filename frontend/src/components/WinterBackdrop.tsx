@@ -11,6 +11,7 @@ import {
   type SpriteName,
 } from "./pixelArt";
 import SleighRig from "./SleighRig";
+import { useLowQuality } from "../utils/lowQuality";
 
 // Immersive but quiet winter backdrop for I-PAROL SYNAPSE:
 //   aurora (CSS) -> light garland + snow bank (pixel tiles) -> hanging pixel
@@ -133,7 +134,19 @@ export default function WinterBackdrop({
   // true while something opaque covers this backdrop: stops the animation
   paused?: boolean;
 }) {
-  const profile = PROFILES[variant];
+  // Low Quality Mode drops Santa, the ornaments and the ice crystals (and the
+  // falling snow, see noSnow). Aurora, garland and snow bank stay as they are.
+  const lowQuality = useLowQuality();
+  const profile = useMemo<Profile>(
+    () =>
+      lowQuality
+        ? { ...PROFILES[variant], sleigh: false, crystals: false, ornaments: [] }
+        : PROFILES[variant],
+    [variant, lowQuality],
+  );
+  // Low Quality Mode also stops the falling snow, except on the "quiet"
+  // backdrop (workspace and Developer Window), which is left as it is.
+  const noSnow = lowQuality && variant !== "quiet";
   const pausedRef = useRef(paused);
   useEffect(() => {
     pausedRef.current = paused;
@@ -165,8 +178,8 @@ export default function WinterBackdrop({
     const host = rootRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !host || !ctx) return;
+    if (noSnow) return;
 
-    const profile = PROFILES[variant];
     const minFrame = profile.maxFps ? 1000 / profile.maxFps - 2 : 0;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let w = 0;
@@ -472,12 +485,13 @@ export default function WinterBackdrop({
       ro.disconnect();
       burstRef.current = () => {};
     };
-  }, [variant]);
+  }, [variant, profile, noSnow]);
 
   // ------------------------------------------- cursor-proximity glow
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !window.matchMedia("(pointer: fine)").matches) return;
+    if (profile.ornaments !== "all" && profile.ornaments.length === 0) return;
     const items = Array.from(root.querySelectorAll<HTMLElement>("[data-orn]"));
     let raf = 0;
     let px = -999;
@@ -506,7 +520,23 @@ export default function WinterBackdrop({
       window.removeEventListener("pointermove", onMove);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [profile]);
+
+  // Turning Low Quality Mode on while Santa's greeting or the elf is showing:
+  // drop them and their timers right away.
+  useEffect(() => {
+    if (!lowQuality) return;
+    greetTimers.current.forEach((id) => window.clearTimeout(id));
+    greetTimers.current = [];
+    santaHoldRef.current = false;
+    setGreet(null);
+    if (elfTimerRef.current !== null) {
+      window.clearTimeout(elfTimerRef.current);
+      elfTimerRef.current = null;
+    }
+    elfBusyRef.current = false;
+    setElfAt(null);
+  }, [lowQuality]);
 
   const sparkle = (el: HTMLElement, count: number) => {
     const host = rootRef.current;
@@ -647,7 +677,7 @@ export default function WinterBackdrop({
         </div>
       )}
 
-      {profile.bank && (
+      {profile.bank && !noSnow && (
         <div
           className="wb-bank"
           style={
@@ -748,7 +778,8 @@ export default function WinterBackdrop({
         </div>
       )}
 
-      <canvas ref={canvasRef} className="wb-canvas" />
+      {/* not rendered at all in Low Quality Mode, so no frozen flakes are left behind */}
+      {!noSnow && <canvas ref={canvasRef} className="wb-canvas" />}
     </div>
   );
 }
