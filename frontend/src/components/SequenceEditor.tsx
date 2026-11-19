@@ -1080,6 +1080,16 @@ function SequenceEditor({
     setKeyNote("");
   };
 
+  // Pick every keyframe of this round (turns select mode on if it is off).
+  // Pressing it again, once everything is picked, clears the selection.
+  const allSelected =
+    frames.length > 0 && frames.every((f) => selectedIds.includes(f.id));
+  const toggleSelectAll = () => {
+    setSelectMode(true);
+    setKeyNote("");
+    setSelectedIds(allSelected ? [] : frames.map((f) => f.id));
+  };
+
   const copyKeyframes = () => {
     const picked = frames.filter((f) => selectedIds.includes(f.id));
     if (picked.length === 0) return;
@@ -1846,6 +1856,19 @@ function SequenceEditor({
               </svg>
             )}
           </span>
+        </button>
+        <button
+          type="button"
+          onClick={toggleSelectAll}
+          disabled={isPlaying || frames.length === 0}
+          title={
+            allSelected
+              ? "Clear the selection"
+              : "Pick every keyframe of this round"
+          }
+          className={miniPillClass}
+        >
+          {allSelected ? "Deselect all" : "Select all keyframes"}
         </button>
         {selectMode && (
           <button
