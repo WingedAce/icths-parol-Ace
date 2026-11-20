@@ -7,6 +7,7 @@ import ParolPreview from "../components/ParolPreview";
 import RenameParolDialog from "../components/RenameParolDialog";
 import { useProjects } from "../context/ProjectContext";
 import Brand from "../components/Brand";
+import SpecialRoundAdmin from "../components/SpecialRoundAdmin";
 import WinterBackdrop from "../components/WinterBackdrop";
 import type { ProjectNode } from "../types";
 import { grantSessionPass } from "../utils/accessLock";
@@ -282,7 +283,9 @@ function DeveloperPage() {
           Developer Window
         </h1>
 
-        <p className="dev-count mb-8 mt-10 font-medium text-xl text-fg sm:text-2xl">
+        <SpecialRoundAdmin />
+
+        <p className="dev-count mb-8 mt-8 font-medium text-xl text-fg sm:text-2xl">
           Current designs registered :{" "}
           <span className="dev-count-num font-bold text-fg">{designs.length}</span>
         </p>

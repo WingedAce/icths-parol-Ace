@@ -78,6 +78,9 @@ type AudioUploaderProps = {
   // How many BPM change points the Preview timeline has. Any tempo
   // correction below clears them, so it asks first when there are some.
   bpmChangeCount?: number;
+  // The stored mp3 belongs to something shared (the Special Round's song):
+  // removing the song here must not delete that file for everyone.
+  keepStoredAudio?: boolean;
 };
 
 function formatDuration(seconds: number) {
@@ -95,6 +98,7 @@ function AudioUploader({
   frameCount = 0,
   onResetKeyframes,
   bpmChangeCount = 0,
+  keepStoredAudio = false,
 }: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -490,7 +494,7 @@ function AudioUploader({
               setAskChange(true);
               return;
             }
-            deleteAudio(node.id).catch(() => {});
+            if (!keepStoredAudio) deleteAudio(node.id).catch(() => {});
             setManualBpmInput("");
             setSectionBpmInputs({});
             onClear();

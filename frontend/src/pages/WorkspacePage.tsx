@@ -33,6 +33,9 @@ import {
 import CodeGenerator from "../components/CodeGenerator";
 
 import TrialWorkspace from "../components/TrialWorkspace";
+import SpecialRoundPanel from "../components/SpecialRoundPanel";
+import { useSpecialRound } from "../lib/useSpecialRound";
+import { SPECIAL_SONG_ID } from "../lib/specialRound";
 import type { DesignPiece, RoundPiece } from "../components/TrialWorkspace";
 
 import { remapFramesToBeats } from "../utils/audioTiming";
@@ -180,17 +183,44 @@ function WorkspacePage() {
   const [roundState, setRoundState] = useState<{ path: string; round: Round }>(
     () => ({ path: pathKey, round: readUi(storeKey).round }),
   );
-  const round: Round =
+  const baseRound: Round =
     roundState.path === pathKey ? roundState.round : readUi(storeKey).round;
   // The Trial tab: a sandbox next to the three rounds (see TrialWorkspace).
   const [trialState, setTrialState] = useState<{ path: string; open: boolean }>(
     () => ({ path: pathKey, open: readUi(storeKey).trial }),
   );
-  const trialOpen: boolean =
+  const trialTabOpen: boolean =
     trialState.path === pathKey ? trialState.open : readUi(storeKey).trial;
+  // The Special Round tab, next to Trial. Not remembered between visits.
+  const [specialState, setSpecialState] = useState<{ path: string; open: boolean }>(
+    { path: pathKey, open: false },
+  );
+  const specialOpen: boolean =
+    specialState.path === pathKey && specialState.open;
+  const special = useSpecialRound();
+  // The Special Round works like a round (Song, Preview, Gallery, Code) only
+  // while a developer has it unlocked. Before that, only the locked screen
+  // (countdown) or, once the countdown has ended, the "wait for the system
+  // confirmation" screen is shown.
+  const specialUsable = special.unlocked;
+  const specialGate = specialOpen && !specialUsable;
+  const specialPlaying = specialOpen && specialUsable;
+  // The round being worked on. 4 = the Special Round (its own song slot,
+  // keyframes and code; Zone Map and Pins are the group's shared ones).
+  const round: number = specialPlaying ? 4 : baseRound;
+  // Every round-only panel below is hidden while Trial or the Special Round's
+  // gate screen is shown.
+  const trialOpen: boolean = trialTabOpen || specialGate;
   const setTrialOpen = (open: boolean) => {
     setTrialState({ path: pathKey, open });
     writeUi(storeKey, { trial: open });
+    // choosing a round or Trial leaves the Special Round
+    setSpecialState({ path: pathKey, open: false });
+  };
+  const openSpecial = () => {
+    setTrialState({ path: pathKey, open: false });
+    writeUi(storeKey, { trial: false });
+    setSpecialState({ path: pathKey, open: true });
   };
   const storedTab: GroupTab =
     tabState.path === pathKey ? tabState.tab : readUi(storeKey).tab;
@@ -251,16 +281,28 @@ function WorkspacePage() {
 
   // The group's song slot for the chosen round. Old projects have one slot
   // with no round saved; that one is Round 1.
-  const animationChild =
+  const songSlot =
     currentNode?.type === "group"
       ? getChildren(currentNode.id).find(
           (item) =>
             item.type === "animation" && (item.round ?? 1) === round,
         )
       : undefined;
+  // The Special Round's song is the ONE song the developer uploaded for every
+  // group. It is laid over the group's own slot for display only (never saved
+  // into the group), so the group keeps its own keyframes and nothing else.
+  const animationChild =
+    songSlot && round === 4
+      ? {
+          ...songSlot,
+          audioFileName: special.song?.fileName,
+          audioAnalysis: special.song?.analysis,
+          audioAnalysisOriginal: special.song?.original,
+        }
+      : songSlot;
 
   // Makes the song slot of a round the first time it is needed.
-  function ensureSongSlot(forRound: Round) {
+  function ensureSongSlot(forRound: number) {
     if (!currentNode || currentNode.type !== "group") return;
 
     const exists = getChildren(currentNode.id).some(
@@ -703,6 +745,7 @@ async function handleFile(
             <div className="mb-10">
               {/* Round picker */}
               <div className="mb-8 flex flex-col items-start gap-3">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
                 <div
                   role="tablist"
                   aria-label="Round"
@@ -731,16 +774,26 @@ async function handleFile(
 
                   <button
                     role="tab"
-                    aria-selected={trialOpen}
+                    aria-selected={trialTabOpen}
                     onClick={() => setTrialOpen(true)}
                     className={`rounded-md px-5 py-2 text-sm font-medium transition sm:px-8 ${
-                      trialOpen
+                      trialTabOpen
                         ? "bg-pine text-fg"
                         : "text-fg-muted hover:text-fg"
                     }`}
                   >
                     Trial
                   </button>
+                </div>
+
+                <button
+                  type="button"
+                  aria-pressed={specialOpen}
+                  onClick={openSpecial}
+                  className="sr-tab"
+                >
+                  Special Round
+                </button>
                 </div>
 
                 {!trialOpen && round > 1 && (
@@ -785,7 +838,13 @@ async function handleFile(
               />
             )}
 
-            {trialOpen && (
+            {specialOpen && (
+              <SpecialRoundPanel
+                clockOffset={special.clockOffset}
+              />
+            )}
+
+            {trialTabOpen && (
               <TrialWorkspace
                 groupNode={currentNode}
                 songNodes={songNodes}
@@ -925,7 +984,34 @@ async function handleFile(
               />
             )}
 
-            {!trialOpen && groupTab === "song" && animationChild && (
+            {!trialOpen && groupTab === "song" && animationChild && round === 4 && (
+              <div className="sr-song-card">
+                <p className="sr-kicker">Special Round song</p>
+                {special.song ? (
+                  <>
+                    <p className="sr-song-name">{special.song.fileName || "Special Round song"}</p>
+                    <p className="sr-wait-note">
+                      This song is the same for every group and is set by your
+                      teacher. Go to Preview to place your keyframes.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => selectTab("preview")}
+                      className="mt-5 cursor-pointer rounded-lg bg-fg px-5 py-2.5 text-sm text-canvas transition hover:bg-fg/90"
+                    >
+                      Go to Preview
+                    </button>
+                  </>
+                ) : (
+                  <p className="sr-wait-note">
+                    The Special Round song hasn't been added yet. Wait for your
+                    teacher, this page updates by itself.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!trialOpen && groupTab === "song" && animationChild && round !== 4 && (
               <AudioUploader
                 key={animationChild.id}
                 node={animationChild}
@@ -984,7 +1070,8 @@ async function handleFile(
             {!trialOpen && groupTab === "preview" && animationChild && (
               <div className="mx-auto max-w-3xl">
                 <SequenceEditor
-                  key={animationChild.id}
+                  key={`${animationChild.id}:${round === 4 ? special.songVersion ?? "" : ""}`}
+                  audioSourceId={round === 4 ? SPECIAL_SONG_ID : undefined}
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) =>
