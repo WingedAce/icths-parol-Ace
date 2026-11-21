@@ -1132,6 +1132,7 @@ async function handleFile(
                 <SequenceEditor
                   key={`${animationChild.id}:${round === 4 ? special.songVersion ?? "" : ""}`}
                   audioSourceId={round === 4 ? SPECIAL_SONG_ID : undefined}
+                  arrowKeys
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) =>
