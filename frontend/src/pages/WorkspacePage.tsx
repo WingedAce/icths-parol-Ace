@@ -1301,6 +1301,7 @@ async function handleFile(
                 key={animationChild.id}
                 node={animationChild}
                 maxClipSeconds={round === 5 || round === 6 ? 60 : undefined}
+                rollSongs={round === 5 || round === 6}
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
