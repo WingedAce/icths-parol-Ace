@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import ParolPreview from "./ParolPreview";
 import TransitionTiming from "./TransitionTiming";
+import { ImportTransitionDialog, LabelTransitionDialog } from "./TransitionDialogs";
 import {
   autoStepCount,
   beatsBetween,
@@ -54,6 +55,7 @@ import type {
   BpmChange,
   Frame,
   ProjectNode,
+  SavedTransition,
   TimingMode,
   Transition,
 } from "../types";
@@ -115,6 +117,14 @@ type SequenceEditorProps = {
   // this says whose saved song file to play instead. When it is set, a file
   // loaded here is only played, never saved over the real round's song.
   audioSourceId?: string;
+  // Practice tab: lets the selected keyframes be labelled and saved as a
+  // reusable transition. Gets the name and the picked keyframes (in time order).
+  onSaveTransition?: (name: string, frames: Frame[]) => void;
+  // Names already in the library, so the label box can say when one repeats.
+  existingTransitionNames?: string[];
+  // Special Round: the group's saved transitions. When given, an "Import
+  // keyframes" button appears.
+  transitionLibrary?: SavedTransition[];
 };
 
 // m:ss.t  (tenths of a second, because beats are only ~0.5s apart)
@@ -301,6 +311,9 @@ function SequenceEditor({
   onFramesChange: saveFrames,
   onTimingChange: saveTiming,
   audioSourceId,
+  onSaveTransition,
+  existingTransitionNames,
+  transitionLibrary,
 }: SequenceEditorProps) {
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
@@ -370,6 +383,8 @@ function SequenceEditor({
     getKeyframeClipboard(),
   );
   const [keyNote, setKeyNote] = useState("");
+  const [labelOpen, setLabelOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [pinClip, setPinClip] = useState<PinClipboard | null>(() =>
     getPinClipboard(),
   );
@@ -1119,11 +1134,32 @@ function SequenceEditor({
   // same gaps. A keyframe that would land on (or too close to) one that is
   // already there, or past the end of the song, is skipped.
   const pasteKeyframes = () => {
-    if (!keyClip || keyClip.length === 0) return;
+    if (keyClip) placeClips(keyClip, "Pasted");
+  };
+
+  // Label the picked keyframes as a transition and save them. The keyframes
+  // on this timeline are not touched.
+  const saveAsTransition = (name: string) => {
+    const picked = sortByTime(frames.filter((f) => selectedIds.includes(f.id)));
+    if (picked.length === 0 || !onSaveTransition) return;
+    onSaveTransition(name, picked);
+    setKeyNote(`Saved “${name}” (${picked.length} keyframe${picked.length === 1 ? "" : "s"}) to the Gallery.`);
+    setLabelOpen(false);
+    setSelectMode(false);
+    setSelectedIds([]);
+  };
+
+  const importTransition = (transition: SavedTransition) => {
+    placeClips(transition.frames, `Imported “${transition.name}”:`);
+    setImportOpen(false);
+  };
+
+  const placeClips = (clips: KeyframeClip[], verb: string) => {
+    if (clips.length === 0) return;
     const base = isManual ? round2(time) : beats[beatIndex];
     const added: Frame[] = [];
     let skipped = 0;
-    for (const clip of keyClip) {
+    for (const clip of clips) {
       const at = base + clip.time;
       const taken = [...frames, ...added].some(
         (f) => Math.abs(f.time - at) < MIN_KEY_GAP,
@@ -1150,7 +1186,7 @@ function SequenceEditor({
     }
     if (added.length > 0) onFramesChange(sortByTime([...frames, ...added]));
     setKeyNote(
-      `Pasted ${added.length} keyframe${added.length === 1 ? "" : "s"}` +
+      `${verb} ${added.length} keyframe${added.length === 1 ? "" : "s"}` +
         (skipped > 0 ? `, skipped ${skipped} (already a keyframe there, or past the end).` : "."),
     );
   };
@@ -1880,6 +1916,16 @@ function SequenceEditor({
             Copy keyframes ({selectedIds.length})
           </button>
         )}
+        {selectMode && onSaveTransition && (
+          <button
+            type="button"
+            onClick={() => setLabelOpen(true)}
+            disabled={selectedIds.length === 0}
+            className={miniPillClass}
+          >
+            Label as Transition ({selectedIds.length})
+          </button>
+        )}
         {selectMode && (
           <button
             type="button"
@@ -1991,6 +2037,16 @@ function SequenceEditor({
               Paste keyframes
               {keyClip ? ` (${keyClip.length})` : ""}
             </button>
+            {transitionLibrary && (
+              <button
+                onClick={() => setImportOpen(true)}
+                disabled={isPlaying}
+                title="Add a saved transition from the Gallery at the playhead"
+                className={miniPillClass}
+              >
+                Import keyframes
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {pinUnits.map((unit) => {
@@ -2345,6 +2401,22 @@ function SequenceEditor({
           lights silently in real time.
         </p>
       </div>
+
+      {labelOpen && onSaveTransition && (
+        <LabelTransitionDialog
+          count={selectedIds.length}
+          existingNames={existingTransitionNames ?? []}
+          onSave={saveAsTransition}
+          onCancel={() => setLabelOpen(false)}
+        />
+      )}
+      {importOpen && transitionLibrary && (
+        <ImportTransitionDialog
+          library={transitionLibrary}
+          onImport={importTransition}
+          onCancel={() => setImportOpen(false)}
+        />
+      )}
     </div>
   );
 }

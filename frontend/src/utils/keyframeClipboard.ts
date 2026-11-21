@@ -15,14 +15,11 @@ export function getKeyframeClipboard(): KeyframeClip[] | null {
   return clipboard;
 }
 
-// `frames` must be sorted by time.
-export function setKeyframeClipboard(frames: Frame[] | null) {
-  if (!frames || frames.length === 0) {
-    clipboard = null;
-    return;
-  }
+// Copies of `frames` (sorted by time) with times counted from the first one.
+export function toClip(frames: Frame[]): KeyframeClip[] {
+  if (frames.length === 0) return [];
   const origin = frames[0].time;
-  clipboard = frames.map((f) => {
+  return frames.map((f) => {
     const rest: Partial<Frame> = structuredClone(f);
     delete rest.id;
     delete rest.sectionId;
@@ -39,4 +36,13 @@ export function setKeyframeClipboard(frames: Frame[] | null) {
         : {}),
     };
   });
+}
+
+// `frames` must be sorted by time.
+export function setKeyframeClipboard(frames: Frame[] | null) {
+  if (!frames || frames.length === 0) {
+    clipboard = null;
+    return;
+  }
+  clipboard = toClip(frames);
 }

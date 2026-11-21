@@ -81,6 +81,9 @@ type AudioUploaderProps = {
   // The stored mp3 belongs to something shared (the Special Round's song):
   // removing the song here must not delete that file for everyone.
   keepStoredAudio?: boolean;
+  // Longest part of a song that gets analyzed, in seconds. Normal rounds use
+  // the full 120; the Special Round and Practice use 60.
+  maxClipSeconds?: number;
 };
 
 function formatDuration(seconds: number) {
@@ -99,13 +102,14 @@ function AudioUploader({
   onResetKeyframes,
   bpmChangeCount = 0,
   keepStoredAudio = false,
+  maxClipSeconds = MAX_CLIP_SECONDS,
 }: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Set once a dropped/picked file turns out to be longer than the
-  // MAX_CLIP_SECONDS cap — holds everything needed to show the trim
+  // maxClipSeconds cap — holds everything needed to show the trim
   // picker and preview-play the selected window before committing to
   // an upload.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -139,7 +143,7 @@ function AudioUploader({
     if (!audio) return;
 
     function handleTimeUpdate() {
-      if (audio && audio.currentTime >= clipStart + MAX_CLIP_SECONDS) {
+      if (audio && audio.currentTime >= clipStart + maxClipSeconds) {
         audio.pause();
       }
     }
@@ -164,6 +168,9 @@ function AudioUploader({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("start", String(start));
+      if (maxClipSeconds < MAX_CLIP_SECONDS) {
+        formData.append("max_seconds", String(maxClipSeconds));
+      }
 
       const response = await fetch(AUDIO_API_URL, {
         method: "POST",
@@ -178,6 +185,14 @@ function AudioUploader({
       }
 
       const raw: AudioAnalysisResponse = await response.json();
+
+      // An analysis server that hasn't been updated ignores the shorter limit
+      // and would hand back a longer song than allowed. Refuse it.
+      if (raw.duration > maxClipSeconds + 1) {
+        throw new Error(
+          `This round allows ${Math.round(maxClipSeconds / 60) === 1 ? "1 minute" : maxClipSeconds + " seconds"} of music, but the analysis server hasn't been updated to enforce that yet. Ask the developer to redeploy the backend.`,
+        );
+      }
 
       // Keep the song itself so the Preview tab can play it. Best-effort:
       // if storage fails, analysis still works and preview is just silent.
@@ -225,10 +240,10 @@ function AudioUploader({
     probe.addEventListener("loadedmetadata", () => {
       // If the browser can't tell the length (NaN/Infinity), skip the
       // picker and let the backend decide — it only analyzes the first
-      // MAX_CLIP_SECONDS anyway.
+      // maxClipSeconds anyway.
       if (
         !Number.isFinite(probe.duration) ||
-        probe.duration <= MAX_CLIP_SECONDS
+        probe.duration <= maxClipSeconds
       ) {
         URL.revokeObjectURL(url);
         doUpload(file, 0);
@@ -527,13 +542,13 @@ function AudioUploader({
   }
 
   if (pendingFile && pendingUrl) {
-    const maxStart = Math.max(0, pendingDuration - MAX_CLIP_SECONDS);
-    const clipEnd = Math.min(clipStart + MAX_CLIP_SECONDS, pendingDuration);
+    const maxStart = Math.max(0, pendingDuration - maxClipSeconds);
+    const clipEnd = Math.min(clipStart + maxClipSeconds, pendingDuration);
 
     return (
       <div className="mx-auto max-w-xl rounded-xl bg-surface px-8 py-10">
         <p className="text-xs text-fg-muted">
-          Pick a {formatDuration(MAX_CLIP_SECONDS)} window
+          Pick a {formatDuration(maxClipSeconds)} window
         </p>
 
         <h3 className="mt-2 font-medium text-xl">
@@ -542,7 +557,7 @@ function AudioUploader({
 
         <p className="mt-2 text-xs text-fg-muted">
           This song is {formatDuration(pendingDuration)} long — only{" "}
-          {formatDuration(MAX_CLIP_SECONDS)} can be analyzed. Drag the
+          {formatDuration(maxClipSeconds)} can be analyzed. Drag the
           slider to choose which part of the song to use, then preview it
           before confirming.
         </p>

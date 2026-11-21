@@ -23,6 +23,8 @@ export const SPECIAL_ROUND_DEADLINE = Date.parse("2026-12-07T15:00:00+08:00");
 export type SpecialRoundStatus = {
   /** The developer's manual unlock switch. */
   unlocked: boolean;
+  /** How many times "Remove Special Round song" has been used. */
+  epoch: number;
   /** Changes whenever the song is replaced; null when there is no song. */
   songVersion: string | null;
   /** Server clock minus this device's clock, in ms (0 if unknown). */
@@ -35,12 +37,14 @@ export async function fetchSpecialRoundStatus(): Promise<SpecialRoundStatus> {
   if (error) throw error;
   const raw = data as {
     unlocked?: boolean;
+    epoch?: number;
     song_version?: string | null;
     now?: string;
   } | null;
   const serverNow = raw?.now ? Date.parse(raw.now) : NaN;
   return {
     unlocked: raw?.unlocked === true,
+    epoch: typeof raw?.epoch === "number" ? raw.epoch : 0,
     songVersion: raw?.song_version ?? null,
     clockOffset: Number.isFinite(serverNow) ? serverNow - Date.now() : 0,
   };
@@ -74,6 +78,17 @@ export async function setSpecialRoundSong(song: SpecialSong | null): Promise<voi
   const { error } = await supabase.rpc("special_round_set_song", {
     p_song: song,
   });
+  if (error) throw error;
+}
+
+/**
+ * Developer only. Removes the song AND makes every group clear its Special
+ * Round keyframes (each group does it the next time it opens the round).
+ * Replacing the song uses setSpecialRoundSong instead and keeps keyframes.
+ */
+export async function removeSpecialRoundSongAndKeyframes(): Promise<void> {
+  await ensureSession();
+  const { error } = await supabase.rpc("special_round_remove_song");
   if (error) throw error;
 }
 

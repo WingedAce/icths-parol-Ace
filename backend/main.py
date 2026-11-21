@@ -652,7 +652,11 @@ def _load_audio(audio_bytes: bytes):
             )
 
 
-def analyze_audio(audio_bytes: bytes, clip_start: float = 0.0) -> dict:
+def analyze_audio(
+    audio_bytes: bytes,
+    clip_start: float = 0.0,
+    max_seconds: float = MAX_CLIP_SECONDS,
+) -> dict:
     """Analyze an uploaded song: BPM, beat timestamps, an energy curve,
     and a set of structural section boundaries with each section's
     average energy.
@@ -689,10 +693,13 @@ def analyze_audio(audio_bytes: bytes, clip_start: float = 0.0) -> dict:
     # Slice to the analyzed window BEFORE anything else runs, so BPM,
     # sections and energy are all computed only from this window —
     # matching exactly what the student chose to use.
-    if source_duration > MAX_CLIP_SECONDS or clip_start > 0:
+    # `max_seconds` lets a caller ask for a SHORTER window (the Special Round
+    # and Practice use 60s); it can never go above MAX_CLIP_SECONDS.
+    window = min(float(max_seconds), MAX_CLIP_SECONDS)
+    if source_duration > window or clip_start > 0:
         start_sample = int(round(clip_start * sr))
         end_sample = min(
-            start_sample + int(round(MAX_CLIP_SECONDS * sr)), len(y)
+            start_sample + int(round(window * sr)), len(y)
         )
         y = y[start_sample:end_sample]
 
@@ -821,6 +828,7 @@ def analyze_audio(audio_bytes: bytes, clip_start: float = 0.0) -> dict:
 async def analyze_audio_endpoint(
     file: UploadFile = File(...),
     start: float = Form(0.0),
+    max_seconds: float = Form(MAX_CLIP_SECONDS),
 ):
     if file.content_type not in ("audio/mpeg", "audio/mp3"):
         raise HTTPException(
@@ -834,6 +842,12 @@ async def analyze_audio_endpoint(
     if start < 0:
         raise HTTPException(status_code=400, detail="start cannot be negative")
 
+    if not (5 <= max_seconds <= MAX_CLIP_SECONDS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"max_seconds must be between 5 and {MAX_CLIP_SECONDS}",
+        )
+
     # Slot first, then read the file (same reason as /segment).
     async with heavy_slot("audio"):
         audio_bytes = await file.read()
@@ -842,7 +856,7 @@ async def analyze_audio_endpoint(
             raise HTTPException(status_code=400, detail="File too large (max 30MB)")
 
         try:
-            result = await run_heavy(analyze_audio, audio_bytes, start)
+            result = await run_heavy(analyze_audio, audio_bytes, start, max_seconds)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         finally:

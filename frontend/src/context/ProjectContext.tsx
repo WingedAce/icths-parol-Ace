@@ -107,6 +107,12 @@ type ProjectContextType = {
     timing: { timingMode?: TimingMode; bpmChanges?: BpmChange[] },
   ) => void;
   setNodesLocked: (ids: string[], locked: boolean) => void;
+  // Changes only these fields of one node (the Practice transition library,
+  // the Special Round reset marker). Everything else on the node is left as is.
+  setNodeExtras: (
+    id: string,
+    extras: Pick<ProjectNode, "transitions" | "specialEpoch">,
+  ) => void;
 };
 
 const ProjectContext = createContext<ProjectContextType | null>(null);
@@ -1424,6 +1430,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  function setNodeExtras(
+    id: string,
+    extras: Pick<ProjectNode, "transitions" | "specialEpoch">,
+  ) {
+    setNodesByParent((previous) => {
+      const next = { ...previous };
+
+      for (const parentId of Object.keys(next)) {
+        next[parentId] = next[parentId].map((node) =>
+          node.id === id ? { ...node, ...extras } : node,
+        );
+      }
+
+      return next;
+    });
+  }
+
   function setNodesLocked(ids: string[], locked: boolean) {
     const idSet = new Set(ids);
 
@@ -1493,6 +1516,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         clearNodeAudio,
         setNodeFrames,
         setNodeTiming,
+        setNodeExtras,
         setNodeParolName,
         setNodesLocked,
       }}

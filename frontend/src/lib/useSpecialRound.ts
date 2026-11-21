@@ -11,6 +11,7 @@ const POLL_MS = 30_000;
 
 const START: SpecialRoundStatus = {
   unlocked: false,
+  epoch: 0,
   songVersion: null,
   clockOffset: 0,
 };
@@ -29,6 +30,7 @@ export function useSpecialRound() {
       const next = await fetchSpecialRoundStatus();
       setStatus((prev) =>
         prev.unlocked === next.unlocked &&
+        prev.epoch === next.epoch &&
         prev.songVersion === next.songVersion &&
         prev.clockOffset === next.clockOffset
           ? prev

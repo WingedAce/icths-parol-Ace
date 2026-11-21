@@ -38,6 +38,9 @@ as $$
   select jsonb_build_object(
     'unlocked', coalesce(
       (select (value)::text = 'true' from public.app_settings where key = 'special_round_unlocked'), false),
+    -- counts "Remove Special Round song" resets (see special_round_remove_song)
+    'epoch', coalesce(
+      (select (value)::text::int from public.app_settings where key = 'special_round_epoch'), 0),
     'song_version', (
       select updated_at from public.app_settings
       where key = 'special_round_song' and value <> 'null'::jsonb),
@@ -92,11 +95,38 @@ begin
 end;
 $$;
 
+-- "Remove Special Round song": removes the song AND tells every group to clear
+-- its Special Round keyframes (each group does it the next time it opens the
+-- round). Replacing the song does NOT use this, so replacing keeps keyframes.
+create or replace function public.special_round_remove_song()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not allowed';
+  end if;
+  insert into public.app_settings (key, value, updated_at)
+  values ('special_round_song', 'null'::jsonb, clock_timestamp())
+  on conflict (key) do update
+    set value = excluded.value, updated_at = excluded.updated_at;
+  insert into public.app_settings (key, value, updated_at)
+  values ('special_round_epoch', to_jsonb(1), clock_timestamp())
+  on conflict (key) do update
+    set value = to_jsonb(coalesce((public.app_settings.value)::text::int, 0) + 1),
+        updated_at = excluded.updated_at;
+end;
+$$;
+
 revoke all on function public.special_round_status()               from public, anon;
 revoke all on function public.special_round_song_get()             from public, anon;
 revoke all on function public.special_round_set(boolean)           from public, anon;
 revoke all on function public.special_round_set_song(jsonb)        from public, anon;
+revoke all on function public.special_round_remove_song()          from public, anon;
 grant execute on function public.special_round_status()             to authenticated;
 grant execute on function public.special_round_song_get()           to authenticated;
 grant execute on function public.special_round_set(boolean)         to authenticated;  -- checks is_admin() inside
 grant execute on function public.special_round_set_song(jsonb)      to authenticated;  -- checks is_admin() inside
+grant execute on function public.special_round_remove_song()        to authenticated;  -- checks is_admin() inside

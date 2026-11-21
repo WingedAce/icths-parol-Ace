@@ -1,7 +1,10 @@
 import { useRef, useState } from "react";
 
 import AudioUploader from "./AudioUploader";
+import ConfirmDialog from "./ConfirmDialog";
+import { deleteAudio } from "../lib/audioStore";
 import {
+  removeSpecialRoundSongAndKeyframes,
   setSpecialRoundSong,
   setSpecialRoundUnlocked,
   SPECIAL_ROUND_DEADLINE,
@@ -54,6 +57,7 @@ export default function SpecialRoundAdmin() {
   // Choosing a different song: the current one stays live for every group
   // until the new one has been analyzed and saved.
   const [replacing, setReplacing] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const freshOriginal = useRef<AudioAnalysis | undefined>(undefined);
 
   const FAIL =
@@ -70,6 +74,26 @@ export default function SpecialRoundAdmin() {
       void special.refresh();
     } catch (err) {
       console.error("Special Round change failed:", err);
+      setError(FAIL);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  // REMOVE SONG: deletes the song and every group's Special Round keyframes.
+  // (Different from replacing the song, which keeps the keyframes.)
+  async function removeSong() {
+    setConfirmRemove(false);
+    setBusy("song");
+    setError("");
+    try {
+      await removeSpecialRoundSongAndKeyframes();
+      special.setSongLocal(null);
+      setReplacing(false);
+      void deleteAudio(SPECIAL_SONG_ID).catch(() => {});
+      void special.refresh();
+    } catch (err) {
+      console.error("Special Round remove failed:", err);
       setError(FAIL);
     } finally {
       setBusy("");
@@ -170,6 +194,7 @@ export default function SpecialRoundAdmin() {
           <AudioUploader
             node={songNode}
             keepStoredAudio
+            maxClipSeconds={60}
             onFreshAnalysis={(analysis) => {
               freshOriginal.current = analysis;
             }}
@@ -186,6 +211,16 @@ export default function SpecialRoundAdmin() {
             }}
             onClear={() => setReplacing(true)}
           />
+          {song && !replacing && (
+            <button
+              type="button"
+              disabled={busy !== ""}
+              onClick={() => setConfirmRemove(true)}
+              className="mt-2 w-full cursor-pointer rounded-full border border-holly/50 px-4 py-2 text-xs text-holly-soft transition hover:bg-holly/10 disabled:opacity-50"
+            >
+              Remove song and keyframes
+            </button>
+          )}
           {replacing && song && (
             <button
               type="button"
@@ -197,6 +232,25 @@ export default function SpecialRoundAdmin() {
           )}
         </div>
       </div>
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove the Special Round song?"
+          checkboxLabel="I understand this also deletes the Special Round keyframes of every group."
+          confirmLabel="Remove song and keyframes"
+          onConfirm={removeSong}
+          onCancel={() => setConfirmRemove(false)}
+        >
+          <p>
+            This removes the song for all groups and <strong>deletes the
+            Special Round keyframes</strong> they made. It can't be undone.
+          </p>
+          <p className="text-fg-muted">
+            To switch to another song and keep everyone's keyframes, use
+            “Remove &amp; upload a different song” above instead.
+          </p>
+        </ConfirmDialog>
+      )}
 
       {error && (
         <p role="alert" className="mt-4 text-xs text-holly-soft">

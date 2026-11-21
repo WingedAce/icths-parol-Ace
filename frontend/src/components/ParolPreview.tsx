@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { memo, useId, useState } from "react";
 
 import { useProjects } from "../context/ProjectContext";
 import {
@@ -119,6 +119,7 @@ function ParolPreview({
       <img
         src={node.imageDataUrl}
         alt="Parol drawing"
+        decoding="async"
         className="absolute inset-0 h-full w-full object-fill"
         style={{ filter: "invert(1) brightness(0.45)" }}
       />
@@ -254,4 +255,6 @@ function ParolPreview({
   );
 }
 
-export default ParolPreview;
+// Memoized: the Gallery draws many of these, and they only need to redraw when
+// their own pins or colors change.
+export default memo(ParolPreview);

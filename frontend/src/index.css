@@ -1599,3 +1599,20 @@ button,
 @media (prefers-reduced-motion: reduce) {
   .sr-tab, .sr-tab::after { animation: none; }
 }
+
+/* ===== Special Round: gold outlines on the panels inside it ===== */
+.sr-scope {
+  --color-line: rgba(230, 193, 90, 0.3);
+  --color-line-strong: rgba(230, 193, 90, 0.5);
+  --color-line-hover: rgba(240, 207, 117, 0.85);
+}
+.sr-scope .bg-surface { box-shadow: 0 0 0 1px rgba(230, 193, 90, 0.34); }
+.sr-scope .bg-surface:hover { box-shadow: 0 0 0 1px rgba(240, 207, 117, 0.5), 0 0 12px rgba(240, 207, 117, 0.12); }
+/* the round picker row keeps its normal look */
+.sr-scope .sr-picker {
+  --color-line: #303030;
+  --color-line-strong: #3d3d3d;
+  --color-line-hover: #5a5a5a;
+}
+.sr-scope .sr-picker .bg-surface,
+.sr-scope .sr-picker .bg-surface:hover { box-shadow: none; }

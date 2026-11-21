@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import LazyMount from "./LazyMount";
 import ParolPreview from "./ParolPreview";
+import TransitionFolders from "./TransitionFolders";
 import TransitionTiming from "./TransitionTiming";
 import {
   autoStepCount,
@@ -37,6 +39,7 @@ import type {
   ManualStep,
   PinLevels,
   ProjectNode,
+  SavedTransition,
 } from "../types";
 
 const pillClass =
@@ -63,6 +66,10 @@ type KeyframeGalleryProps = {
   // The Song node: owns the audio analysis and the keyframes.
   animationNode: ProjectNode;
   onFramesChange: (frames: Frame[]) => void;
+  // Practice tab: the group's saved transitions, shown as folders, and how to
+  // rename or delete them.
+  transitions?: SavedTransition[];
+  onTransitionsChange?: (next: SavedTransition[]) => void;
 };
 
 // m:ss.mmm  (for in-betweens that sit closer together than the beats)
@@ -1149,19 +1156,34 @@ function KeyframeGallery({
   groupNode,
   animationNode,
   onFramesChange,
+  transitions,
+  onTransitionsChange,
 }: KeyframeGalleryProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // The beat grid with any BPM change points applied, so the in-betweens
-  // follow the same beats as the Preview tab.
-  const analysis = effectiveAnalysis(
-    animationNode.audioAnalysis,
-    animationNode.bpmChanges,
+  // follow the same beats as the Preview tab. Worked out again only when the
+  // song or its BPM changes move, not on every redraw.
+  const analysis = useMemo(
+    () => effectiveAnalysis(animationNode.audioAnalysis, animationNode.bpmChanges),
+    [animationNode.audioAnalysis, animationNode.bpmChanges],
   );
 
-  const keyframes = (animationNode.frames ?? [])
-    .filter((f) => f.kind === "key")
-    .sort((a, b) => a.time - b.time);
+  const keyframes = useMemo(
+    () =>
+      (animationNode.frames ?? [])
+        .filter((f) => f.kind === "key")
+        .sort((a, b) => a.time - b.time),
+    [animationNode.frames],
+  );
+
+  const folders = transitions && transitions.length > 0 && (
+    <TransitionFolders
+      groupNode={groupNode}
+      transitions={transitions}
+      onChange={onTransitionsChange}
+    />
+  );
 
   const hasParol =
     !!groupNode.imageDataUrl &&
@@ -1179,10 +1201,13 @@ function KeyframeGallery({
 
   if (keyframes.length === 0) {
     return (
-      <p className="text-center text-sm text-fg-muted">
-        No keyframes yet. Add some on the Preview tab and they will show up
-        here.
-      </p>
+      <div className="flex flex-col gap-8">
+        <p className="text-center text-sm text-fg-muted">
+          No keyframes yet. Add some on the Preview tab and they will show up
+          here.
+        </p>
+        {folders}
+      </div>
     );
   }
 
@@ -1281,12 +1306,14 @@ function KeyframeGallery({
             className="group min-w-0 cursor-pointer text-left"
           >
             <div className="relative rounded-xl ring-1 ring-transparent transition group-hover:ring-line-hover">
-              <ParolPreview
-                node={groupNode}
-                litPins={frame.litPins}
-                levels={frame.levels}
-                tricolorColors={frame.tricolors}
-              />
+              <LazyMount>
+                <ParolPreview
+                  node={groupNode}
+                  litPins={frame.litPins}
+                  levels={frame.levels}
+                  tricolorColors={frame.tricolors}
+                />
+              </LazyMount>
               <span className="pointer-events-none absolute left-3 top-2 font-medium text-lg text-fg [text-shadow:0_1px_6px_rgba(0,0,0,0.9)]">
                 {index + 1}
               </span>
@@ -1297,6 +1324,8 @@ function KeyframeGallery({
           </button>
         ))}
       </div>
+
+      {folders}
     </div>
   );
 }

@@ -55,6 +55,22 @@ export type ProjectNode = {
   // label: `name` ("Group 3") stays as it is, because students open their
   // design by typing that group number on the home page.
   parolName?: string;
+  // On a group's Practice slot (round 5): the transitions the group labelled
+  // and saved, ready to be imported into the Special Round.
+  transitions?: SavedTransition[];
+  // On a group's Special Round slot (round 4): which "Remove Special Round
+  // song" reset this slot has already been through (see specialRound.ts).
+  specialEpoch?: number;
+};
+
+// A group of keyframes labelled by the user as a reusable transition. The
+// frames are full copies with times counted from the first one, so pasting
+// them anywhere keeps the same gaps (same shape as the keyframe clipboard).
+export type SavedTransition = {
+  id: string;
+  name: string;
+  createdAt: number;
+  frames: (Omit<Frame, "id" | "sectionId"> & { time: number })[];
 };
 
 export type AudioSection = {

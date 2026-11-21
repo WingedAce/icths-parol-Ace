@@ -36,6 +36,7 @@ import TrialWorkspace from "../components/TrialWorkspace";
 import SpecialRoundPanel from "../components/SpecialRoundPanel";
 import { useSpecialRound } from "../lib/useSpecialRound";
 import { SPECIAL_SONG_ID } from "../lib/specialRound";
+import { toClip } from "../utils/keyframeClipboard";
 import type { DesignPiece, RoundPiece } from "../components/TrialWorkspace";
 
 import { remapFramesToBeats } from "../utils/audioTiming";
@@ -156,6 +157,7 @@ function WorkspacePage() {
     clearNodeAudio,
     setNodeFrames,
     setNodeTiming,
+    setNodeExtras,
   } = useProjects();
 
   const workspace: Workspace | undefined = workspaces.find(
@@ -207,20 +209,34 @@ function WorkspacePage() {
   const specialPlaying = specialOpen && specialUsable;
   // The round being worked on. 4 = the Special Round (its own song slot,
   // keyframes and code; Zone Map and Pins are the group's shared ones).
-  const round: number = specialPlaying ? 4 : baseRound;
+  // The Practice tab (5) is a normal round-like slot of its own next to it.
+  const [practiceState, setPracticeState] = useState<{ path: string; open: boolean }>(
+    { path: pathKey, open: false },
+  );
+  const practiceOpen: boolean =
+    practiceState.path === pathKey && practiceState.open;
+  const round: number = specialPlaying ? 4 : practiceOpen ? 5 : baseRound;
   // Every round-only panel below is hidden while Trial or the Special Round's
   // gate screen is shown.
   const trialOpen: boolean = trialTabOpen || specialGate;
   const setTrialOpen = (open: boolean) => {
     setTrialState({ path: pathKey, open });
     writeUi(storeKey, { trial: open });
-    // choosing a round or Trial leaves the Special Round
+    // choosing a round or Trial leaves the Special Round and Practice
     setSpecialState({ path: pathKey, open: false });
+    setPracticeState({ path: pathKey, open: false });
   };
   const openSpecial = () => {
     setTrialState({ path: pathKey, open: false });
     writeUi(storeKey, { trial: false });
+    setPracticeState({ path: pathKey, open: false });
     setSpecialState({ path: pathKey, open: true });
+  };
+  const openPractice = () => {
+    setTrialState({ path: pathKey, open: false });
+    writeUi(storeKey, { trial: false });
+    setSpecialState({ path: pathKey, open: false });
+    setPracticeState({ path: pathKey, open: true });
   };
   const storedTab: GroupTab =
     tabState.path === pathKey ? tabState.tab : readUi(storeKey).tab;
@@ -286,6 +302,15 @@ function WorkspacePage() {
       ? getChildren(currentNode.id).find(
           (item) =>
             item.type === "animation" && (item.round ?? 1) === round,
+        )
+      : undefined;
+  // The group's Practice slot (round 5) holds its saved transitions, which
+  // the Special Round can import.
+  const practiceSlot =
+    currentNode?.type === "group"
+      ? getChildren(currentNode.id).find(
+          (item) =>
+            item.type === "animation" && (item.round ?? 1) === 5,
         )
       : undefined;
   // The Special Round's song is the ONE song the developer uploaded for every
@@ -693,6 +718,21 @@ async function handleFile(
           }
           onEnsure={() => ensureSongSlot(round)}
         />
+        {/* After "Remove Special Round song": this group's Special Round
+            keyframes are cleared once, then it is marked as up to date. */}
+        <SongSlotGuard
+          active={
+            specialPlaying &&
+            !!songSlot &&
+            special.loaded &&
+            (songSlot.specialEpoch ?? 0) < special.epoch
+          }
+          onEnsure={() => {
+            if (!songSlot) return;
+            if ((songSlot.frames ?? []).length > 0) setNodeFrames(songSlot.id, []);
+            setNodeExtras(songSlot.id, { specialEpoch: special.epoch });
+          }}
+        />
 
         <p className="text-sm text-fg-muted">
           {currentWorkspace.name}
@@ -741,10 +781,10 @@ async function handleFile(
             </button>
           </section>
         ) : currentNode?.type === "group" ? (
-          <section className="mt-12">
+          <section className={`mt-12${specialPlaying ? " sr-scope" : ""}`}>
             <div className="mb-10">
               {/* Round picker */}
-              <div className="mb-8 flex flex-col items-start gap-3">
+              <div className="sr-picker mb-8 flex flex-col items-start gap-3">
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
                 <div
                   role="tablist"
@@ -794,6 +834,25 @@ async function handleFile(
                 >
                   Special Round
                 </button>
+
+                <div
+                  role="tablist"
+                  aria-label="Practice"
+                  className="inline-flex rounded-lg bg-surface p-1"
+                >
+                  <button
+                    role="tab"
+                    aria-selected={practiceOpen}
+                    onClick={openPractice}
+                    className={`rounded-md px-5 py-2 text-sm font-medium transition sm:px-8 ${
+                      practiceOpen
+                        ? "bg-pine text-fg"
+                        : "text-fg-muted hover:text-fg"
+                    }`}
+                  >
+                    Practice
+                  </button>
+                </div>
                 </div>
 
                 {!trialOpen && round > 1 && (
@@ -1015,6 +1074,7 @@ async function handleFile(
               <AudioUploader
                 key={animationChild.id}
                 node={animationChild}
+                maxClipSeconds={round === 5 ? 60 : undefined}
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
@@ -1083,6 +1143,30 @@ async function handleFile(
                   onTimingChange={(timing) =>
                     setNodeTiming(animationChild.id, timing)
                   }
+                  onSaveTransition={
+                    round === 5
+                      ? (name, picked) =>
+                          setNodeExtras(animationChild.id, {
+                            transitions: [
+                              ...(animationChild.transitions ?? []),
+                              {
+                                id: crypto.randomUUID(),
+                                name,
+                                createdAt: Date.now(),
+                                frames: toClip(picked),
+                              },
+                            ],
+                          })
+                      : undefined
+                  }
+                  existingTransitionNames={
+                    round === 5
+                      ? (animationChild.transitions ?? []).map((t) => t.name)
+                      : undefined
+                  }
+                  transitionLibrary={
+                    round === 4 ? (practiceSlot?.transitions ?? []) : undefined
+                  }
                 />
               </div>
             )}
@@ -1098,6 +1182,13 @@ async function handleFile(
                       animationChild.id,
                       frames,
                     )
+                  }
+                  transitions={round === 5 ? animationChild.transitions : undefined}
+                  onTransitionsChange={
+                    round === 5
+                      ? (next) =>
+                          setNodeExtras(animationChild.id, { transitions: next })
+                      : undefined
                   }
                 />
               </div>
