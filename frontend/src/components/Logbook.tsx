@@ -4,7 +4,7 @@ import CodeGenerator from "./CodeGenerator";
 import ConfirmDialog from "./ConfirmDialog";
 import SequenceEditor from "./SequenceEditor";
 import { LOGBOOK_MAX, logbookAudioId } from "../lib/logbook";
-import type { LogbookEntry, ProjectNode } from "../types";
+import type { Frame, LogbookEntry, ProjectNode } from "../types";
 
 const when = (ms: number) =>
   new Date(ms).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -39,10 +39,17 @@ export default function Logbook({
   groupNode,
   entries,
   onDelete,
+  onSaveTransition,
+  existingTransitionNames,
 }: {
   groupNode: ProjectNode;
   entries: LogbookEntry[];
   onDelete: (id: string) => void;
+  // Saves picked keyframes as a transition in the group's transition library.
+  // The library is separate from the attempt, so deleting the attempt later
+  // doesn't remove it.
+  onSaveTransition?: (name: string, frames: Frame[]) => void;
+  existingTransitionNames?: string[];
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [tab, setTab] = useState<"play" | "code">("play");
@@ -91,6 +98,8 @@ export default function Logbook({
               readOnly
               onFramesChange={noop}
               onTimingChange={noop}
+              onSaveTransition={onSaveTransition}
+              existingTransitionNames={existingTransitionNames}
             />
           </div>
         ) : (

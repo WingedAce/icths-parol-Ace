@@ -58,7 +58,7 @@ import type { DesignPiece, RoundPiece } from "../components/TrialWorkspace";
 import { remapFramesToBeats } from "../utils/audioTiming";
 import { displayName, originalNameIfRenamed } from "../utils/parolName";
 
-import type { AudioAnalysis } from "../types";
+import type { AudioAnalysis, Frame, SavedTransition } from "../types";
 
 import type {
   LogbookEntry,
@@ -269,6 +269,9 @@ function WorkspacePage() {
   // the logbook already holds three).
   const [logbookPicking, setLogbookPicking] = useState(false);
   const [logbookSaving, setLogbookSaving] = useState(false);
+  // Transitions saved from a Timed mode / Logbook review, waiting for the
+  // Practice slot to exist (see saveTransitionToLibrary).
+  const [pendingTransitions, setPendingTransitions] = useState<SavedTransition[]>([]);
   const round: number = specialPlaying
     ? 4
     : practiceOpen
@@ -393,6 +396,24 @@ function WorkspacePage() {
         )
       : undefined;
   const logbookEntries: LogbookEntry[] = timedSlot?.logbook ?? [];
+
+  // Transitions labelled while reviewing a Timed mode attempt or a Logbook
+  // entry. They go into the group's transition library (on the Practice slot),
+  // which is separate from the attempt, so they stay even if the attempt is
+  // never saved or is deleted later. If the Practice slot doesn't exist yet it
+  // is made first and the transitions wait here until it does.
+  function saveTransitionToLibrary(name: string, picked: Frame[]) {
+    setPendingTransitions((previous) => [
+      ...previous,
+      {
+        id: crypto.randomUUID(),
+        name,
+        createdAt: Date.now(),
+        frames: toClip(picked),
+      },
+    ]);
+    ensureSongSlot(5);
+  }
 
   // Keeps the finished attempt: a full copy of its song, keyframes and timing
   // (plus the song file), so it survives the Timed mode slot being cleared.
@@ -827,6 +848,17 @@ async function handleFile(
           }
           onEnsure={() => ensureSongSlot(round)}
         />
+        <SongSlotGuard
+          active={!!practiceSlot && pendingTransitions.length > 0}
+          onEnsure={() => {
+            if (!practiceSlot) return;
+            const toAdd = pendingTransitions;
+            setPendingTransitions([]);
+            setNodeExtras(practiceSlot.id, {
+              transitions: [...(practiceSlot.transitions ?? []), ...toAdd],
+            });
+          }}
+        />
         {/* After "Remove Special Round song": this group's Special Round
             keyframes are cleared once, then it is marked as up to date. */}
         <SongSlotGuard
@@ -1088,6 +1120,11 @@ async function handleFile(
                 groupNode={currentNode}
                 entries={logbookEntries}
                 onDelete={deleteLogbookEntry}
+                onSaveTransition={saveTransitionToLibrary}
+                existingTransitionNames={[
+                  ...(practiceSlot?.transitions ?? []).map((t) => t.name),
+                  ...pendingTransitions.map((t) => t.name),
+                ]}
               />
             )}
 
@@ -1338,7 +1375,11 @@ async function handleFile(
                     if (!timedFrozen) setNodeTiming(animationChild.id, timing);
                   }}
                   onSaveTransition={
-                    round === 5
+                    round === 6
+                      ? timedFinished
+                        ? saveTransitionToLibrary
+                        : undefined
+                      : round === 5
                       ? (name, picked) =>
                           setNodeExtras(animationChild.id, {
                             transitions: [
@@ -1356,7 +1397,9 @@ async function handleFile(
                   existingTransitionNames={
                     round === 5
                       ? (animationChild.transitions ?? []).map((t) => t.name)
-                      : undefined
+                      : round === 6
+                        ? (practiceSlot?.transitions ?? []).map((t) => t.name)
+                        : undefined
                   }
                   transitionLibrary={
                     round === 4 || round === 6

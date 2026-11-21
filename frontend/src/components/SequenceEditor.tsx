@@ -1926,8 +1926,10 @@ function SequenceEditor({
       </div>
       )}
 
-      {/* Select keyframes to copy */}
-      {!readOnly && (
+      {/* Select keyframes to copy. In review/playback (read-only) the same
+          row is kept for selecting, but the ONLY action left is "Label as
+          Transition": no copy, paste or delete, and the attempt isn't changed. */}
+      {(!readOnly || !!onSaveTransition) && (
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -1962,7 +1964,7 @@ function SequenceEditor({
         >
           {allSelected ? "Deselect all" : "Select all keyframes"}
         </button>
-        {selectMode && (
+        {selectMode && !readOnly && (
           <button
             type="button"
             onClick={copyKeyframes}
@@ -1982,7 +1984,7 @@ function SequenceEditor({
             Label as Transition ({selectedIds.length})
           </button>
         )}
-        {selectMode && (
+        {selectMode && !readOnly && (
           <button
             type="button"
             onClick={deleteSelectedKeyframes}
