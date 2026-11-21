@@ -2,7 +2,7 @@
 // and Free practice (right). It replaces the Round 1-3 / Trial / Special
 // Round tabs while Practice is open, so none of those are visible here.
 
-export type PracticeMode = "choose" | "timed" | "free";
+export type PracticeMode = "choose" | "timed" | "free" | "logbook";
 
 function StopwatchIcon() {
   return (
@@ -48,7 +48,7 @@ const cardClass =
 export default function PracticeHome({
   onPick,
 }: {
-  onPick: (mode: "timed" | "free") => void;
+  onPick: (mode: "timed" | "free" | "logbook") => void;
 }) {
   return (
     <section aria-label="Practice" className="mx-auto max-w-3xl">
@@ -89,22 +89,16 @@ export default function PracticeHome({
           </span>
         </button>
       </div>
-    </section>
-  );
-}
 
-// Timed mode's own workspace. Nothing is built here yet.
-export function PracticeTimed() {
-  return (
-    <section
-      aria-label="Timed mode"
-      className="mx-auto flex max-w-xl flex-col items-center rounded-2xl border border-line bg-surface px-8 py-16 text-center"
-    >
-      <span className="text-fg-soft">
-        <StopwatchIcon />
-      </span>
-      <h2 className="mt-6 text-xl font-medium text-fg">Timed mode</h2>
-      <p className="mt-2 text-sm text-fg-muted">Coming soon.</p>
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => onPick("logbook")}
+          className="cursor-pointer rounded-xl border border-line bg-surface px-8 py-3 text-sm font-medium text-fg-soft transition hover:border-line-hover hover:bg-elevated hover:text-fg"
+        >
+          Logbook
+        </button>
+      </div>
     </section>
   );
 }
