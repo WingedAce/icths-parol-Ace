@@ -10,6 +10,7 @@ import {
   setSectionTempo,
   TEMPO_CORRECTIONS,
 } from "../utils/audioTempo";
+import { rollPracticeSong } from "../utils/practiceSongs";
 
 const AUDIO_API_URL =
   import.meta.env.VITE_AUDIO_API_URL ?? "http://localhost:8000/analyze-audio";
@@ -84,6 +85,9 @@ type AudioUploaderProps = {
   // Longest part of a song that gets analyzed, in seconds. Normal rounds use
   // the full 120; the Special Round and Practice use 60.
   maxClipSeconds?: number;
+  // Practice only: shows a "Roll a random song" button that picks one of the
+  // fixed Practice songs (already analyzed, nothing to upload).
+  rollSongs?: boolean;
 };
 
 function formatDuration(seconds: number) {
@@ -103,6 +107,7 @@ function AudioUploader({
   bpmChangeCount = 0,
   keepStoredAudio = false,
   maxClipSeconds = MAX_CLIP_SECONDS,
+  rollSongs = false,
 }: AudioUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -132,6 +137,10 @@ function AudioUploader({
   const [askChange, setAskChange] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const resetOnUpload = useRef(false);
+  // Set when the Change Song dialog was opened by Roll instead of by the
+  // "upload a different song" button.
+  const rollAfterChoice = useRef(false);
+  const [isRolling, setIsRolling] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLAudioElement>(null);
@@ -217,6 +226,42 @@ function AudioUploader({
       setPendingFile(null);
       if (pendingUrl) URL.revokeObjectURL(pendingUrl);
       setPendingUrl(null);
+    }
+  }
+
+  // Roll: pick a fixed Practice song at random and load it with its saved
+  // analysis, the same way an upload would end up, without the analysis server.
+  async function rollSong() {
+    setError(null);
+    setIsRolling(true);
+    try {
+      const song = rollPracticeSong(node.audioFileName);
+      const base = `${import.meta.env.BASE_URL}practice/${song.id}`;
+      const [audioRes, dataRes] = await Promise.all([
+        fetch(`${base}.mp3`),
+        fetch(`${base}.json`),
+      ]);
+      if (!audioRes.ok || !dataRes.ok) {
+        throw new Error("Couldn't load that song. Please try rolling again.");
+      }
+      const blob = await audioRes.blob();
+      const data: { analysis: AudioAnalysisResponse } = await dataRes.json();
+
+      await saveAudio(node.id, blob).catch(() => {});
+
+      const analysis = toAudioAnalysis(data.analysis);
+      onFreshAnalysis(analysis);
+      onAnalyzed(song.title, analysis, resetOnUpload.current);
+      resetOnUpload.current = false;
+      setReplacing(false);
+      setManualBpmInput("");
+      setSectionBpmInputs({});
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't roll a song right now.",
+      );
+    } finally {
+      setIsRolling(false);
     }
   }
 
@@ -501,6 +546,25 @@ function AudioUploader({
           </button>
         )}
 
+        {rollSongs && (
+          <button
+            onClick={() => {
+              // With keyframes saved, ask first, same as changing the song.
+              if (frameCount > 0) {
+                rollAfterChoice.current = true;
+                setAskChange(true);
+                return;
+              }
+              resetOnUpload.current = false;
+              void rollSong();
+            }}
+            disabled={isRolling}
+            className="mt-8 w-full cursor-pointer rounded-full px-4 py-2 text-xs text-fg-soft transition hover:text-fg disabled:cursor-wait disabled:opacity-50 bg-elevated hover:bg-line-strong"
+          >
+            {isRolling ? "Rolling…" : "Roll another random song"}
+          </button>
+        )}
+
         <button
           onClick={() => {
             // With keyframes saved, ask first and keep the current song until
@@ -526,15 +590,28 @@ function AudioUploader({
               resetOnUpload.current = false;
               setAskChange(false);
               setError(null);
+              if (rollAfterChoice.current) {
+                rollAfterChoice.current = false;
+                void rollSong();
+                return;
+              }
               setReplacing(true);
             }}
             onReset={() => {
               resetOnUpload.current = true;
               setAskChange(false);
               setError(null);
+              if (rollAfterChoice.current) {
+                rollAfterChoice.current = false;
+                void rollSong();
+                return;
+              }
               setReplacing(true);
             }}
-            onCancel={() => setAskChange(false)}
+            onCancel={() => {
+              rollAfterChoice.current = false;
+              setAskChange(false);
+            }}
           />
         )}
       </div>
@@ -652,8 +729,12 @@ function AudioUploader({
           : "bg-elevated"
       }`}
     >
-      {isUploading ? (
-        <p className="text-fg-soft">Analyzing audio — this can take a moment…</p>
+      {isUploading || isRolling ? (
+        <p className="text-fg-soft">
+          {isRolling
+            ? "Rolling a song…"
+            : "Analyzing audio — this can take a moment…"}
+        </p>
       ) : (
         <>
           <p className="text-fg-soft">
@@ -669,6 +750,15 @@ function AudioUploader({
           <p className="mt-2 text-xs text-fg-muted">
             MP3 only — analyzed for BPM, sections, and energy
           </p>
+
+          {rollSongs && (
+            <button
+              onClick={() => void rollSong()}
+              className="mt-6 cursor-pointer rounded-full px-5 py-2 text-xs text-fg-soft transition hover:text-fg bg-line-strong hover:bg-line-hover"
+            >
+              Or roll a random song
+            </button>
+          )}
 
           {replacing && (
             <>
