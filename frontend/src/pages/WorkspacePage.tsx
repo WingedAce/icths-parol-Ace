@@ -34,6 +34,8 @@ import CodeGenerator from "../components/CodeGenerator";
 
 import TrialWorkspace from "../components/TrialWorkspace";
 import SpecialRoundPanel from "../components/SpecialRoundPanel";
+import PracticeHome, { PracticeTimed } from "../components/PracticeHome";
+import type { PracticeMode } from "../components/PracticeHome";
 import { useSpecialRound } from "../lib/useSpecialRound";
 import { SPECIAL_SONG_ID } from "../lib/specialRound";
 import { toClip } from "../utils/keyframeClipboard";
@@ -210,33 +212,53 @@ function WorkspacePage() {
   // The round being worked on. 4 = the Special Round (its own song slot,
   // keyframes and code; Zone Map and Pins are the group's shared ones).
   // The Practice tab (5) is a normal round-like slot of its own next to it.
-  const [practiceState, setPracticeState] = useState<{ path: string; open: boolean }>(
-    { path: pathKey, open: false },
-  );
+  // Practice is its own workspace: it first shows the Timed mode / Free
+  // practice cards ("choose"), and hides the Round 1-3, Trial and Special
+  // Round tabs the whole time it is open. Not remembered between visits.
+  const [practiceState, setPracticeState] = useState<{
+    path: string;
+    open: boolean;
+    mode: PracticeMode;
+  }>({ path: pathKey, open: false, mode: "choose" });
   const practiceOpen: boolean =
     practiceState.path === pathKey && practiceState.open;
+  const practiceMode: PracticeMode = practiceOpen
+    ? practiceState.mode
+    : "choose";
+  // Only Free practice shows the round-style steps (Song, Preview, ...).
+  const practiceChoosing: boolean = practiceOpen && practiceMode !== "free";
   const round: number = specialPlaying ? 4 : practiceOpen ? 5 : baseRound;
-  // Every round-only panel below is hidden while Trial or the Special Round's
-  // gate screen is shown.
-  const trialOpen: boolean = trialTabOpen || specialGate;
+  // Every round-only panel below is hidden while Trial, the Special Round's
+  // gate screen, or Practice's start / Timed mode screen is shown.
+  const trialOpen: boolean = trialTabOpen || specialGate || practiceChoosing;
   const setTrialOpen = (open: boolean) => {
     setTrialState({ path: pathKey, open });
     writeUi(storeKey, { trial: open });
     // choosing a round or Trial leaves the Special Round and Practice
     setSpecialState({ path: pathKey, open: false });
-    setPracticeState({ path: pathKey, open: false });
+    setPracticeState({ path: pathKey, open: false, mode: "choose" });
   };
   const openSpecial = () => {
     setTrialState({ path: pathKey, open: false });
     writeUi(storeKey, { trial: false });
-    setPracticeState({ path: pathKey, open: false });
+    setPracticeState({ path: pathKey, open: false, mode: "choose" });
     setSpecialState({ path: pathKey, open: true });
   };
   const openPractice = () => {
     setTrialState({ path: pathKey, open: false });
     writeUi(storeKey, { trial: false });
     setSpecialState({ path: pathKey, open: false });
-    setPracticeState({ path: pathKey, open: true });
+    setPracticeState({ path: pathKey, open: true, mode: "choose" });
+  };
+  const setPracticeMode = (mode: PracticeMode) =>
+    setPracticeState({ path: pathKey, open: true, mode });
+  // Back: from a mode to the two cards, from the cards to the rounds.
+  const practiceBack = () => {
+    if (practiceMode === "choose") {
+      setPracticeState({ path: pathKey, open: false, mode: "choose" });
+    } else {
+      setPracticeMode("choose");
+    }
   };
   const storedTab: GroupTab =
     tabState.path === pathKey ? tabState.tab : readUi(storeKey).tab;
@@ -713,6 +735,7 @@ async function handleFile(
           active={
             currentNode?.type === "group" &&
             needsSongSlot(groupTab) &&
+            !practiceChoosing &&
             !animationChild &&
             !currentNode.locked
           }
@@ -783,7 +806,26 @@ async function handleFile(
         ) : currentNode?.type === "group" ? (
           <section className={`mt-12${specialPlaying ? " sr-scope" : ""}`}>
             <div className="mb-10">
+              {/* Practice has its own header: just a way back. */}
+              {practiceOpen && (
+                <div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <button
+                    type="button"
+                    onClick={practiceBack}
+                    className="cursor-pointer rounded-lg bg-surface px-4 py-2 text-sm font-medium text-fg-soft transition hover:bg-elevated hover:text-fg"
+                  >
+                    &larr; Back
+                  </button>
+                  <p className="text-sm font-medium text-fg">
+                    Practice
+                    {practiceMode === "timed" && " · Timed mode"}
+                    {practiceMode === "free" && " · Free practice"}
+                  </p>
+                </div>
+              )}
+
               {/* Round picker */}
+              {!practiceOpen && (
               <div className="sr-picker mb-8 flex flex-col items-start gap-3">
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
                 <div
@@ -863,6 +905,7 @@ async function handleFile(
                   </p>
                 )}
               </div>
+              )}
 
               {/* Step tabs */}
               {!trialOpen && (
@@ -902,6 +945,12 @@ async function handleFile(
                 clockOffset={special.clockOffset}
               />
             )}
+
+            {practiceOpen && practiceMode === "choose" && (
+              <PracticeHome onPick={setPracticeMode} />
+            )}
+
+            {practiceOpen && practiceMode === "timed" && <PracticeTimed />}
 
             {trialTabOpen && (
               <TrialWorkspace
