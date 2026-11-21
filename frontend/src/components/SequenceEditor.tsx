@@ -125,7 +125,46 @@ type SequenceEditorProps = {
   // Special Round: the group's saved transitions. When given, an "Import
   // keyframes" button appears.
   transitionLibrary?: SavedTransition[];
+  // Preview tab only: Left / Right arrow keys jump to the previous / next
+  // keyframe, same as the Back / Next buttons.
+  arrowKeys?: boolean;
 };
+
+// Left / Right arrow = previous / next keyframe. Left alone while typing in a
+// box, using a slider or dropdown, or while a dialog is open, so those keep
+// their own arrow-key behaviour. Renders nothing.
+function ArrowKeyJump({ onJump }: { onJump: (direction: 1 | -1) => void }) {
+  const jump = useRef(onJump);
+  useEffect(() => {
+    jump.current = onJump;
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) {
+        return;
+      }
+      event.preventDefault();
+      jump.current(event.key === "ArrowRight" ? 1 : -1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+  return null;
+}
 
 // m:ss.t  (tenths of a second, because beats are only ~0.5s apart)
 function formatTime(seconds: number) {
@@ -314,6 +353,7 @@ function SequenceEditor({
   onSaveTransition,
   existingTransitionNames,
   transitionLibrary,
+  arrowKeys = false,
 }: SequenceEditorProps) {
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
@@ -1353,6 +1393,8 @@ function SequenceEditor({
 
   return (
     <div className="flex flex-col gap-6">
+      {arrowKeys && <ArrowKeyJump onJump={jumpKeyframe} />}
+
       {/* Hidden player, only used when the user loads the song file */}
       <audio ref={audioRef} src={audioUrl ?? undefined} preload="auto" />
 
