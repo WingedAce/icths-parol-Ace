@@ -61,6 +61,24 @@ export type ProjectNode = {
   // On a group's Special Round slot (round 4): which "Remove Special Round
   // song" reset this slot has already been through (see specialRound.ts).
   specialEpoch?: number;
+  // On a group's Timed mode slot (round 6): the (up to three) attempts the
+  // group chose to keep in the logbook.
+  logbook?: LogbookEntry[];
+};
+
+// One Timed mode attempt kept in the logbook: a full copy of the song's
+// analysis and keyframes, so it still plays and makes code after the Timed
+// mode slot is cleared for the next attempt. Its song file is copied to the
+// audio store under logbookAudioId(id).
+export type LogbookEntry = {
+  id: string;
+  savedAt: number;
+  minutes: number;
+  songName: string;
+  frames: Frame[];
+  audioAnalysis?: AudioAnalysis;
+  timingMode?: TimingMode;
+  bpmChanges?: BpmChange[];
 };
 
 // A group of keyframes labelled by the user as a reusable transition. The
