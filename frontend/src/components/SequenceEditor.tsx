@@ -128,6 +128,10 @@ type SequenceEditorProps = {
   // Preview tab only: Left / Right arrow keys jump to the previous / next
   // keyframe, same as the Back / Next buttons.
   arrowKeys?: boolean;
+  // Playback only: the song, the timeline and the transport buttons work, but
+  // nothing can be changed (no keyframe or tempo editing, no undo / redo).
+  // Used after a Timed mode attempt ends and for the logbook.
+  readOnly?: boolean;
 };
 
 // Left / Right arrow = previous / next keyframe. Left alone while typing in a
@@ -354,6 +358,7 @@ function SequenceEditor({
   existingTransitionNames,
   transitionLibrary,
   arrowKeys = false,
+  readOnly = false,
 }: SequenceEditorProps) {
   // The playhead, in seconds. This is the source of truth for "where are we".
   const [time, setTime] = useState(0);
@@ -467,6 +472,7 @@ function SequenceEditor({
   };
 
   const onFramesChange = (next: Frame[]) => {
+    if (readOnly) return;
     recordHistory();
     saveFrames(next);
   };
@@ -475,6 +481,7 @@ function SequenceEditor({
     timingMode?: TimingMode;
     bpmChanges?: BpmChange[];
   }) => {
+    if (readOnly) return;
     // Clicking the timing mode that is already selected changes nothing.
     if (
       "timingMode" in timing &&
@@ -497,6 +504,7 @@ function SequenceEditor({
   };
 
   const undo = () => {
+    if (readOnly) return;
     const snapshot = undoStack.current.pop();
     if (!snapshot) return;
     redoStack.current.push(takeSnapshot());
@@ -505,6 +513,7 @@ function SequenceEditor({
   };
 
   const redo = () => {
+    if (readOnly) return;
     const snapshot = redoStack.current.pop();
     if (!snapshot) return;
     undoStack.current.push(takeSnapshot());
@@ -1436,6 +1445,7 @@ function SequenceEditor({
               {segmentLabel}
             </p>
           )}
+          {!readOnly && (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -1460,6 +1470,7 @@ function SequenceEditor({
               Redo
             </button>
           </div>
+          )}
           <div className="flex items-center gap-2">
             <span className="text-xs text-fg-muted">
               Zoom
@@ -1548,7 +1559,7 @@ function SequenceEditor({
                   data-bpm-trigger=""
                   title={`Beat ${i + 1} · ${formatTime(beat)} — click to set the tempo from here`}
                   onClick={(event) => {
-                    if (isPlaying) return;
+                    if (isPlaying || readOnly) return;
                     event.stopPropagation();
                     setPopover({ anchor: "bar", beatTime: beat });
                   }}
@@ -1572,7 +1583,7 @@ function SequenceEditor({
             // Manual timing: a keyframe can be dragged along the bar. It stays
             // between its neighbours so the order (and the transitions) never
             // change. A plain click still just moves the playhead there.
-            const canDrag = isManual && !isPlaying && !selectMode;
+            const canDrag = isManual && !isPlaying && !selectMode && !readOnly;
             const isSelected = selectedIds.includes(frame.id);
             const shownTime = drag?.id === frame.id ? drag.time : frame.time;
             return (
@@ -1655,7 +1666,7 @@ function SequenceEditor({
                 nearestIndex(beats, change.beatTime) + 1
               } · ${formatTime(change.beatTime)} — click to edit or remove`}
               onClick={(event) => {
-                if (isPlaying) return;
+                if (isPlaying || readOnly) return;
                 event.stopPropagation();
                 setPopover({ anchor: "bar", beatTime: change.beatTime });
               }}
@@ -1840,6 +1851,7 @@ function SequenceEditor({
       </div>
 
       {/* Timing mode and tempo changes: the one extra row */}
+      {!readOnly && (
       <div>
         <div className="relative flex flex-wrap items-center gap-2">
           <div
@@ -1912,8 +1924,10 @@ function SequenceEditor({
           </p>
         )}
       </div>
+      )}
 
       {/* Select keyframes to copy */}
+      {!readOnly && (
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -1985,8 +1999,10 @@ function SequenceEditor({
         )}
         {keyNote && <span className="text-xs text-fg-muted">{keyNote}</span>}
       </div>
+      )}
 
       {/* Keyframe at the playhead */}
+      {!readOnly && (
       <div>
         <p className={labelClass}>
           {keyframeHere
@@ -2362,6 +2378,7 @@ function SequenceEditor({
           )}
         </div>
       </div>
+      )}
 
       {/* Save the preview as a video, with the song */}
       <div>
