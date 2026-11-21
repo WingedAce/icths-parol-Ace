@@ -11,7 +11,7 @@ export type PracticeSong = {
 
 export const PRACTICE_SONGS: PracticeSong[] = [
   { id: "merry-christmas-please-dont-call", title: "Merry Christmas Please Don't Call", weight: 5 },
-  { id: "ako-ang-bagyo", title: "Ako ang Bagyo", weight: 1 },
+  { id: "pahintulot", title: "Pahintulot", weight: 1 },
   { id: "carol-of-the-bells", title: "Carol of the Bells" },
   { id: "joy-to-the-world", title: "Joy to the World" },
   { id: "feliz-navidad", title: "Feliz Navidad" },
