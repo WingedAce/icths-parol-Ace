@@ -111,7 +111,7 @@ type ProjectContextType = {
   // the Special Round reset marker). Everything else on the node is left as is.
   setNodeExtras: (
     id: string,
-    extras: Pick<ProjectNode, "transitions" | "specialEpoch">,
+    extras: Pick<ProjectNode, "transitions" | "specialEpoch" | "logbook">,
   ) => void;
 };
 
@@ -1432,7 +1432,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   function setNodeExtras(
     id: string,
-    extras: Pick<ProjectNode, "transitions" | "specialEpoch">,
+    extras: Pick<ProjectNode, "transitions" | "specialEpoch" | "logbook">,
   ) {
     setNodesByParent((previous) => {
       const next = { ...previous };
