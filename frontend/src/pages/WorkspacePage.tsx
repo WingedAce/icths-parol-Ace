@@ -34,7 +34,21 @@ import CodeGenerator from "../components/CodeGenerator";
 
 import TrialWorkspace from "../components/TrialWorkspace";
 import SpecialRoundPanel from "../components/SpecialRoundPanel";
-import PracticeHome, { PracticeTimed } from "../components/PracticeHome";
+import PracticeHome from "../components/PracticeHome";
+import Logbook, { LogbookReplaceDialog } from "../components/Logbook";
+import {
+  LOGBOOK_MAX,
+  copyAudioToLogbook,
+  makeLogbookEntry,
+  removeLogbookAudio,
+} from "../lib/logbook";
+import {
+  TimedCountdown,
+  TimedPaused,
+  TimedSidebar,
+} from "../components/TimedMode";
+import { useTimedSession, TIMED_MINUTES } from "../lib/timedSession";
+import type { TimedMinutes } from "../lib/timedSession";
 import type { PracticeMode } from "../components/PracticeHome";
 import { useSpecialRound } from "../lib/useSpecialRound";
 import { SPECIAL_SONG_ID } from "../lib/specialRound";
@@ -47,6 +61,7 @@ import { displayName, originalNameIfRenamed } from "../utils/parolName";
 import type { AudioAnalysis } from "../types";
 
 import type {
+  LogbookEntry,
   NodeType,
   PinMapping,
   ProjectNode,
@@ -225,9 +240,42 @@ function WorkspacePage() {
   const practiceMode: PracticeMode = practiceOpen
     ? practiceState.mode
     : "choose";
-  // Only Free practice shows the round-style steps (Song, Preview, ...).
-  const practiceChoosing: boolean = practiceOpen && practiceMode !== "free";
-  const round: number = specialPlaying ? 4 : practiceOpen ? 5 : baseRound;
+  // Timed mode: its own song slot (round 6), a 10 second countdown after the
+  // song is analyzed, then a 30 / 20 / 15 minute timer. See lib/timedSession.
+  const timedActive: boolean = practiceOpen && practiceMode === "timed";
+  const timed = useTimedSession(`parol-timed:${workspaceId ?? ""}:${pathKey}`);
+  const [timedMinutes, setTimedMinutes] = useState<TimedMinutes>(TIMED_MINUTES[0]);
+  const [timedConfirm, setTimedConfirm] = useState<"quit" | "restart" | null>(
+    null,
+  );
+  const timedPaused = timedActive && timed.status === "paused";
+  const timedCountdown = timedActive && timed.status === "countdown";
+  const timedFinished = timedActive && timed.status === "finished";
+  // While the countdown runs or after time is up, nothing may be edited.
+  const timedFrozen = timedCountdown || timedFinished;
+  // Once the timer is on (counting down, running or paused) the only ways out
+  // are Pause -> Quit, so the Back button is hidden.
+  const timerHoldsBack =
+    timedActive &&
+    (timed.status === "countdown" ||
+      timed.status === "running" ||
+      timed.status === "paused");
+  // Free practice and a running Timed mode show the round-style steps (Song,
+  // Preview, ...). The two cards and the paused screen show none of them.
+  const practiceChoosing: boolean =
+    practiceOpen &&
+    (practiceMode === "choose" || practiceMode === "logbook" || timedPaused);
+  // Saving a finished attempt to the logbook (asks which one to replace when
+  // the logbook already holds three).
+  const [logbookPicking, setLogbookPicking] = useState(false);
+  const [logbookSaving, setLogbookSaving] = useState(false);
+  const round: number = specialPlaying
+    ? 4
+    : practiceOpen
+      ? practiceMode === "timed"
+        ? 6
+        : 5
+      : baseRound;
   // Every round-only panel below is hidden while Trial, the Special Round's
   // gate screen, or Practice's start / Timed mode screen is shown.
   const trialOpen: boolean = trialTabOpen || specialGate || practiceChoosing;
@@ -335,6 +383,44 @@ function WorkspacePage() {
             item.type === "animation" && (item.round ?? 1) === 5,
         )
       : undefined;
+  // The group's Timed mode slot (round 6): the attempt in progress, and the
+  // logbook of attempts kept from earlier ones.
+  const timedSlot =
+    currentNode?.type === "group"
+      ? getChildren(currentNode.id).find(
+          (item) =>
+            item.type === "animation" && (item.round ?? 1) === 6,
+        )
+      : undefined;
+  const logbookEntries: LogbookEntry[] = timedSlot?.logbook ?? [];
+
+  // Keeps the finished attempt: a full copy of its song, keyframes and timing
+  // (plus the song file), so it survives the Timed mode slot being cleared.
+  async function saveAttemptToLogbook(replaceId?: string) {
+    if (!timedSlot || logbookSaving) return;
+    setLogbookSaving(true);
+    setLogbookPicking(false);
+    const entry = makeLogbookEntry(
+      timedSlot,
+      timed.session.status === "idle" ? timedMinutes : timed.session.minutes,
+    );
+    await copyAudioToLogbook(timedSlot.id, entry.id);
+    const next = replaceId
+      ? logbookEntries.map((e) => (e.id === replaceId ? entry : e))
+      : [...logbookEntries, entry];
+    setNodeExtras(timedSlot.id, { logbook: next });
+    if (replaceId) removeLogbookAudio(replaceId);
+    timed.markLogged();
+    setLogbookSaving(false);
+  }
+
+  function deleteLogbookEntry(id: string) {
+    if (!timedSlot) return;
+    setNodeExtras(timedSlot.id, {
+      logbook: logbookEntries.filter((e) => e.id !== id),
+    });
+    removeLogbookAudio(id);
+  }
   // The Special Round's song is the ONE song the developer uploaded for every
   // group. It is laid over the group's own slot for display only (never saved
   // into the group), so the group keeps its own keyframes and nothing else.
@@ -809,6 +895,7 @@ async function handleFile(
               {/* Practice has its own header: just a way back. */}
               {practiceOpen && (
                 <div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-3">
+                  {!timerHoldsBack ? (
                   <button
                     type="button"
                     onClick={practiceBack}
@@ -816,10 +903,12 @@ async function handleFile(
                   >
                     &larr; Back
                   </button>
+                  ) : null}
                   <p className="text-sm font-medium text-fg">
                     Practice
                     {practiceMode === "timed" && " · Timed mode"}
                     {practiceMode === "free" && " · Free practice"}
+                    {practiceMode === "logbook" && " · Logbook"}
                   </p>
                 </div>
               )}
@@ -940,6 +1029,50 @@ async function handleFile(
               />
             )}
 
+            {timedCountdown && (
+              <TimedCountdown secondsLeft={timed.countdownLeft} />
+            )}
+
+            {timedPaused && (
+              <TimedPaused
+                remainingMs={timed.remainingMs}
+                onPlay={timed.play}
+                onQuit={() => setTimedConfirm("quit")}
+              />
+            )}
+
+            <div
+              className={
+                timedActive && !timedPaused
+                  ? "flex flex-col gap-8 lg:flex-row lg:items-start"
+                  : undefined
+              }
+            >
+            {timedActive && !timedPaused && (
+              <TimedSidebar
+                status={timed.status}
+                minutes={
+                  timed.session.status === "idle"
+                    ? timedMinutes
+                    : timed.session.minutes
+                }
+                remainingMs={timed.remainingMs}
+                onPickMinutes={setTimedMinutes}
+                onPause={timed.pause}
+                onNewSession={() => setTimedConfirm("restart")}
+                logged={timed.logged}
+                saving={logbookSaving}
+                onSaveToLogbook={() =>
+                  logbookEntries.length >= LOGBOOK_MAX
+                    ? setLogbookPicking(true)
+                    : void saveAttemptToLogbook()
+                }
+              />
+            )}
+            <div
+              className={timedActive ? "min-w-0 flex-1" : undefined}
+              inert={timedCountdown || undefined}
+            >
             {specialOpen && (
               <SpecialRoundPanel
                 clockOffset={special.clockOffset}
@@ -950,7 +1083,13 @@ async function handleFile(
               <PracticeHome onPick={setPracticeMode} />
             )}
 
-            {practiceOpen && practiceMode === "timed" && <PracticeTimed />}
+            {practiceOpen && practiceMode === "logbook" && (
+              <Logbook
+                groupNode={currentNode}
+                entries={logbookEntries}
+                onDelete={deleteLogbookEntry}
+              />
+            )}
 
             {trialTabOpen && (
               <TrialWorkspace
@@ -1120,10 +1259,11 @@ async function handleFile(
             )}
 
             {!trialOpen && groupTab === "song" && animationChild && round !== 4 && (
+              <div inert={timedFinished || undefined}>
               <AudioUploader
                 key={animationChild.id}
                 node={animationChild}
-                maxClipSeconds={round === 5 ? 60 : undefined}
+                maxClipSeconds={round === 5 || round === 6 ? 60 : undefined}
                 onAnalyzed={(
                   fileName: string,
                   analysis: AudioAnalysis,
@@ -1139,6 +1279,11 @@ async function handleFile(
                   if (resetKeyframes) setNodeFrames(animationChild.id, []);
                   // Tempo changes belong to the old song's beats, so they start over.
                   setNodeTiming(animationChild.id, { bpmChanges: undefined });
+                  // Timed mode: the song is analyzed, so the 10 second
+                  // countdown (then the timer) starts now.
+                  if (timedActive && timed.status === "idle") {
+                    timed.start(timedMinutes);
+                  }
                 }}
                 onFreshAnalysis={(analysis: AudioAnalysis) =>
                   setNodeAudioOriginal(animationChild.id, analysis)
@@ -1174,6 +1319,7 @@ async function handleFile(
                   setNodeFrames(animationChild.id, [])
                 }
               />
+              </div>
             )}
 
             {!trialOpen && groupTab === "preview" && animationChild && (
@@ -1181,18 +1327,16 @@ async function handleFile(
                 <SequenceEditor
                   key={`${animationChild.id}:${round === 4 ? special.songVersion ?? "" : ""}`}
                   audioSourceId={round === 4 ? SPECIAL_SONG_ID : undefined}
+                  readOnly={timedFinished}
                   arrowKeys
                   groupNode={currentNode}
                   animationNode={animationChild}
-                  onFramesChange={(frames) =>
-                    setNodeFrames(
-                      animationChild.id,
-                      frames,
-                    )
-                  }
-                  onTimingChange={(timing) =>
-                    setNodeTiming(animationChild.id, timing)
-                  }
+                  onFramesChange={(frames) => {
+                    if (!timedFrozen) setNodeFrames(animationChild.id, frames);
+                  }}
+                  onTimingChange={(timing) => {
+                    if (!timedFrozen) setNodeTiming(animationChild.id, timing);
+                  }}
                   onSaveTransition={
                     round === 5
                       ? (name, picked) =>
@@ -1215,24 +1359,23 @@ async function handleFile(
                       : undefined
                   }
                   transitionLibrary={
-                    round === 4 ? (practiceSlot?.transitions ?? []) : undefined
+                    round === 4 || round === 6
+                      ? (practiceSlot?.transitions ?? [])
+                      : undefined
                   }
                 />
               </div>
             )}
 
             {!trialOpen && groupTab === "gallery" && animationChild && (
-              <div className="mx-auto max-w-5xl">
+              <div className="mx-auto max-w-5xl" inert={timedFinished || undefined}>
                 <KeyframeGallery
                   key={animationChild.id}
                   groupNode={currentNode}
                   animationNode={animationChild}
-                  onFramesChange={(frames) =>
-                    setNodeFrames(
-                      animationChild.id,
-                      frames,
-                    )
-                  }
+                  onFramesChange={(frames) => {
+                    if (!timedFrozen) setNodeFrames(animationChild.id, frames);
+                  }}
                   transitions={round === 5 ? animationChild.transitions : undefined}
                   onTransitionsChange={
                     round === 5
@@ -1261,6 +1404,50 @@ async function handleFile(
                 }
                 bpmChanges={animationChild.bpmChanges}
                 songName={animationChild.audioFileName ?? animationChild.name}
+              />
+            )}
+            </div>
+            </div>
+
+            {timedConfirm && (
+              <ConfirmDialog
+                title={
+                  timedConfirm === "quit"
+                    ? "Quit Timed mode?"
+                    : "Start a new timed session?"
+                }
+                checkboxLabel="I understand"
+                confirmLabel={timedConfirm === "quit" ? "Quit" : "Start over"}
+                onCancel={() => setTimedConfirm(null)}
+                onConfirm={() => {
+                  // The session is over: its song and keyframes are thrown
+                  // away so the next one starts clean.
+                  if (songSlot) {
+                    clearNodeAudio(songSlot.id);
+                    setNodeFrames(songSlot.id, []);
+                  }
+                  timed.reset();
+                  if (timedConfirm === "quit") setPracticeMode("choose");
+                  setTimedConfirm(null);
+                }}
+              >
+                <p>
+                  This session's song and keyframes will be thrown away. This
+                  can't be undone.
+                </p>
+                {timedFinished && !timed.logged && (
+                  <p className="mt-3">
+                    This attempt hasn't been saved to the logbook.
+                  </p>
+                )}
+              </ConfirmDialog>
+            )}
+
+            {logbookPicking && (
+              <LogbookReplaceDialog
+                entries={logbookEntries}
+                onPick={(id) => void saveAttemptToLogbook(id)}
+                onCancel={() => setLogbookPicking(false)}
               />
             )}
           </section>
