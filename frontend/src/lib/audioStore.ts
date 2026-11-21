@@ -11,6 +11,19 @@ export async function saveAudio(id: string, file: Blob): Promise<void> {
 }
 
 export async function loadAudio(id: string): Promise<Blob | null> {
+  try {
+    const { data: signed } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(id, 3600);
+    if (signed?.signedUrl) {
+      const res = await fetch(`${signed.signedUrl}&t=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (res.ok) return await res.blob();
+    }
+  } catch {
+    // fall back to the normal download below
+  }
   const { data, error } = await supabase.storage.from(BUCKET).download(id);
   return error ? null : data;
 }
