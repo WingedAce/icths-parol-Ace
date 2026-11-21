@@ -49,3 +49,59 @@ export function rollPracticeSong(
   }
   return choices[choices.length - 1];
 }
+
+// ---- The rare song ----
+// Never Gonna Give You Up is not in PRACTICE_SONGS, so it never shares the
+// weights above. It has its own chance instead: 10% on a first roll, and 10%
+// more for every reroll since it last came up (20%, 30%, ... up to 100%).
+// Once it is rolled the chance starts over at 10%.
+export const RICK_SONG: PracticeSong = {
+  id: "never-gonna-give-you-up",
+  title: "Never Gonna Give You Up",
+};
+
+const RICK_START_CHANCE = 0.1;
+const RICK_CHANCE_STEP = 0.1;
+// Rolls since the song last came up, kept in this browser so switching tabs or
+// reloading the page does not reset the odds.
+const RICK_ROLLS_KEY = "parol-rick-rolls";
+
+/** Chance that the next roll is Rick, after `rolls` rolls without him. */
+export const rickChance = (rolls: number): number =>
+  Math.min(1, RICK_START_CHANCE + RICK_CHANCE_STEP * rolls);
+
+function readRickRolls(): number {
+  try {
+    const n = Number(localStorage.getItem(RICK_ROLLS_KEY));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeRickRolls(n: number) {
+  try {
+    localStorage.setItem(RICK_ROLLS_KEY, String(n));
+  } catch {
+    // storage blocked: the odds just start over on the next page load
+  }
+}
+
+// The roll the Roll buttons use: first the rare song's own chance, then the
+// normal weighted pick.
+export function rollSong(
+  currentTitle?: string,
+  random: () => number = Math.random,
+): PracticeSong {
+  // Rolling away from Rick can't land on him again, so it doesn't count.
+  if (currentTitle === RICK_SONG.title) {
+    return rollPracticeSong(currentTitle, random);
+  }
+  const rolls = readRickRolls();
+  if (random() < rickChance(rolls)) {
+    writeRickRolls(0);
+    return RICK_SONG;
+  }
+  writeRickRolls(rolls + 1);
+  return rollPracticeSong(currentTitle, random);
+}
