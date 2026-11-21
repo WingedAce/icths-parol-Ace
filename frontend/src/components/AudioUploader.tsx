@@ -10,7 +10,7 @@ import {
   setSectionTempo,
   TEMPO_CORRECTIONS,
 } from "../utils/audioTempo";
-import { rollPracticeSong } from "../utils/practiceSongs";
+import { rollSong as pickSong } from "../utils/practiceSongs";
 
 const AUDIO_API_URL =
   import.meta.env.VITE_AUDIO_API_URL ?? "http://localhost:8000/analyze-audio";
@@ -235,7 +235,7 @@ function AudioUploader({
     setError(null);
     setIsRolling(true);
     try {
-      const song = rollPracticeSong(node.audioFileName);
+      const song = pickSong(node.audioFileName);
       const base = `${import.meta.env.BASE_URL}practice/${song.id}`;
       const [audioRes, dataRes] = await Promise.all([
         fetch(`${base}.mp3`),
