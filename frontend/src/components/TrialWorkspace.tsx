@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import CodeGenerator from "./CodeGenerator";
 import ConfirmDialog from "./ConfirmDialog";
 import KeyframeGallery from "./KeyframeGallery";
 import PinRemapNotice from "./PinRemapNotice";
@@ -27,7 +28,7 @@ import type {
 } from "../types";
 
 type Round = 1 | 2 | 3;
-type SubTab = "zones" | "pins" | "preview" | "gallery";
+type SubTab = "zones" | "pins" | "preview" | "gallery" | "code";
 
 const ROUNDS: Round[] = [1, 2, 3];
 
@@ -36,6 +37,7 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: "pins", label: "Pins" },
   { id: "preview", label: "Preview" },
   { id: "gallery", label: "Gallery" },
+  { id: "code", label: "Code" },
 ];
 
 const EMPTY_FRAMES: Frame[] = [];
@@ -124,7 +126,10 @@ function readDraft(saved: unknown): TrialDraft {
     previewRound:
       d.previewRound === 2 || d.previewRound === 3 ? d.previewRound : 1,
     sub:
-      d.sub === "pins" || d.sub === "preview" || d.sub === "gallery"
+      d.sub === "pins" ||
+      d.sub === "preview" ||
+      d.sub === "gallery" ||
+      d.sub === "code"
         ? d.sub
         : "zones",
     liveSync: d.liveSync === true,
@@ -701,11 +706,11 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
         />
       )}
 
-      {(sub === "preview" || sub === "gallery") && (
+      {(sub === "preview" || sub === "gallery" || sub === "code") && (
         <div className={`mx-auto ${sub === "gallery" ? "max-w-5xl" : "max-w-3xl"}`}>
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <span className="text-xs text-fg-muted">
-              {sub === "gallery" ? "Gallery" : "Preview"}
+              {sub === "gallery" ? "Gallery" : sub === "code" ? "Code" : "Preview"}
             </span>
             <div
               role="tablist"
@@ -739,6 +744,18 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
                 audioSourceId={realSong.id}
                 onFramesChange={(frames) => editRound(previewRound, { frames })}
                 onTimingChange={(timing) => editRound(previewRound, timing)}
+              />
+            ) : sub === "code" ? (
+              <CodeGenerator
+                key={`${trialSong.id}-${version}`}
+                round={previewRound}
+                pinMappings={trialGroup.pinMappings ?? []}
+                tricolorGroups={trialGroup.tricolorGroups ?? []}
+                zones={trialGroup.zones ?? []}
+                frames={trialSong.frames ?? []}
+                audioAnalysis={trialSong.audioAnalysis}
+                bpmChanges={trialSong.bpmChanges}
+                songName={trialSong.audioFileName ?? trialSong.name}
               />
             ) : (
               <KeyframeGallery
