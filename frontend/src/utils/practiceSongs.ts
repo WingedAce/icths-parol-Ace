@@ -51,13 +51,13 @@ export function rollPracticeSong(
 }
 
 // ---- The rare song ----
-// Never Gonna Give You Up is not in PRACTICE_SONGS, so it never shares the
+// Rudolph the Red Nosed Reindeer (the rare song) is not in PRACTICE_SONGS, so it never shares the
 // weights above. It has its own chance instead: 10% on a first roll, and 10%
 // more for every reroll since it last came up (20%, 30%, ... up to 100%).
 // Once it is rolled the chance starts over at 10%.
 export const RICK_SONG: PracticeSong = {
   id: "never-gonna-give-you-up",
-  title: "Never Gonna Give You Up",
+  title: "Rudolph the Red Nosed Reindeer",
 };
 
 const RICK_START_CHANCE = 0.1;
