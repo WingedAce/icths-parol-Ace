@@ -1403,7 +1403,7 @@ async function handleFile(
                         : undefined
                   }
                   transitionLibrary={
-                    round === 4 || round === 6
+                    round === 4 || round === 5 || round === 6
                       ? (practiceSlot?.transitions ?? [])
                       : undefined
                   }
