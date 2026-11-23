@@ -56,6 +56,9 @@ const PUSH_DEBOUNCE_MS = 200;
 type ProjectContextType = {
   syncStatus: SyncStatus;
   lastSavedAt: number | null;
+  // How many items the server refused to save on the last try (permissions).
+  // Their changes stay on screen and on this device; they are not reverted.
+  rejectedCount: number;
   saveNow: () => Promise<boolean>;
   workspaces: Workspace[];
   getChildren: (parentId: string) => ProjectNode[];
@@ -391,6 +394,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [cloudLoaded, setCloudLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [rejectedCount, setRejectedCount] = useState(0);
 
   const [deletions, setDeletions] = useState<DeletedBatch[]>([]);
   const deletionsRef = useRef<DeletedBatch[]>([]);
@@ -717,10 +721,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setLastSavedAt(Date.now());
       writeDraft();
 
-      if (result.rejected.length > 0) {
-        const rejected = new Set(result.rejected);
-        enqueue(() => pullTask(rejected));
-      }
+      // A refused save (row-level security) used to force-pull the server's
+      // copy over the local one, which silently threw away the user's new
+      // keyframes. Keep the local edits instead: the item stays "unsaved"
+      // (so it is kept in the local draft and merged, never overwritten, by
+      // later pulls) and the Save button says so.
+      setRejectedCount(result.rejected.length);
     } catch (error) {
       console.error("Could not save to Supabase:", error);
       flags.current.pushError = true;
@@ -1484,6 +1490,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       value={{
         syncStatus,
         lastSavedAt,
+        rejectedCount,
         saveNow,
         workspaces,
         getChildren,
