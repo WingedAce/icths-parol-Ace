@@ -14,7 +14,7 @@ function clock(ms: number) {
 }
 
 function SaveButton() {
-  const { syncStatus, lastSavedAt, saveNow } = useProjects();
+  const { syncStatus, lastSavedAt, rejectedCount, saveNow } = useProjects();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -26,6 +26,9 @@ function SaveButton() {
   if (saving) {
     label = "Saving…";
     tone = "text-fg-muted";
+  } else if (rejectedCount > 0) {
+    label = `${rejectedCount} item${rejectedCount === 1 ? "" : "s"} could not be saved (no permission) · your changes are kept on this device`;
+    tone = "text-warn";
   } else if (problem) {
     label = "Not saved yet · kept on this device, retrying";
     tone = "text-warn";
