@@ -38,7 +38,6 @@ type CodeGeneratorProps = {
 };
 
 
-const AUTO_START_DELAY_MS = 5000;
 
 const MEGA_MAX_PIN = 69;
 const ANALOG_PIN_BASE = 54;
@@ -168,7 +167,6 @@ uint32_t tableAddress(uint8_t) { return 0; }`;
 #define FAR_DATA __attribute__((section(".fini2"), used))
 
 const uint8_t LED_PINS[] = { ${pinList} };
-const uint16_t START_DELAY_MS = ${AUTO_START_DELAY_MS};
 ${loop ? `const uint32_t LOOP_LENGTH_MS = ${loopMs};\n` : ""}
 struct Event {
   uint16_t waitMs;
@@ -212,8 +210,6 @@ void setup() {
     pinMode(LED_PINS[i], OUTPUT);
   }
   allOff();
-  Serial.println(F("Starting in ${AUTO_START_DELAY_MS / 1000} seconds..."));
-  delay(START_DELAY_MS);
   startShow();
 }
 
@@ -390,8 +386,8 @@ function CodeGenerator({
           )}
 
           <p className="max-w-md text-center text-xs text-fg-muted">
-            Heads up: the lights start {AUTO_START_DELAY_MS / 1000} seconds
-            after you press the RESET button on the Arduino.
+            Heads up: the lights start as soon as the Arduino powers up or you
+            press its RESET button.
           </p>
 
           {loopToggle}
@@ -468,7 +464,7 @@ function CodeGenerator({
                 </p>
               ))}
               <p className="text-xs text-fg-muted">
-                {`Heads up: the lights start ${AUTO_START_DELAY_MS / 1000} seconds after you press the RESET button on the Arduino. Press play on the song when they start.`}
+                {`Heads up: the lights start as soon as the Arduino powers up or you press its RESET button. Press play on the song when they start.`}
                 {(audioAnalysis?.clipStart ?? 0) > 0 &&
                   ` Play the song from ${formatClock(audioAnalysis?.clipStart ?? 0)}, the part you picked on the Song tab.`}
               </p>
