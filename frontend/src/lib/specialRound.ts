@@ -5,6 +5,7 @@
 
 import type { AudioAnalysis } from "../types";
 import { ensureSession, supabase } from "./supabase";
+import { clampDuration, DEFAULT_DURATION_MIN } from "./specialTimer";
 
 // The one song every group uses in the Special Round. The mp3 is kept in the
 // "audio" bucket under this id (see lib/audioStore.ts).
@@ -29,6 +30,15 @@ export type SpecialRoundStatus = {
   songVersion: string | null;
   /** Server clock minus this device's clock, in ms (0 if unknown). */
   clockOffset: number;
+  /** Round length in minutes, shared by every group (default 15). */
+  durationMin: number;
+  /** Server time (ms) the official round was unlocked; null when locked. */
+  runStartedAt: number | null;
+  /**
+   * The developers-only TEST RUN. The database only sends this to developers,
+   * so for everyone else it is always null.
+   */
+  test: { active: boolean; startedAt: number | null } | null;
 };
 
 export async function fetchSpecialRoundStatus(): Promise<SpecialRoundStatus> {
@@ -40,14 +50,57 @@ export async function fetchSpecialRoundStatus(): Promise<SpecialRoundStatus> {
     epoch?: number;
     song_version?: string | null;
     now?: string;
+    now_ms?: number;
+    duration_min?: number;
+    run_started_at?: number | null;
+    test?: { active?: boolean; started_at?: number | null } | null;
   } | null;
-  const serverNow = raw?.now ? Date.parse(raw.now) : NaN;
+  // Prefer the exact millisecond clock; fall back to the older timestamp.
+  const serverNow =
+    typeof raw?.now_ms === "number"
+      ? raw.now_ms
+      : raw?.now
+        ? Date.parse(raw.now)
+        : NaN;
   return {
     unlocked: raw?.unlocked === true,
     epoch: typeof raw?.epoch === "number" ? raw.epoch : 0,
     songVersion: raw?.song_version ?? null,
     clockOffset: Number.isFinite(serverNow) ? serverNow - Date.now() : 0,
+    durationMin: clampDuration(
+      typeof raw?.duration_min === "number" ? raw.duration_min : DEFAULT_DURATION_MIN,
+    ),
+    runStartedAt:
+      typeof raw?.run_started_at === "number" ? raw.run_started_at : null,
+    test: raw?.test
+      ? {
+          active: raw.test.active === true,
+          startedAt:
+            typeof raw.test.started_at === "number" ? raw.test.started_at : null,
+        }
+      : null,
   };
+}
+
+/** Developer only (the database checks is_admin()). Sets the round length for every group. */
+export async function setSpecialRoundDuration(minutes: number): Promise<void> {
+  await ensureSession();
+  const { error } = await supabase.rpc("special_round_set_duration", {
+    p_minutes: clampDuration(minutes),
+  });
+  if (error) throw error;
+}
+
+/**
+ * Developer only (the database checks is_admin()). Starts or ends the TEST
+ * RUN. It never touches the unlock switch or the deadline.
+ */
+export async function setSpecialRoundTest(active: boolean): Promise<void> {
+  await ensureSession();
+  const { error } = await supabase.rpc("special_round_test_set", {
+    p_active: active,
+  });
+  if (error) throw error;
 }
 
 /** Developer only (the database checks is_admin()). The only thing that lets groups use the round. */

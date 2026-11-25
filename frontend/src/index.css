@@ -1616,3 +1616,149 @@ button,
 }
 .sr-scope .sr-picker .bg-surface,
 .sr-scope .sr-picker .bg-surface:hover { box-shadow: none; }
+
+/* ===== Special Round: official label, gold timer, WELL DONE ===== */
+/* "SPECIAL ROUND — OFFICIAL": OFFICIAL in green, right beside the name. */
+.sr-official {
+  margin-left: 0.1em;
+  font-weight: 800;
+  color: #34d058;
+  text-shadow: 0 0 8px rgba(52, 208, 88, 0.55);
+}
+/* the open (gold) tab: a deeper green so it still stands out on gold */
+.sr-tab[aria-pressed="true"] .sr-official { color: #05662a; text-shadow: none; }
+
+.sr-test-badge {
+  margin-left: 0.6rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid #e6c15a;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #2a1f05;
+  background: #f1cf72;
+}
+
+.sr-timer-banner {
+  margin: 0 auto 1.5rem;
+  max-width: 34rem;
+  padding: 1rem 1.25rem;
+  text-align: center;
+  border: 1.5px solid rgba(230, 193, 90, 0.55);
+  border-radius: 1.25rem;
+  background: var(--color-surface);
+  box-shadow: 0 0 24px rgba(240, 207, 117, 0.1);
+}
+.sr-timer-kicker { font-size: 0.7rem; letter-spacing: 0.3em; text-transform: uppercase; color: #f1cf72; }
+.sr-timer-sub { margin-top: 0.15rem; font-size: 0.75rem; color: var(--color-fg-muted); }
+.sr-timer-digits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: #f1cf72;
+  text-shadow: 0 0 14px rgba(240, 207, 117, 0.35);
+}
+.sr-timer-digits-lg { margin-top: 0.25rem; font-size: 3.5rem; line-height: 1.1; font-weight: 600; }
+@media (min-width: 640px) { .sr-timer-digits-lg { font-size: 4.5rem; } }
+.sr-timer-done { color: #fff3c9; }
+.sr-welldone-side {
+  margin-top: 1.25rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #f1cf72;
+  text-shadow: 0 0 12px rgba(240, 207, 117, 0.45);
+}
+
+/* WELL DONE! pop-up: floats over the page and never blocks clicks. */
+.sr-welldone {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: sr-welldone-in 0.5s ease-out both;
+}
+.sr-welldone-card {
+  padding: 2rem 2.5rem;
+  text-align: center;
+  border: 2px solid #e6c15a;
+  border-radius: 1.5rem;
+  background: rgba(20, 16, 6, 0.92);
+  box-shadow: 0 0 60px rgba(240, 207, 117, 0.45), inset 0 0 24px rgba(240, 207, 117, 0.12);
+}
+.sr-welldone-title {
+  font-size: 2.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #f6dc8a;
+  text-shadow: 0 0 22px rgba(240, 207, 117, 0.7);
+}
+@media (min-width: 640px) { .sr-welldone-title { font-size: 4rem; } }
+.sr-welldone-note { margin-top: 0.6rem; max-width: 22rem; font-size: 0.9rem; color: #fff3c9; }
+.sr-confetti { position: absolute; inset: 0; overflow: hidden; }
+.sr-confetti span {
+  position: absolute;
+  top: -1.5rem;
+  width: 0.6rem;
+  height: 1rem;
+  border-radius: 2px;
+  opacity: 0.95;
+  animation-name: sr-confetti-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes sr-confetti-fall {
+  to { top: 105%; margin-left: 2rem; }
+}
+@keyframes sr-welldone-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sr-welldone { animation: none; }
+  .sr-confetti { display: none; }
+}
+
+/* developer-only TEST RUN strip */
+.sr-testbar {
+  margin: 0 auto 1.25rem;
+  max-width: 34rem;
+  padding: 0.75rem 1rem;
+  border: 1.5px dashed #e6c15a;
+  border-radius: 0.9rem;
+  background: rgba(240, 207, 117, 0.08);
+  color: #fff3c9;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.sr-gold-btn {
+  cursor: pointer;
+  border-radius: 0.6rem;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2a1f05;
+  background: linear-gradient(180deg, #f6dc8a, #d8aa3e);
+  transition: filter 0.2s;
+}
+.sr-gold-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.sr-gold-btn:disabled { opacity: 0.5; cursor: default; }
+.sr-ghost-btn {
+  cursor: pointer;
+  border-radius: 0.6rem;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff3c9;
+  border: 1.5px solid rgba(230, 193, 90, 0.7);
+  background: transparent;
+  transition: background 0.2s;
+}
+.sr-ghost-btn:hover:not(:disabled) { background: rgba(230, 193, 90, 0.14); }
+.sr-ghost-btn:disabled { opacity: 0.5; cursor: default; }

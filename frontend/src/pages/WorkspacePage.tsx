@@ -50,8 +50,19 @@ import {
 import { useTimedSession, TIMED_MINUTES } from "../lib/timedSession";
 import type { TimedMinutes } from "../lib/timedSession";
 import type { PracticeMode } from "../components/PracticeHome";
-import { useSpecialRound } from "../lib/useSpecialRound";
-import { SPECIAL_SONG_ID } from "../lib/specialRound";
+import { useReached, useSpecialRound } from "../lib/useSpecialRound";
+import {
+  setSpecialRoundTest,
+  SPECIAL_ROUND_DEADLINE,
+  SPECIAL_SONG_ID,
+} from "../lib/specialRound";
+import { activeRun } from "../lib/specialTimer";
+import { useIsAdmin } from "../lib/useIsAdmin";
+import {
+  SpecialTimerBanner,
+  SpecialTimerSidebar,
+  SpecialWellDone,
+} from "../components/SpecialRoundTimer";
 import { toClip } from "../utils/keyframeClipboard";
 import type { DesignPiece, RoundPiece } from "../components/TrialWorkspace";
 
@@ -216,14 +227,34 @@ function WorkspacePage() {
   );
   const specialOpen: boolean =
     specialState.path === pathKey && specialState.open;
-  const special = useSpecialRound();
+  // While the Special Round tab is open the shared state is re-read every few
+  // seconds (otherwise every 30 s), so an unlock, a TEST RUN or a new timer
+  // length reaches every group quickly.
+  const special = useSpecialRound(specialOpen ? 5_000 : undefined);
+  const isAdmin = useIsAdmin();
   // The Special Round works like a round (Song, Preview, Gallery, Code) only
-  // while a developer has it unlocked. Before that, only the locked screen
-  // (countdown) or, once the countdown has ended, the "wait for the system
-  // confirmation" screen is shown.
-  const specialUsable = special.unlocked;
+  // while a developer has it unlocked, or while a developer's TEST RUN is on
+  // (the database only reports a test run to developers, so regular users
+  // never get it). Before that, only the locked screen (countdown) or, once
+  // the countdown has ended, the "wait for the system confirmation" screen is
+  // shown.
+  const specialTestOn = special.test?.active === true;
+  const specialUsable = special.unlocked || specialTestOn;
   const specialGate = specialOpen && !specialUsable;
   const specialPlaying = specialOpen && specialUsable;
+  // The shared timer (same one for TEST RUN and the official round), and the
+  // "OFFICIAL" label, which appears once the deadline has passed.
+  const specialRun = activeRun(special);
+  const specialTimeUp =
+    useReached(
+      specialRun ? specialRun.startedAt + specialRun.durationMs : null,
+      special.clockOffset,
+    ) && specialPlaying;
+  const specialOfficial = useReached(
+    SPECIAL_ROUND_DEADLINE,
+    special.clockOffset,
+  );
+  const [endingTest, setEndingTest] = useState(false);
   // The round being worked on. 4 = the Special Round (its own song slot,
   // keyframes and code; Zone Map and Pins are the group's shared ones).
   // The Practice tab (5) is a normal round-like slot of its own next to it.
@@ -996,6 +1027,12 @@ async function handleFile(
                   className="sr-tab"
                 >
                   Special Round
+                  {specialOfficial && (
+                    <>
+                      {" — "}
+                      <span className="sr-official">Official</span>
+                    </>
+                  )}
                 </button>
 
                 <div
@@ -1073,13 +1110,49 @@ async function handleFile(
               />
             )}
 
+            {/* Special Round: developers' TEST RUN strip, and the big gold clock.
+                Both read the same shared timer the side panel does. */}
+            {specialPlaying && specialRun?.kind === "test" && isAdmin && (
+              <div className="sr-testbar text-center" role="status">
+                <p className="font-semibold uppercase tracking-widest">
+                  Test run · developers only
+                </p>
+                <p className="mt-1">
+                  This is exactly what groups get when the Special Round
+                  unlocks. Regular users can't see it, and the real round is
+                  still locked.
+                </p>
+                <button
+                  type="button"
+                  className="sr-ghost-btn mt-3"
+                  onClick={() => setEndingTest(true)}
+                >
+                  End test run
+                </button>
+              </div>
+            )}
+            {specialPlaying && specialRun && (
+              <SpecialTimerBanner
+                run={specialRun}
+                clockOffset={special.clockOffset}
+              />
+            )}
+            {specialPlaying && <SpecialWellDone finished={specialTimeUp} />}
+
             <div
               className={
-                timedActive && !timedPaused
+                (timedActive && !timedPaused) || (specialPlaying && specialRun)
                   ? "flex flex-col gap-8 lg:flex-row lg:items-start"
                   : undefined
               }
             >
+            {specialPlaying && specialRun && (
+              <SpecialTimerSidebar
+                run={specialRun}
+                clockOffset={special.clockOffset}
+                onOpenCode={() => selectTab("code")}
+              />
+            )}
             {timedActive && !timedPaused && (
               <TimedSidebar
                 status={timed.status}
@@ -1102,12 +1175,18 @@ async function handleFile(
               />
             )}
             <div
-              className={timedActive ? "min-w-0 flex-1" : undefined}
+              className={
+                timedActive || (specialPlaying && specialRun)
+                  ? "min-w-0 flex-1"
+                  : undefined
+              }
               inert={timedCountdown || undefined}
             >
-            {specialOpen && (
+            {specialGate && (
               <SpecialRoundPanel
                 clockOffset={special.clockOffset}
+                isAdmin={isAdmin}
+                onTestChanged={() => void special.refresh()}
               />
             )}
 
@@ -1365,15 +1444,15 @@ async function handleFile(
                 <SequenceEditor
                   key={`${animationChild.id}:${round === 4 ? special.songVersion ?? "" : ""}`}
                   audioSourceId={round === 4 ? SPECIAL_SONG_ID : undefined}
-                  readOnly={timedFinished}
+                  readOnly={timedFinished || specialTimeUp}
                   arrowKeys
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) => {
-                    if (!timedFrozen) setNodeFrames(animationChild.id, frames);
+                    if (!timedFrozen && !specialTimeUp) setNodeFrames(animationChild.id, frames);
                   }}
                   onTimingChange={(timing) => {
-                    if (!timedFrozen) setNodeTiming(animationChild.id, timing);
+                    if (!timedFrozen && !specialTimeUp) setNodeTiming(animationChild.id, timing);
                   }}
                   onSaveTransition={
                     round === 6
@@ -1412,13 +1491,13 @@ async function handleFile(
             )}
 
             {!trialOpen && groupTab === "gallery" && animationChild && (
-              <div className="mx-auto max-w-5xl" inert={timedFinished || undefined}>
+              <div className="mx-auto max-w-5xl" inert={timedFinished || specialTimeUp || undefined}>
                 <KeyframeGallery
                   key={animationChild.id}
                   groupNode={currentNode}
                   animationNode={animationChild}
                   onFramesChange={(frames) => {
-                    if (!timedFrozen) setNodeFrames(animationChild.id, frames);
+                    if (!timedFrozen && !specialTimeUp) setNodeFrames(animationChild.id, frames);
                   }}
                   transitions={round === 5 ? animationChild.transitions : undefined}
                   onTransitionsChange={
@@ -1452,6 +1531,28 @@ async function handleFile(
             )}
             </div>
             </div>
+
+            {endingTest && (
+              <ConfirmDialog
+                title="End the test run?"
+                checkboxLabel="I understand"
+                confirmLabel="End test run"
+                onCancel={() => setEndingTest(false)}
+                onConfirm={() => {
+                  setEndingTest(false);
+                  void setSpecialRoundTest(false)
+                    .catch((err) => console.error("Could not end the test run:", err))
+                    .finally(() => void special.refresh());
+                }}
+              >
+                <p>
+                  The test run ends for every developer. The Special Round goes
+                  back to its normal state: locked, or waiting for the system
+                  confirmation after the deadline. Nothing is unlocked and the
+                  deadline is not changed.
+                </p>
+              </ConfirmDialog>
+            )}
 
             {timedConfirm && (
               <ConfirmDialog

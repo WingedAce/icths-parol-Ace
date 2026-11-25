@@ -1,6 +1,12 @@
+import { useState } from "react";
+
 import logo from "../assets/logo.png";
 import { useServerNow } from "../lib/useSpecialRound";
-import { countdownAt, SPECIAL_ROUND_DEADLINE } from "../lib/specialRound";
+import {
+  countdownAt,
+  setSpecialRoundTest,
+  SPECIAL_ROUND_DEADLINE,
+} from "../lib/specialRound";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -23,6 +29,49 @@ function LockIcon({ open = false }: { open?: boolean }) {
   );
 }
 
+// TEST RUN: for signed-in developers only (it is not rendered for anyone else,
+// and the database refuses it for anyone who isn't a developer). It shows
+// every group's developers the same unlocked Special Round, on the same
+// timer, without unlocking the real round or touching the deadline. It is
+// separate from the "Unlock Special Round" switch in the Developer Window.
+function TestRunStart({ onChanged }: { onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function start() {
+    setBusy(true);
+    setError("");
+    try {
+      await setSpecialRoundTest(true);
+      onChanged();
+    } catch (err) {
+      console.error("Could not start the test run:", err);
+      setError("Couldn't start the test run. Check that the Special Round timer SQL was run in Supabase.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="sr-testbar mt-8 text-center">
+      <p className="font-semibold uppercase tracking-widest">Developers only</p>
+      <p className="mt-1">
+        Preview the unlocked Special Round exactly as groups will get it. Other
+        developers see it too. Regular users keep seeing this screen, and the
+        real round stays locked.
+      </p>
+      <button type="button" className="sr-gold-btn mt-3" disabled={busy} onClick={start}>
+        {busy ? "Starting..." : "TEST RUN"}
+      </button>
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-holly-soft">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // The Special Round screen, shown while groups can't use the round yet.
 //  - Before the deadline: logo, lock, LOCKED and a live countdown.
 //  - After the deadline: the countdown has ended, but the start time is not
@@ -30,7 +79,17 @@ function LockIcon({ open = false }: { open?: boolean }) {
 //    developer turning on "Unlock Special Round"). The page then opens by
 //    itself, no refresh needed.
 // `now` is the server-adjusted clock, ticking once a second.
-export default function SpecialRoundPanel({ clockOffset }: { clockOffset: number }) {
+export default function SpecialRoundPanel({
+  clockOffset,
+  isAdmin = false,
+  onTestChanged,
+}: {
+  clockOffset: number;
+  /** A signed-in developer: shows the TEST RUN button. */
+  isAdmin?: boolean;
+  /** Called after TEST RUN starts, so the page re-reads the shared state. */
+  onTestChanged?: () => void;
+}) {
   const now = useServerNow(true, clockOffset);
   const open = now >= SPECIAL_ROUND_DEADLINE;
   const left = countdownAt(now);
@@ -49,6 +108,7 @@ export default function SpecialRoundPanel({ clockOffset }: { clockOffset: number
           begins once the system confirms it. This page opens the round by
           itself, so you can stay here.
         </p>
+        {isAdmin && <TestRunStart onChanged={() => onTestChanged?.()} />}
       </section>
     );
   }
@@ -90,6 +150,7 @@ export default function SpecialRoundPanel({ clockOffset }: { clockOffset: number
         })}{" "}
         (Philippine Time)
       </p>
+      {isAdmin && <TestRunStart onChanged={() => onTestChanged?.()} />}
     </section>
   );
 }

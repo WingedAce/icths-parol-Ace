@@ -5,12 +5,22 @@ import ConfirmDialog from "./ConfirmDialog";
 import { deleteAudio } from "../lib/audioStore";
 import {
   removeSpecialRoundSongAndKeyframes,
+  setSpecialRoundDuration,
   setSpecialRoundSong,
+  setSpecialRoundTest,
   setSpecialRoundUnlocked,
   SPECIAL_ROUND_DEADLINE,
   SPECIAL_SONG_ID,
   type SpecialSong,
 } from "../lib/specialRound";
+import {
+  activeRun,
+  clampDuration,
+  formatClock,
+  MAX_DURATION_MIN,
+  MIN_DURATION_MIN,
+  timerAt,
+} from "../lib/specialTimer";
 import { useServerNow, useSpecialRound } from "../lib/useSpecialRound";
 import type { AudioAnalysis, ProjectNode } from "../types";
 
@@ -51,8 +61,10 @@ function Switch({
 // checked by the database). Nothing here can move the countdown: the
 // December 7 deadline is fixed in the code.
 export default function SpecialRoundAdmin() {
-  const special = useSpecialRound();
-  const [busy, setBusy] = useState<"" | "unlock" | "song">("");
+  // Re-read every 3 seconds: this window shows the live shared timer.
+  const special = useSpecialRound(3_000);
+  const [busy, setBusy] = useState<"" | "unlock" | "song" | "timer">("");
+  const [confirmEndTest, setConfirmEndTest] = useState(false);
   const [error, setError] = useState("");
   // Choosing a different song: the current one stays live for every group
   // until the new one has been analyzed and saved.
@@ -122,6 +134,64 @@ export default function SpecialRoundAdmin() {
   // The countdown has ended and groups are waiting for a developer to unlock.
   const needsUnlock = now >= SPECIAL_ROUND_DEADLINE && !special.unlocked && special.loaded;
 
+  // The shared timer: the very same start time and length every group uses
+  // (official round if unlocked, otherwise a TEST RUN), not a copy of its own.
+  const run = activeRun(special);
+  const liveNow = useServerNow(true, special.clockOffset, 500);
+  const timer = run ? timerAt(run, liveNow) : null;
+  const testOn = special.test?.active === true;
+
+  async function changeDuration(delta: number) {
+    if (busy || !special.loaded) return;
+    const next = clampDuration(special.durationMin + delta);
+    if (next === special.durationMin) return;
+    setBusy("timer");
+    setError("");
+    try {
+      await setSpecialRoundDuration(next);
+      special.setDurationLocal(next);
+      void special.refresh();
+    } catch (err) {
+      console.error("Special Round duration change failed:", err);
+      setError(FAIL);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function changeTest(active: boolean) {
+    if (busy) return;
+    setBusy("timer");
+    setError("");
+    try {
+      await setSpecialRoundTest(active);
+      void special.refresh();
+    } catch (err) {
+      console.error("Special Round test run change failed:", err);
+      setError(FAIL);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const officialLabel = !special.unlocked
+    ? "Not unlocked"
+    : timer?.finished
+      ? "Active, timer ended"
+      : "Active";
+  const testLabel = !testOn
+    ? "Off"
+    : special.unlocked
+      ? "On, but ignored while the official round is unlocked"
+      : timer?.finished
+        ? "Active, timer ended"
+        : "Active";
+  const timerLabel = !run
+    ? "No timer running"
+    : timer?.finished
+      ? "Ended"
+      : "Running";
+
   const song = special.song;
   // The uploader works on a stand-in node that only holds the song.
   const songNode: ProjectNode = {
@@ -184,6 +254,110 @@ export default function SpecialRoundAdmin() {
       </div>
 
       <div className="mt-4 border-t border-line/70 pt-4">
+        <p className="text-sm font-medium text-fg">Timer and test run</p>
+        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+          One shared timer for every group and device. It starts when the round
+          unlocks (or when a test run starts). When it reaches zero, groups can
+          only extract their code.
+        </p>
+
+        <div
+          className="sr-timer-banner mt-3"
+          role="timer"
+          aria-label="Special Round time left"
+        >
+          <p className="sr-timer-kicker">
+            {run ? (run.kind === "test" ? "Test run" : "Official round") : "Timer"}
+          </p>
+          <p
+            className={`sr-timer-digits sr-timer-digits-lg${
+              timer?.finished ? " sr-timer-done" : ""
+            }`}
+            aria-live="off"
+          >
+            {timer ? formatClock(timer.remainingMs) : "--:--"}
+          </p>
+          <p className="sr-timer-sub">{timerLabel}</p>
+        </div>
+
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+          <dt className="text-fg-muted">Official Special Round</dt>
+          <dd className="text-fg">{officialLabel}</dd>
+          <dt className="text-fg-muted">Test run</dt>
+          <dd className="text-fg">{testLabel}</dd>
+          <dt className="text-fg-muted">Configured duration</dt>
+          <dd className="text-fg">{special.durationMin} minutes</dd>
+        </dl>
+
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-fg">Duration</p>
+            <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+              1 to {MAX_DURATION_MIN} minutes. Takes effect for every group
+              right away, even while the timer is running.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              aria-label="Decrease duration by one minute"
+              className="sr-ghost-btn"
+              disabled={
+                busy !== "" || !special.loaded || special.durationMin <= MIN_DURATION_MIN
+              }
+              onClick={() => void changeDuration(-1)}
+            >
+              −
+            </button>
+            <span
+              className="w-20 text-center font-mono text-sm tabular-nums text-fg"
+              aria-live="polite"
+            >
+              {special.durationMin} min
+            </span>
+            <button
+              type="button"
+              aria-label="Increase duration by one minute"
+              className="sr-ghost-btn"
+              disabled={
+                busy !== "" || !special.loaded || special.durationMin >= MAX_DURATION_MIN
+              }
+              onClick={() => void changeDuration(1)}
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {testOn ? (
+            <button
+              type="button"
+              className="sr-ghost-btn"
+              disabled={busy !== ""}
+              onClick={() => setConfirmEndTest(true)}
+            >
+              End test run
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="sr-gold-btn"
+              disabled={busy !== "" || !special.loaded || special.unlocked}
+              onClick={() => void changeTest(true)}
+            >
+              TEST RUN
+            </button>
+          )}
+          <p className="text-xs text-fg-muted">
+            {special.unlocked
+              ? "The official round is unlocked, so a test run isn't needed."
+              : "Developers see the unlocked round on the shared timer. Regular users don't, and nothing is unlocked."}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-line/70 pt-4">
         <p className="text-sm font-medium text-fg">Special Round song</p>
         <p className="mt-1 text-xs leading-relaxed text-fg-muted">
           One song for every group, new and existing. Groups keep their own
@@ -232,6 +406,25 @@ export default function SpecialRoundAdmin() {
           )}
         </div>
       </div>
+
+      {confirmEndTest && (
+        <ConfirmDialog
+          title="End the test run?"
+          checkboxLabel="I understand"
+          confirmLabel="End test run"
+          onConfirm={() => {
+            setConfirmEndTest(false);
+            void changeTest(false);
+          }}
+          onCancel={() => setConfirmEndTest(false)}
+        >
+          <p>
+            The test run ends for every developer. The Special Round goes back
+            to its normal state. Nothing is unlocked and the deadline is not
+            changed.
+          </p>
+        </ConfirmDialog>
+      )}
 
       {confirmRemove && (
         <ConfirmDialog
