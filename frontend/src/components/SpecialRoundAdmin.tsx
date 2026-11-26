@@ -60,11 +60,32 @@ function Switch({
 // Window (the page itself is behind the admin gate, and every change is also
 // checked by the database). Nothing here can move the countdown: the
 // December 7 deadline is fixed in the code.
+// Where this browser remembers whether the Special Round section is open.
+const OPEN_KEY = "parol-dev-special-round";
+
 export default function SpecialRoundAdmin() {
   // Re-read every 2 seconds: this window shows the live shared timer.
   const special = useSpecialRound(2_000);
   const [busy, setBusy] = useState<"" | "unlock" | "song" | "timer">("");
   const [confirmEndTest, setConfirmEndTest] = useState(false);
+  // Open / closed (the arrow in the header). Remembered on this browser only.
+  const [open, setOpen] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(OPEN_KEY) !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  function toggleOpen() {
+    setOpen((was) => {
+      try {
+        window.localStorage.setItem(OPEN_KEY, was ? "closed" : "open");
+      } catch {
+        // Not remembering is fine.
+      }
+      return !was;
+    });
+  }
   const [error, setError] = useState("");
   // Choosing a different song: the current one stays live for every group
   // until the new one has been analyzed and saved.
@@ -217,9 +238,31 @@ export default function SpecialRoundAdmin() {
       aria-label="Special Round controls"
       className="mt-8 rounded-2xl border border-[#e6c15a]/50 bg-surface px-5 py-5"
     >
-      <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#f1cf72]">
-        Special Round
-      </p>
+      <button
+        type="button"
+        onClick={toggleOpen}
+        aria-expanded={open}
+        aria-controls="sr-admin-body"
+        className="flex w-full cursor-pointer items-center justify-between gap-3 text-left"
+      >
+        <span className="text-xs font-medium uppercase tracking-[0.2em] text-[#f1cf72]">
+          Special Round
+        </span>
+        <span
+          aria-hidden="true"
+          className="text-sm leading-none text-[#f1cf72]"
+          title={open ? "Close" : "Open"}
+        >
+          {open ? "▲" : "▼"}
+        </span>
+      </button>
+      {!open && (
+        <p className="mt-2 text-xs text-fg-muted">
+          Official: {officialLabel} · Test run: {testLabel}
+          {timer ? ` · Timer: ${formatClock(timer.remainingMs)}` : ""} ·{" "}
+          {special.durationMin} min
+        </p>
+      )}
 
       {needsUnlock && (
         <div
@@ -232,6 +275,9 @@ export default function SpecialRoundAdmin() {
         </div>
       )}
 
+      {/* Everything below opens and closes. It stays mounted (just hidden) so
+          nothing in it is lost, e.g. a song being uploaded. */}
+      <div id="sr-admin-body" hidden={!open}>
       <div
         className={`mt-4 flex items-center justify-between gap-4 rounded-xl ${
           needsUnlock ? "sr-reminder-row px-4 py-3" : ""
@@ -407,6 +453,8 @@ export default function SpecialRoundAdmin() {
             </button>
           )}
         </div>
+      </div>
+
       </div>
 
       {confirmEndTest && (
