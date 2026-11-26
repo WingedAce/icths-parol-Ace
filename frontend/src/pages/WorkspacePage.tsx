@@ -228,10 +228,10 @@ function WorkspacePage() {
   );
   const specialOpen: boolean =
     specialState.path === pathKey && specialState.open;
-  // While the Special Round tab is open the shared state is re-read every few
+  // While the Special Round tab is open the shared state is re-read every 2
   // seconds (otherwise every 30 s), so an unlock, a TEST RUN or a new timer
-  // length reaches every group quickly.
-  const special = useSpecialRound(specialOpen ? 5_000 : undefined);
+  // length reaches every group almost at once.
+  const special = useSpecialRound(specialOpen ? 2_000 : undefined);
   const isAdmin = useIsAdmin();
   // The Special Round works like a round (Song, Preview, Gallery, Code) only
   // while a developer has it unlocked, or while a developer's TEST RUN is on
@@ -251,7 +251,7 @@ function WorkspacePage() {
       specialRun ? runEndsAt(specialRun) : null,
       special.clockOffset,
     ) && specialPlaying;
-  // The 10-second GET READY! countdown: the workspace is covered and can't be
+  // The 15-second GET READY! countdown: the workspace is covered and can't be
   // touched until it ends, and the minutes start after it.
   const specialLeadOver = useReached(
     specialRun ? runBeginsAt(specialRun) : null,

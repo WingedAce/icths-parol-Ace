@@ -65,22 +65,23 @@ test("remaining time counts down and hits zero exactly at the end", () => {
   assert.equal(timerAt(run, begin + 99 * MIN).remainingMs, 0);
 });
 
-test("GET READY! lasts 10 seconds: counts 10..1, shows the full time, then starts", () => {
-  assert.equal(LEAD_IN_MS, 10_000);
+test("GET READY! lasts 15 seconds: counts 15..1, shows the full time, then starts", () => {
+  assert.equal(LEAD_IN_MS, 15_000);
   const run = { kind: "official" as const, startedAt: 5_000_000, durationMs: 15 * MIN };
-  assert.equal(runBeginsAt(run), 5_010_000);
-  assert.equal(runEndsAt(run), 5_010_000 + 15 * MIN);
+  assert.equal(runBeginsAt(run), 5_015_000);
+  assert.equal(runEndsAt(run), 5_015_000 + 15 * MIN);
   const first = timerAt(run, 5_000_000);
   assert.equal(first.counting, true);
-  assert.equal(Math.ceil(first.countdownMs / 1000), 10);
+  assert.equal(Math.ceil(first.countdownMs / 1000), 15);
   assert.equal(first.remainingMs, 15 * MIN); // minutes have not started
-  assert.equal(Math.ceil(timerAt(run, 5_000_000 + 4_500).countdownMs / 1000), 6);
-  assert.equal(Math.ceil(timerAt(run, 5_009_999).countdownMs / 1000), 1);
-  const go = timerAt(run, 5_010_000);
+  // someone who opens the tab 8 seconds in sees 7, like everyone else
+  assert.equal(Math.ceil(timerAt(run, 5_000_000 + 8_000).countdownMs / 1000), 7);
+  assert.equal(Math.ceil(timerAt(run, 5_014_999).countdownMs / 1000), 1);
+  const go = timerAt(run, 5_015_000);
   assert.equal(go.counting, false);
   assert.equal(go.countdownMs, 0);
   assert.equal(go.finished, false);
-  assert.equal(timerAt(run, 5_010_000 + 1000).remainingMs, 15 * MIN - 1000);
+  assert.equal(timerAt(run, 5_015_000 + 1000).remainingMs, 15 * MIN - 1000);
 });
 
 test("a clock slightly before the start never shows more than the total", () => {

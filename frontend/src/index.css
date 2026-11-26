@@ -1763,7 +1763,7 @@ button,
 .sr-ghost-btn:hover:not(:disabled) { background: rgba(230, 193, 90, 0.14); }
 .sr-ghost-btn:disabled { opacity: 0.5; cursor: default; }
 
-/* GET READY! 10-second countdown: gold on translucent black. */
+/* GET READY! 15-second countdown: gold on translucent black. */
 .sr-getready {
   position: fixed;
   inset: 0;

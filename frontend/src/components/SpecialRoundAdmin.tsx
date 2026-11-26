@@ -61,8 +61,8 @@ function Switch({
 // checked by the database). Nothing here can move the countdown: the
 // December 7 deadline is fixed in the code.
 export default function SpecialRoundAdmin() {
-  // Re-read every 3 seconds: this window shows the live shared timer.
-  const special = useSpecialRound(3_000);
+  // Re-read every 2 seconds: this window shows the live shared timer.
+  const special = useSpecialRound(2_000);
   const [busy, setBusy] = useState<"" | "unlock" | "song" | "timer">("");
   const [confirmEndTest, setConfirmEndTest] = useState(false);
   const [error, setError] = useState("");

@@ -8,11 +8,11 @@ export const MIN_DURATION_MIN = 1;
 export const MAX_DURATION_MIN = 60;
 
 /**
- * The "GET READY!" countdown (10, 9, ... 1) before the minutes start. It is
+ * The "GET READY!" countdown (15, 14, ... 1) before the minutes start. It is
  * part of the run: it begins at the shared start time, and the round's
  * minutes begin LEAD_IN_MS later, so every device sees the same number.
  */
-export const LEAD_IN_MS = 10_000;
+export const LEAD_IN_MS = 15_000;
 
 /** The official round (unlock switch) or a developers-only TEST RUN. */
 export type SpecialRunKind = "official" | "test";
@@ -28,7 +28,7 @@ export type SpecialTimer = {
   totalMs: number;
   remainingMs: number;
   finished: boolean;
-  /** True during the 10-second GET READY! countdown (minutes not started). */
+  /** True during the 15-second GET READY! countdown (minutes not started). */
   counting: boolean;
   /** Time left in the GET READY! countdown (0 once the minutes have started). */
   countdownMs: number;

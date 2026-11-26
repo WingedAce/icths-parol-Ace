@@ -5,6 +5,7 @@
 
 import type { AudioAnalysis } from "../types";
 import { ensureSession, supabase } from "./supabase";
+import { notifySpecialRoundChanged } from "./specialRoundSignal";
 import { clampDuration, DEFAULT_DURATION_MIN } from "./specialTimer";
 
 // The one song every group uses in the Special Round. The mp3 is kept in the
@@ -89,6 +90,7 @@ export async function setSpecialRoundDuration(minutes: number): Promise<void> {
     p_minutes: clampDuration(minutes),
   });
   if (error) throw error;
+  void notifySpecialRoundChanged();
 }
 
 /**
@@ -101,6 +103,7 @@ export async function setSpecialRoundTest(active: boolean): Promise<void> {
     p_active: active,
   });
   if (error) throw error;
+  void notifySpecialRoundChanged();
 }
 
 /** Developer only (the database checks is_admin()). The only thing that lets groups use the round. */
@@ -110,6 +113,7 @@ export async function setSpecialRoundUnlocked(unlocked: boolean): Promise<void> 
     p_unlocked: unlocked,
   });
   if (error) throw error;
+  void notifySpecialRoundChanged();
 }
 
 export async function fetchSpecialRoundSong(): Promise<SpecialSong | null> {

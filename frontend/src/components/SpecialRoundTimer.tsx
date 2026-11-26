@@ -124,7 +124,7 @@ const READY_MESSAGES = [
   "REMEMBER: THE SONG IS PRE-UPLOADED FOR THIS ROUND",
 ];
 
-// The 10 ... 1 countdown before the minutes start: gold digits on a
+// The 15 ... 1 countdown before the minutes start: gold digits on a
 // translucent black screen, like Practice's get-ready but gold. It covers the
 // workspace (so nothing can be touched), and everyone sees the same number
 // because it is worked out from the shared start time.

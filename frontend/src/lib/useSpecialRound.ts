@@ -6,6 +6,7 @@ import {
   type SpecialRoundStatus,
   type SpecialSong,
 } from "./specialRound";
+import { onSpecialRoundSignal } from "./specialRoundSignal";
 import { DEFAULT_DURATION_MIN } from "./specialTimer";
 
 // How often the shared settings are re-read. 30 s normally; callers that show
@@ -72,6 +73,10 @@ export function useSpecialRound(pollMs: number = POLL_MS) {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh, pollMs]);
+
+  // A developer pressed TEST RUN / Unlock / changed the duration somewhere:
+  // re-read right away instead of waiting for the next check.
+  useEffect(() => onSpecialRoundSignal(() => void refresh()), [refresh]);
 
   // Download the song when it is new or has been replaced.
   useEffect(() => {
