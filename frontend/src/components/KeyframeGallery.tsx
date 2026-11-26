@@ -1161,6 +1161,10 @@ function KeyframeGallery({
 }: KeyframeGalleryProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Select mode: tick keyframes, then remove the in-betweens after them.
+  const [selectMode, setSelectMode] = useState(false);
+  const [pickedIds, setPickedIds] = useState<string[]>([]);
+
   // The beat grid with any BPM change points applied, so the in-betweens
   // follow the same beats as the Preview tab. Worked out again only when the
   // song or its BPM changes move, not on every redraw.
@@ -1290,22 +1294,105 @@ function KeyframeGallery({
   }
 
   // ---- Gallery: every keyframe, five to a row ----
+  // The last keyframe has no transition after it, so it can't be picked.
+  const lastId = keyframes[keyframes.length - 1].id;
+  const pickable = keyframes.filter((f) => f.id !== lastId);
+  const picked = pickable.filter((f) => pickedIds.includes(f.id));
+  const withInbetweens = picked.filter(
+    (f) => (f.transition ?? "hold") !== "hold",
+  );
+
+  const togglePicked = (id: string) =>
+    setPickedIds((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+    );
+
+  const leaveSelectMode = () => {
+    setSelectMode(false);
+    setPickedIds([]);
+  };
+
+  // Only the transition is switched to Hold (no in-betweens). The keyframes,
+  // their pins and any hand-made in-betweens stay saved on the keyframe, so
+  // choosing Manual again on that pair brings them back.
+  const removeInbetweens = () => {
+    if (withInbetweens.length === 0) return;
+    if (
+      !window.confirm(
+        `Remove the in-betweens after ${withInbetweens.length} keyframe${
+          withInbetweens.length === 1 ? "" : "s"
+        }? The keyframes themselves stay, and each transition becomes Hold (no in-betweens).`,
+      )
+    ) {
+      return;
+    }
+    const ids = new Set(withInbetweens.map((f) => f.id));
+    onFramesChange(
+      (animationNode.frames ?? []).map((f) =>
+        ids.has(f.id) ? { ...f, transition: "hold" as const } : f,
+      ),
+    );
+    leaveSelectMode();
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-fg-muted">
-        {keyframes.length} keyframe{keyframes.length === 1 ? "" : "s"}. Click
-        one to see it next to the keyframe that follows and edit the
-        transition between them.
+        {keyframes.length} keyframe{keyframes.length === 1 ? "" : "s"}.{" "}
+        {selectMode
+          ? "Tick the keyframes whose in-betweens (the transition after them) you want to remove."
+          : "Click one to see it next to the keyframe that follows and edit the transition between them."}
       </p>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <button
+          onClick={() => (selectMode ? leaveSelectMode() : setSelectMode(true))}
+          className="cursor-pointer rounded-full bg-elevated px-4 py-2 text-fg-soft transition hover:bg-line-strong hover:text-fg"
+        >
+          {selectMode ? "Done selecting" : "Select keyframes"}
+        </button>
+        {selectMode && (
+          <>
+            <button
+              onClick={() =>
+                setPickedIds(
+                  picked.length === pickable.length
+                    ? []
+                    : pickable.map((f) => f.id),
+                )
+              }
+              className="cursor-pointer rounded-full bg-elevated px-4 py-2 text-fg-soft transition hover:bg-line-strong hover:text-fg"
+            >
+              {picked.length === pickable.length ? "Clear" : "Select all"}
+            </button>
+            <button
+              onClick={removeInbetweens}
+              disabled={withInbetweens.length === 0}
+              className="cursor-pointer rounded-full bg-elevated px-4 py-2 text-fg transition hover:bg-line-strong disabled:cursor-default disabled:opacity-40"
+            >
+              Remove in-betweens ({withInbetweens.length})
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {keyframes.map((frame, index) => (
           <button
             key={frame.id}
-            onClick={() => setSelectedId(frame.id)}
+            onClick={() => {
+              if (!selectMode) setSelectedId(frame.id);
+              else if (frame.id !== lastId) togglePicked(frame.id);
+            }}
             className="group min-w-0 cursor-pointer text-left"
           >
-            <div className="relative rounded-xl ring-1 ring-transparent transition group-hover:ring-line-hover">
+            <div
+              className={`relative rounded-xl ring-1 transition group-hover:ring-line-hover ${
+                pickedIds.includes(frame.id)
+                  ? "ring-2 ring-sky-400"
+                  : "ring-transparent"
+              } ${selectMode && frame.id === lastId ? "opacity-40" : ""}`}
+            >
               <LazyMount>
                 <ParolPreview
                   node={groupNode}
@@ -1320,6 +1407,11 @@ function KeyframeGallery({
             </div>
             <p className="mt-2 text-xs text-fg-muted">
               {formatTime(frame.time)} · {pinsOnLabel(frame)}
+              {selectMode && frame.id !== lastId
+                ? (frame.transition ?? "hold") === "hold"
+                  ? " · no in-betweens"
+                  : ` · ${presetLabel(frame.transition as Preset)}`
+                : ""}
             </p>
           </button>
         ))}
