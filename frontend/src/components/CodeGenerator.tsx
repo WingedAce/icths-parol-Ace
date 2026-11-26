@@ -159,7 +159,9 @@ ${tables.map((_, i) => `    case ${i}: return pgm_get_far_address(SHOW${i});`).j
 const uint16_t ROWS_PER_TABLE = ${ROWS_PER_TABLE};
 uint32_t tableAddress(uint8_t) { return 0; }`;
 
-  return `#include <avr/pgmspace.h>
+  return `// Engineered by I-Parol Synapse - Where intelligence meets illumination.
+
+#include <avr/pgmspace.h>
 
 // The show tables can total more than 64KB. In the normal PROGMEM area they push the
 // Arduino core's own pin tables above 64KB, where its 16-bit reads fail and
