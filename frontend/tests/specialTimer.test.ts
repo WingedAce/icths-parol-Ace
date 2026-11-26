@@ -8,6 +8,9 @@ import {
   clampDuration,
   DEFAULT_DURATION_MIN,
   formatClock,
+  LEAD_IN_MS,
+  runBeginsAt,
+  runEndsAt,
   timerAt,
 } from "../src/lib/specialTimer.ts";
 
@@ -50,14 +53,34 @@ test("unlocked without a known start time has no timer (old database)", () => {
 });
 
 test("remaining time counts down and hits zero exactly at the end", () => {
-  const run = { kind: "official" as const, startedAt: 1_000_000, durationMs: 15 * MIN };
-  assert.equal(timerAt(run, 1_000_000).remainingMs, 15 * MIN);
-  assert.equal(timerAt(run, 1_000_000 + 5 * MIN).remainingMs, 10 * MIN);
-  assert.equal(timerAt(run, 1_000_000 + 15 * MIN - 1).finished, false);
-  const end = timerAt(run, 1_000_000 + 15 * MIN);
+  const start = 1_000_000;
+  const begin = start + LEAD_IN_MS; // the minutes start after GET READY!
+  const run = { kind: "official" as const, startedAt: start, durationMs: 15 * MIN };
+  assert.equal(timerAt(run, begin).remainingMs, 15 * MIN);
+  assert.equal(timerAt(run, begin + 5 * MIN).remainingMs, 10 * MIN);
+  assert.equal(timerAt(run, begin + 15 * MIN - 1).finished, false);
+  const end = timerAt(run, begin + 15 * MIN);
   assert.equal(end.finished, true);
   assert.equal(end.remainingMs, 0);
-  assert.equal(timerAt(run, 1_000_000 + 99 * MIN).remainingMs, 0);
+  assert.equal(timerAt(run, begin + 99 * MIN).remainingMs, 0);
+});
+
+test("GET READY! lasts 10 seconds: counts 10..1, shows the full time, then starts", () => {
+  assert.equal(LEAD_IN_MS, 10_000);
+  const run = { kind: "official" as const, startedAt: 5_000_000, durationMs: 15 * MIN };
+  assert.equal(runBeginsAt(run), 5_010_000);
+  assert.equal(runEndsAt(run), 5_010_000 + 15 * MIN);
+  const first = timerAt(run, 5_000_000);
+  assert.equal(first.counting, true);
+  assert.equal(Math.ceil(first.countdownMs / 1000), 10);
+  assert.equal(first.remainingMs, 15 * MIN); // minutes have not started
+  assert.equal(Math.ceil(timerAt(run, 5_000_000 + 4_500).countdownMs / 1000), 6);
+  assert.equal(Math.ceil(timerAt(run, 5_009_999).countdownMs / 1000), 1);
+  const go = timerAt(run, 5_010_000);
+  assert.equal(go.counting, false);
+  assert.equal(go.countdownMs, 0);
+  assert.equal(go.finished, false);
+  assert.equal(timerAt(run, 5_010_000 + 1000).remainingMs, 15 * MIN - 1000);
 });
 
 test("a clock slightly before the start never shows more than the total", () => {
@@ -65,11 +88,12 @@ test("a clock slightly before the start never shows more than the total", () => 
   const t = timerAt(run, 1_000_000 - 3000);
   assert.equal(t.remainingMs, 15 * MIN);
   assert.equal(t.finished, false);
+  assert.equal(t.counting, true);
 });
 
 test("devices with different local clocks agree once adjusted to the server", () => {
   const run = { kind: "official" as const, startedAt: 2_000_000, durationMs: 15 * MIN };
-  const serverNow = 2_000_000 + 7 * MIN;
+  const serverNow = 2_000_000 + LEAD_IN_MS + 7 * MIN;
   // device A is 3 minutes fast, device B is 40 seconds slow
   const aLocal = serverNow + 3 * MIN;
   const bLocal = serverNow - 40_000;
@@ -83,7 +107,7 @@ test("devices with different local clocks agree once adjusted to the server", ()
 
 test("changing the duration changes the end for everyone", () => {
   const start = 3_000_000;
-  const at = start + 14 * MIN;
+  const at = start + LEAD_IN_MS + 14 * MIN;
   const before = timerAt({ kind: "official", startedAt: start, durationMs: 15 * MIN }, at);
   const after = timerAt({ kind: "official", startedAt: start, durationMs: 20 * MIN }, at);
   assert.equal(before.remainingMs, 1 * MIN);

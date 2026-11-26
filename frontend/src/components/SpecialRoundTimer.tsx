@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useServerNow } from "../lib/useSpecialRound";
-import { formatClock, timerAt, type SpecialRun } from "../lib/specialTimer";
+import {
+  formatClock,
+  LEAD_IN_MS,
+  timerAt,
+  type SpecialRun,
+} from "../lib/specialTimer";
 
 // The Special Round's timer, in gold. Same layout as the Practice timer
 // (a panel at the side), plus a big clock above the workspace. Every device
@@ -109,6 +114,46 @@ export function SpecialTimerSidebar({
         </p>
       )}
     </aside>
+  );
+}
+
+// What the GET READY! screen says. It changes every 2 seconds, in this order.
+const READY_MESSAGES = [
+  "GET READY!",
+  "GOOD LUCK!",
+  "REMEMBER: THE SONG IS PRE-UPLOADED FOR THIS ROUND",
+];
+
+// The 10 ... 1 countdown before the minutes start: gold digits on a
+// translucent black screen, like Practice's get-ready but gold. It covers the
+// workspace (so nothing can be touched), and everyone sees the same number
+// because it is worked out from the shared start time.
+export function SpecialGetReady({ run, clockOffset }: TimerProps) {
+  const now = useServerNow(true, clockOffset, 100);
+  const left = Math.max(0, run.startedAt + LEAD_IN_MS - now);
+  if (left <= 0) return null;
+  const seconds = Math.ceil(left / 1000);
+  const elapsed = Math.min(LEAD_IN_MS, Math.max(0, now - run.startedAt));
+  const message =
+    READY_MESSAGES[Math.floor(elapsed / 2000) % READY_MESSAGES.length];
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-label="Special Round starting"
+      className="sr-getready"
+    >
+      <p key={message} className="sr-getready-msg">
+        {message}
+      </p>
+      <p className="sr-getready-digits" aria-live="off">
+        {seconds}
+      </p>
+      <p className="sr-getready-sub">
+        {run.kind === "test" ? "Test run. " : ""}Your timer starts when this
+        reaches zero.
+      </p>
+    </div>
   );
 }
 

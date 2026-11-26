@@ -1762,3 +1762,47 @@ button,
 }
 .sr-ghost-btn:hover:not(:disabled) { background: rgba(230, 193, 90, 0.14); }
 .sr-ghost-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* GET READY! 10-second countdown: gold on translucent black. */
+.sr-getready {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(3px);
+}
+.sr-getready-msg {
+  min-height: 3.5rem;
+  max-width: 30rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
+  color: #f6dc8a;
+  text-shadow: 0 0 18px rgba(240, 207, 117, 0.55);
+  animation: sr-getready-msg-in 0.35s ease-out both;
+}
+@media (min-width: 640px) { .sr-getready-msg { font-size: 2.1rem; } }
+.sr-getready-digits {
+  margin-top: 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 8rem;
+  line-height: 1;
+  font-weight: 700;
+  color: #f1cf72;
+  text-shadow: 0 0 30px rgba(240, 207, 117, 0.6);
+}
+@media (min-width: 640px) { .sr-getready-digits { font-size: 11rem; } }
+.sr-getready-sub { margin-top: 1.25rem; font-size: 0.85rem; color: #fff3c9; opacity: 0.85; }
+@keyframes sr-getready-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .sr-getready-msg { animation: none; } }

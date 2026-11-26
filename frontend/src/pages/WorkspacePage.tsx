@@ -56,9 +56,10 @@ import {
   SPECIAL_ROUND_DEADLINE,
   SPECIAL_SONG_ID,
 } from "../lib/specialRound";
-import { activeRun } from "../lib/specialTimer";
+import { activeRun, runBeginsAt, runEndsAt } from "../lib/specialTimer";
 import { useIsAdmin } from "../lib/useIsAdmin";
 import {
+  SpecialGetReady,
   SpecialTimerBanner,
   SpecialTimerSidebar,
   SpecialWellDone,
@@ -247,9 +248,17 @@ function WorkspacePage() {
   const specialRun = activeRun(special);
   const specialTimeUp =
     useReached(
-      specialRun ? specialRun.startedAt + specialRun.durationMs : null,
+      specialRun ? runEndsAt(specialRun) : null,
       special.clockOffset,
     ) && specialPlaying;
+  // The 10-second GET READY! countdown: the workspace is covered and can't be
+  // touched until it ends, and the minutes start after it.
+  const specialLeadOver = useReached(
+    specialRun ? runBeginsAt(specialRun) : null,
+    special.clockOffset,
+  );
+  const specialCountdown =
+    specialPlaying && specialRun != null && !specialLeadOver;
   const specialOfficial = useReached(
     SPECIAL_ROUND_DEADLINE,
     special.clockOffset,
@@ -1138,6 +1147,12 @@ async function handleFile(
               />
             )}
             {specialPlaying && <SpecialWellDone finished={specialTimeUp} />}
+            {specialCountdown && specialRun && (
+              <SpecialGetReady
+                run={specialRun}
+                clockOffset={special.clockOffset}
+              />
+            )}
 
             <div
               className={
@@ -1180,7 +1195,7 @@ async function handleFile(
                   ? "min-w-0 flex-1"
                   : undefined
               }
-              inert={timedCountdown || undefined}
+              inert={timedCountdown || specialCountdown || undefined}
             >
             {specialGate && (
               <SpecialRoundPanel
@@ -1444,7 +1459,7 @@ async function handleFile(
                 <SequenceEditor
                   key={`${animationChild.id}:${round === 4 ? special.songVersion ?? "" : ""}`}
                   audioSourceId={round === 4 ? SPECIAL_SONG_ID : undefined}
-                  readOnly={timedFinished || specialTimeUp}
+                  readOnly={timedFinished || specialTimeUp || specialCountdown}
                   arrowKeys
                   groupNode={currentNode}
                   animationNode={animationChild}

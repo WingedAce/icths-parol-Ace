@@ -190,7 +190,9 @@ export default function SpecialRoundAdmin() {
     ? "No timer running"
     : timer?.finished
       ? "Ended"
-      : "Running";
+      : timer?.counting
+        ? `Get ready: starts in ${Math.ceil(timer.countdownMs / 1000)} s`
+        : "Running";
 
   const song = special.song;
   // The uploader works on a stand-in node that only holds the song.

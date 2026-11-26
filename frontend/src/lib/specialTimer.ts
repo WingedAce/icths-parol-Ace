@@ -7,6 +7,13 @@ export const DEFAULT_DURATION_MIN = 15;
 export const MIN_DURATION_MIN = 1;
 export const MAX_DURATION_MIN = 60;
 
+/**
+ * The "GET READY!" countdown (10, 9, ... 1) before the minutes start. It is
+ * part of the run: it begins at the shared start time, and the round's
+ * minutes begin LEAD_IN_MS later, so every device sees the same number.
+ */
+export const LEAD_IN_MS = 10_000;
+
 /** The official round (unlock switch) or a developers-only TEST RUN. */
 export type SpecialRunKind = "official" | "test";
 
@@ -21,7 +28,21 @@ export type SpecialTimer = {
   totalMs: number;
   remainingMs: number;
   finished: boolean;
+  /** True during the 10-second GET READY! countdown (minutes not started). */
+  counting: boolean;
+  /** Time left in the GET READY! countdown (0 once the minutes have started). */
+  countdownMs: number;
 };
+
+/** When the minutes start running (after the GET READY! countdown). */
+export function runBeginsAt(run: SpecialRun): number {
+  return run.startedAt + LEAD_IN_MS;
+}
+
+/** When the round ends: the GET READY! countdown plus the full duration. */
+export function runEndsAt(run: SpecialRun): number {
+  return run.startedAt + LEAD_IN_MS + run.durationMs;
+}
 
 type RunSource = {
   unlocked: boolean;
@@ -56,14 +77,20 @@ export function activeRun(source: RunSource): SpecialRun | null {
   return null;
 }
 
-/** Time left at `now` (server-adjusted ms). Never negative, never above the total. */
+/**
+ * Time left at `now` (server-adjusted ms). Never negative, never above the
+ * total. During the GET READY! countdown the full duration is shown.
+ */
 export function timerAt(run: SpecialRun, now: number): SpecialTimer {
-  const endsAt = run.startedAt + run.durationMs;
+  const endsAt = runEndsAt(run);
   const remainingMs = Math.min(run.durationMs, Math.max(0, endsAt - now));
+  const countdownMs = Math.max(0, runBeginsAt(run) - now);
   return {
     totalMs: run.durationMs,
     remainingMs,
     finished: now >= endsAt,
+    counting: countdownMs > 0,
+    countdownMs,
   };
 }
 
