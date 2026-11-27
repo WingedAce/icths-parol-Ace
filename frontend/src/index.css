@@ -1670,8 +1670,10 @@ button,
   color: #f1cf72;
   text-shadow: 0 0 12px rgba(240, 207, 117, 0.45);
 }
+.sr-welldone-side::before, .sr-welldone-side::after { content: " ✦ "; color: #e23b3b; }
 
-/* WELL DONE! pop-up: floats over the page and never blocks clicks. */
+/* WELL DONE! pop-up: floats over the page and never blocks clicks.
+   Christmas themed: string lights, snow, confetti, twinkling stars, gold. */
 .sr-welldone {
   position: fixed;
   inset: 0;
@@ -1680,25 +1682,98 @@ button,
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  animation: sr-welldone-in 0.5s ease-out both;
+  animation: sr-welldone-in 0.5s ease-out both, sr-welldone-out 0.8s ease-in 9.2s both;
+}
+.sr-welldone-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(240, 207, 117, 0.22), transparent 55%),
+    radial-gradient(ellipse at 15% 100%, rgba(226, 59, 59, 0.2), transparent 50%),
+    radial-gradient(ellipse at 85% 100%, rgba(47, 168, 79, 0.2), transparent 50%);
+  animation: sr-glow-pulse 2.4s ease-in-out infinite;
 }
 .sr-welldone-card {
-  padding: 2rem 2.5rem;
+  position: relative;
+  max-width: calc(100vw - 2rem);
+  padding: 2rem 2.5rem 1.75rem;
   text-align: center;
   border: 2px solid #e6c15a;
   border-radius: 1.5rem;
-  background: rgba(20, 16, 6, 0.92);
-  box-shadow: 0 0 60px rgba(240, 207, 117, 0.45), inset 0 0 24px rgba(240, 207, 117, 0.12);
+  background: linear-gradient(180deg, rgba(40, 10, 14, 0.94), rgba(10, 26, 16, 0.94));
+  box-shadow:
+    0 0 0 4px rgba(20, 16, 6, 0.9),
+    0 0 0 6px #c8102e,
+    0 0 60px rgba(240, 207, 117, 0.5),
+    inset 0 0 28px rgba(240, 207, 117, 0.14);
+  animation: sr-card-pop 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
+.sr-welldone-deco { font-size: 1.4rem; letter-spacing: 0.2em; margin-bottom: 0.25rem; color: #fff; text-shadow: 0 0 10px rgba(255, 255, 255, 0.7); }
 .sr-welldone-title {
   font-size: 2.75rem;
+  line-height: 1.1;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #f6dc8a;
-  text-shadow: 0 0 22px rgba(240, 207, 117, 0.7);
+  background: linear-gradient(100deg, #e0b24a 10%, #fff3c9 30%, #f6dc8a 45%, #fff 50%, #f6dc8a 55%, #e8bb4f 70%, #e0b24a 90%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 16px rgba(240, 207, 117, 0.65));
+  animation: sr-title-shimmer 2.6s linear infinite;
 }
 @media (min-width: 640px) { .sr-welldone-title { font-size: 4rem; } }
-.sr-welldone-note { margin-top: 0.6rem; max-width: 22rem; font-size: 0.9rem; color: #fff3c9; }
+.sr-welldone-cheer {
+  margin-top: 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ff8a8a;
+  text-shadow: 0 0 12px rgba(226, 59, 59, 0.55);
+}
+.sr-welldone-note { margin: 0.6rem auto 0; max-width: 22rem; font-size: 0.85rem; color: #fff3c9; }
+
+/* string lights along the top edge */
+.sr-lights { position: absolute; inset: 0 0 auto 0; height: 3.5rem; }
+.sr-lights::before {
+  content: "";
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  top: 0.9rem;
+  height: 1.6rem;
+  border-bottom: 2px solid rgba(240, 207, 117, 0.55);
+  border-radius: 0 0 50% 50% / 0 0 100% 100%;
+}
+.sr-bulb {
+  position: absolute;
+  top: 1.4rem;
+  width: 0.7rem;
+  height: 1rem;
+  margin-left: -0.35rem;
+  border-radius: 50% 50% 55% 55%;
+  background: currentColor;
+  box-shadow: 0 0 14px 4px currentColor;
+  animation: sr-bulb-blink 1.4s ease-in-out infinite;
+}
+
+/* snow */
+.sr-snow { position: absolute; inset: 0; overflow: hidden; }
+.sr-snow span {
+  position: absolute;
+  top: -2rem;
+  color: #fff;
+  opacity: 0.9;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  animation-name: sr-snow-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes sr-snow-fall {
+  to { top: 105%; transform: translateX(var(--drift, 0px)) rotate(180deg); }
+}
+
+/* confetti */
 .sr-confetti { position: absolute; inset: 0; overflow: hidden; }
 .sr-confetti span {
   position: absolute;
@@ -1714,13 +1789,46 @@ button,
 @keyframes sr-confetti-fall {
   to { top: 105%; margin-left: 2rem; }
 }
+
+/* twinkling stars around the card */
+.sr-sparkle {
+  position: absolute;
+  color: #fff3c9;
+  text-shadow: 0 0 10px #f6dc8a, 0 0 22px #f6dc8a;
+  animation: sr-twinkle 1.3s ease-in-out infinite;
+}
+
 @keyframes sr-welldone-in {
-  from { opacity: 0; transform: scale(0.92); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sr-welldone-out {
+  to { opacity: 0; }
+}
+@keyframes sr-card-pop {
+  0% { opacity: 0; transform: scale(0.6) rotate(-3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes sr-title-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -50% 0; }
+}
+@keyframes sr-glow-pulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+@keyframes sr-bulb-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.85); }
+}
+@keyframes sr-twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.6) rotate(0); }
+  50% { opacity: 1; transform: scale(1.25) rotate(45deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sr-welldone { animation: none; }
-  .sr-confetti { display: none; }
+  .sr-welldone, .sr-welldone-card, .sr-welldone-title, .sr-welldone-glow,
+  .sr-bulb, .sr-sparkle { animation: none; }
+  .sr-confetti, .sr-snow { display: none; }
 }
 
 /* developer-only TEST RUN strip */

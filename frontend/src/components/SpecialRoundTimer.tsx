@@ -157,20 +157,50 @@ export function SpecialGetReady({ run, clockOffset }: TimerProps) {
   );
 }
 
-const SHOW_MS = 8000; // at least 5 seconds; a little longer so it is easy to read
+const SHOW_MS = 10000; // well over the 5 seconds asked for, so it can be enjoyed
 
-const CONFETTI = Array.from({ length: 30 }, (_, i) => ({
+// Christmas colours with gold: red, green, white, gold.
+const FESTIVE = ["#f6dc8a", "#d8aa3e", "#e23b3b", "#2fa84f", "#ffffff", "#c8102e"];
+
+const CONFETTI = Array.from({ length: 56 }, (_, i) => ({
   left: (i * 37 + 11) % 100,
-  delay: (i % 7) * 0.18,
-  duration: 2.4 + (i % 5) * 0.4,
+  delay: (i % 9) * 0.16,
+  duration: 2.6 + (i % 6) * 0.45,
   rotate: (i * 53) % 360,
-  color: ["#f6dc8a", "#d8aa3e", "#fff3c9", "#e6c15a"][i % 4],
+  color: FESTIVE[i % FESTIVE.length],
+  wide: i % 4 === 0,
 }));
+
+const SNOW = Array.from({ length: 34 }, (_, i) => ({
+  left: (i * 29 + 7) % 100,
+  size: 0.6 + (i % 5) * 0.28,
+  delay: (i % 11) * 0.35,
+  duration: 4.2 + (i % 7) * 0.7,
+  drift: ((i % 5) - 2) * 18,
+}));
+
+// String lights along the top: red, gold, green, blue, taking turns to blink.
+const BULB_COLORS = ["#e23b3b", "#f6dc8a", "#2fa84f", "#4aa3ff"];
+const BULBS = Array.from({ length: 22 }, (_, i) => ({
+  left: 2 + (i * 96) / 21,
+  color: BULB_COLORS[i % BULB_COLORS.length],
+  delay: (i % 4) * 0.35,
+}));
+
+const SPARKLES = [
+  { top: "8%", left: "6%", size: 1.6, delay: 0 },
+  { top: "14%", left: "90%", size: 1.2, delay: 0.5 },
+  { top: "78%", left: "4%", size: 1.3, delay: 0.9 },
+  { top: "84%", left: "93%", size: 1.7, delay: 0.3 },
+  { top: "-9%", left: "30%", size: 1.1, delay: 0.7 },
+  { top: "-7%", left: "72%", size: 1.4, delay: 0.2 },
+];
 
 // The celebration, shown when this device sees the timer reach zero. It floats
 // over the page without blocking it (so Extract code stays usable), and stays
-// for 8 seconds. Someone who opens the round after time is up doesn't get the
-// pop-up, but still sees WELL DONE! in the side panel.
+// for 10 seconds: string lights, falling snow, confetti, twinkling stars and
+// a shimmering gold WELL DONE!. Someone who opens the round after time is up
+// doesn't get the pop-up, but still sees WELL DONE! in the side panel.
 export function SpecialWellDone({ finished }: { finished: boolean }) {
   const [show, setShow] = useState(false);
   const wasFinished = useRef(finished);
@@ -190,6 +220,39 @@ export function SpecialWellDone({ finished }: { finished: boolean }) {
   if (!show) return null;
   return (
     <div className="sr-welldone" role="status" aria-live="polite">
+      <div className="sr-welldone-glow" aria-hidden="true" />
+
+      <div className="sr-lights" aria-hidden="true">
+        {BULBS.map((b, i) => (
+          <span
+            key={i}
+            className="sr-bulb"
+            style={{
+              left: `${b.left}%`,
+              color: b.color,
+              animationDelay: `${b.delay}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="sr-snow" aria-hidden="true">
+        {SNOW.map((f, i) => (
+          <span
+            key={i}
+            style={{
+              left: `${f.left}%`,
+              fontSize: `${f.size}rem`,
+              animationDelay: `${f.delay}s`,
+              animationDuration: `${f.duration}s`,
+              ["--drift" as string]: `${f.drift}px`,
+            }}
+          >
+            ❄
+          </span>
+        ))}
+      </div>
+
       <div className="sr-confetti" aria-hidden="true">
         {CONFETTI.map((c, i) => (
           <span
@@ -197,6 +260,7 @@ export function SpecialWellDone({ finished }: { finished: boolean }) {
             style={{
               left: `${c.left}%`,
               background: c.color,
+              width: c.wide ? "1rem" : "0.6rem",
               animationDelay: `${c.delay}s`,
               animationDuration: `${c.duration}s`,
               transform: `rotate(${c.rotate}deg)`,
@@ -204,8 +268,28 @@ export function SpecialWellDone({ finished }: { finished: boolean }) {
           />
         ))}
       </div>
+
       <div className="sr-welldone-card">
+        {SPARKLES.map((sp, i) => (
+          <span
+            key={i}
+            className="sr-sparkle"
+            aria-hidden="true"
+            style={{
+              top: sp.top,
+              left: sp.left,
+              fontSize: `${sp.size}rem`,
+              animationDelay: `${sp.delay}s`,
+            }}
+          >
+            ✦
+          </span>
+        ))}
+        <p className="sr-welldone-deco" aria-hidden="true">
+          🎄 ❄ 🎁 ❄ 🎄
+        </p>
         <p className="sr-welldone-title">WELL DONE!</p>
+        <p className="sr-welldone-cheer">Merry &amp; bright. You lit up the season!</p>
         <p className="sr-welldone-note">
           Time's up. Your work is kept. Open the Code tab to extract your code.
         </p>
