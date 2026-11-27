@@ -22,6 +22,7 @@ import type {
   Frame,
   PinMapping,
   ProjectNode,
+  SavedTransition,
   TimingMode,
   TricolorGroup,
   Zone,
@@ -161,12 +162,26 @@ type TrialWorkspaceProps = {
     design: DesignPiece | null;
     roundPiece: RoundPiece | null;
   }) => void;
+  // The group's saved transitions (the same library every round uses), so the
+  // Trial Preview can "Label as Transition" and "Import keyframes" too.
+  // Importing only puts copies on the trial timeline; labelling saves a copy
+  // into the real library. Neither changes a real round.
+  transitionLibrary?: SavedTransition[];
+  onSaveTransition?: (name: string, frames: Frame[]) => void;
+  existingTransitionNames?: string[];
 };
 
 // A sandbox copy of the Zone Map, Pins and Preview tabs. Nothing in here
 // touches the real rounds: every edit goes into `draft` (kept in this
 // browser), and the real project only changes through onApply.
-function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) {
+function TrialWorkspace({
+  groupNode,
+  songNodes,
+  onApply,
+  transitionLibrary,
+  onSaveTransition,
+  existingTransitionNames,
+}: TrialWorkspaceProps) {
   const [draft, setDraft] = useState<TrialDraft>(EMPTY_DRAFT);
   const [ready, setReady] = useState(false);
   // Bumped when the trial is reset or applied, so the editors start fresh.
@@ -744,6 +759,9 @@ function TrialWorkspace({ groupNode, songNodes, onApply }: TrialWorkspaceProps) 
                 audioSourceId={realSong.id}
                 onFramesChange={(frames) => editRound(previewRound, { frames })}
                 onTimingChange={(timing) => editRound(previewRound, timing)}
+                onSaveTransition={onSaveTransition}
+                existingTransitionNames={existingTransitionNames}
+                transitionLibrary={transitionLibrary}
               />
             ) : sub === "code" ? (
               <CodeGenerator

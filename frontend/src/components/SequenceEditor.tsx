@@ -117,13 +117,14 @@ type SequenceEditorProps = {
   // this says whose saved song file to play instead. When it is set, a file
   // loaded here is only played, never saved over the real round's song.
   audioSourceId?: string;
-  // Practice tab: lets the selected keyframes be labelled and saved as a
-  // reusable transition. Gets the name and the picked keyframes (in time order).
+  // Every round (and Trial): lets the selected keyframes be labelled and saved
+  // as a reusable transition. Gets the name and the picked keyframes (in time
+  // order).
   onSaveTransition?: (name: string, frames: Frame[]) => void;
   // Names already in the library, so the label box can say when one repeats.
   existingTransitionNames?: string[];
-  // Special Round: the group's saved transitions. When given, an "Import
-  // keyframes" button appears.
+  // The group's saved transitions, shared by every round (and Trial). When
+  // given, an "Import keyframes" button appears.
   transitionLibrary?: SavedTransition[];
   // Preview tab only: Left / Right arrow keys jump to the previous / next
   // keyframe, same as the Back / Next buttons.

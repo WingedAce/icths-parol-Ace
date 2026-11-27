@@ -1227,6 +1227,12 @@ async function handleFile(
                 groupNode={currentNode}
                 songNodes={songNodes}
                 onApply={applyTrial}
+                transitionLibrary={practiceSlot?.transitions ?? []}
+                onSaveTransition={saveTransitionToLibrary}
+                existingTransitionNames={[
+                  ...(practiceSlot?.transitions ?? []).map((t) => t.name),
+                  ...pendingTransitions.map((t) => t.name),
+                ]}
               />
             )}
 
@@ -1469,6 +1475,12 @@ async function handleFile(
                   onTimingChange={(timing) => {
                     if (!timedFrozen && !specialTimeUp) setNodeTiming(animationChild.id, timing);
                   }}
+                  // "Label as Transition" and "Import keyframes" work in every
+                  // round and all use the same group library (kept on the
+                  // Practice slot), so a transition labelled in one round can
+                  // be imported in any other. Practice and Timed mode work
+                  // exactly as before. In the Special Round, labelling stops
+                  // when the timer ends (only Extract code is left then).
                   onSaveTransition={
                     round === 6
                       ? timedFinished
@@ -1487,20 +1499,19 @@ async function handleFile(
                               },
                             ],
                           })
-                      : undefined
+                      : round === 4 && (specialTimeUp || specialCountdown)
+                        ? undefined
+                        : saveTransitionToLibrary
                   }
                   existingTransitionNames={
                     round === 5
                       ? (animationChild.transitions ?? []).map((t) => t.name)
-                      : round === 6
-                        ? (practiceSlot?.transitions ?? []).map((t) => t.name)
-                        : undefined
+                      : [
+                          ...(practiceSlot?.transitions ?? []).map((t) => t.name),
+                          ...pendingTransitions.map((t) => t.name),
+                        ]
                   }
-                  transitionLibrary={
-                    round === 4 || round === 5 || round === 6
-                      ? (practiceSlot?.transitions ?? [])
-                      : undefined
-                  }
+                  transitionLibrary={practiceSlot?.transitions ?? []}
                 />
               </div>
             )}
