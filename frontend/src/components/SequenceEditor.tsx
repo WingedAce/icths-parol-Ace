@@ -81,8 +81,9 @@ const miniPillClass =
 // How far the timeline bar can be stretched. 1 = the whole song fits on screen;
 // 8 = the bar is eight screens wide and scrolls sideways.
 // Playback speeds for the preview. Slower than 1x is for checking where the
-// keyframes land; the song and the lights slow down together.
-const SPEEDS = [0.25, 0.5, 0.75, 1];
+// keyframes land; 2x and 4x are for skimming through a long song quickly. The
+// song and the lights change speed together.
+const SPEEDS = [0.25, 0.5, 0.75, 1, 2, 4];
 
 const ZOOM_LEVELS = [1, 2, 4, 6, 8, 12, 16, 24, 36, 50, 75, 100];
 
@@ -1762,7 +1763,7 @@ function SequenceEditor({
           className="flex items-center gap-1 rounded-full px-2 py-1 bg-elevated hover:bg-line-strong"
           role="group"
           aria-label="Playback speed"
-          title="Slow the song and the lights down to see where the keyframes land"
+          title="Change the speed of the song and the lights: slower to see where the keyframes land, 2x or 4x to skim through"
         >
           <span className="px-2 text-xs text-fg-muted">
             Speed
